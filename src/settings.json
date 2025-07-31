@@ -1,0 +1,6 @@
+{
+    "contentHubSettings": {
+        "apiUrl": "https://your-content-hub-url.com",
+        "apiToken": "your-api-token"
+    }
+}
