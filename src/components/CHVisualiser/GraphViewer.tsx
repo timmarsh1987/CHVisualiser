@@ -257,7 +257,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                   
                   if (href) {
                     // Extract the entity definition name from the URL
-                    // href format: "https://epamdemo.sitecoresandbox.cloud/api/entitydefinitions/EPAM.DDB.DocumentType"
+                    // href format: "https://demo.sitecoresandbox.cloud/api/entitydefinitions/DocumentType"
                     const urlParts = href.split('/');
                     targetName = urlParts[urlParts.length - 1];
                   }
