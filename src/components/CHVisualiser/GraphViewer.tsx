@@ -372,10 +372,79 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
         console.log(`📍 Node ${entity.id} (${entity.name}) initialized at:`, position);
       });
       
-      setNodePositions(initialPositions);
-      console.log(`✅ All ${initialPositions.size} node positions initialized`);
+      // Resolve any initial overlaps
+      const resolvedPositions = resolveInitialOverlaps(initialPositions);
+      setNodePositions(resolvedPositions);
+      console.log(`✅ All ${resolvedPositions.size} node positions initialized and overlaps resolved`);
     }
   }, [definitions]);
+
+  // Function to resolve initial overlaps between nodes
+  const resolveInitialOverlaps = (positions: Map<number, { x: number; y: number }>): Map<number, { x: number; y: number }> => {
+    const nodeRadius = 30;
+    const minDistance = nodeRadius * 2.8;
+    const resolvedPositions = new Map(positions);
+    let hasOverlaps = true;
+    let iterations = 0;
+    const maxIterations = 30;
+    
+    console.log(`🔍 Checking for initial overlaps among ${positions.size} nodes...`);
+    
+    while (hasOverlaps && iterations < maxIterations) {
+      hasOverlaps = false;
+      iterations++;
+      
+      for (const [id1, pos1] of resolvedPositions.entries()) {
+        for (const [id2, pos2] of resolvedPositions.entries()) {
+          if (id1 >= id2) continue; // Only check each pair once
+          
+          const dx = pos1.x - pos2.x;
+          const dy = pos1.y - pos2.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < minDistance) {
+            hasOverlaps = true;
+            console.log(`💥 Initial overlap detected between nodes ${id1} and ${id2}, distance: ${distance.toFixed(2)}`);
+            
+            // Move both nodes apart
+            const angle = Math.atan2(dy, dx);
+            const pushDistance = (minDistance - distance) / 2 + 15;
+            
+            // Move first node
+            const newPos1 = {
+              x: pos1.x + Math.cos(angle) * pushDistance,
+              y: pos1.y + Math.sin(angle) * pushDistance
+            };
+            
+            // Move second node
+            const newPos2 = {
+              x: pos2.x - Math.cos(angle) * pushDistance,
+              y: pos2.y - Math.sin(angle) * pushDistance
+            };
+            
+            // Keep within bounds
+            newPos1.x = Math.max(80, Math.min(1120, newPos1.x));
+            newPos1.y = Math.max(80, Math.min(720, newPos1.y));
+            newPos2.x = Math.max(80, Math.min(1120, newPos2.x));
+            newPos2.y = Math.max(80, Math.min(720, newPos2.y));
+            
+            resolvedPositions.set(id1, newPos1);
+            resolvedPositions.set(id2, newPos2);
+            
+            console.log(`🔄 Resolved overlap: moved node ${id1} to (${newPos1.x.toFixed(1)}, ${newPos1.y.toFixed(1)}) and node ${id2} to (${newPos2.x.toFixed(1)}, ${newPos2.y.toFixed(1)})`);
+          }
+        }
+      }
+    }
+    
+    if (iterations >= maxIterations) {
+      console.log(`⚠️ Initial overlap resolution stopped after ${maxIterations} iterations`);
+    } else {
+      console.log(`✅ Initial overlaps resolved in ${iterations} iterations`);
+    }
+    
+    return resolvedPositions;
+  };
 
   // Helper function to calculate initial positions (separate from the memoized one)
   const calculateInitialPosition = (entity: EntityDefinition, allEntities: EntityDefinition[]): { x: number; y: number } => {
@@ -384,31 +453,68 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     
     const viewWidth = 1200;
     const viewHeight = 800;
+    const nodeRadius = 30;
+    const minDistance = nodeRadius * 2.5; // Minimum distance between node centers
     
     if (total === 1) {
       return { x: viewWidth / 2, y: viewHeight / 2 };
     }
     
-    // More compact initial positioning
-    const cols = Math.ceil(Math.sqrt(total * 1.5));
-    const rows = Math.ceil(total / cols);
-    const col = index % cols;
-    const row = Math.floor(index / cols);
-    // Reduced spacing for a tighter layout
-    const spacing = Math.min(180, Math.max(100, viewWidth / cols));
-    // Start from a corner instead of center for more area usage
-    const startX = 150; // Left margin
-    const startY = 150; // Top margin
-    const x = startX + col * spacing;
-    const y = startY + row * spacing;
-    // More randomization for natural spread
-    const randomSeed = entity.id % 1000;
-    const offsetX = (randomSeed % 60) - 30; // Increased randomness
-    const offsetY = ((randomSeed * 7) % 60) - 30;
-    return {
-      x: Math.max(80, Math.min(viewWidth - 80, x + offsetX)),
-      y: Math.max(80, Math.min(viewHeight - 80, y + offsetY))
-    };
+    // Use a hybrid approach: start with spiral, then grid, then random if needed
+    let position: { x: number; y: number };
+    
+    if (index < total * 0.6) {
+      // First 60% of nodes: Use a spiral pattern from center for better distribution
+      const spiralRadius = 80 + (index * 20);
+      const spiralAngle = index * 0.8; // Golden angle approximation for even distribution
+      position = {
+        x: viewWidth / 2 + spiralRadius * Math.cos(spiralAngle),
+        y: viewHeight / 2 + spiralRadius * Math.sin(spiralAngle)
+      };
+    } else if (index < total * 0.9) {
+      // Next 30%: Use a grid with larger spacing
+      const gridIndex = index - Math.floor(total * 0.6);
+      const cols = Math.ceil(Math.sqrt(total * 0.4)); // Grid for remaining nodes
+      const col = gridIndex % cols;
+      const row = Math.floor(gridIndex / cols);
+      const spacing = Math.max(minDistance * 1.3, 200);
+      const startX = 150;
+      const startY = 150;
+      position = {
+        x: startX + col * spacing,
+        y: startY + row * spacing
+      };
+    } else {
+      // Last 10%: Use corners and edges for remaining nodes
+      const cornerIndex = index - Math.floor(total * 0.9);
+      const corners = [
+        { x: 100, y: 100 },
+        { x: viewWidth - 100, y: 100 },
+        { x: 100, y: viewHeight - 100 },
+        { x: viewWidth - 100, y: viewHeight - 100 }
+      ];
+      const corner = corners[cornerIndex % corners.length];
+      const offset = Math.floor(cornerIndex / corners.length) * 80;
+      position = {
+        x: corner.x + (cornerIndex % 2 === 0 ? offset : -offset),
+        y: corner.y + (cornerIndex % 2 === 1 ? offset : -offset)
+      };
+    }
+    
+    // Keep within bounds
+    position.x = Math.max(100, Math.min(viewWidth - 100, position.x));
+    position.y = Math.max(100, Math.min(viewHeight - 100, position.y));
+    
+    // Add small random offset to prevent perfect alignment
+    const randomOffset = 15;
+    position.x += (Math.random() - 0.5) * randomOffset;
+    position.y += (Math.random() - 0.5) * randomOffset;
+    
+    // Final bounds check
+    position.x = Math.max(100, Math.min(viewWidth - 100, position.x));
+    position.y = Math.max(100, Math.min(viewHeight - 100, position.y));
+    
+    return position;
   };
   const getEntityConnections = useMemo(() => {
     const connectionsCache = new Map<number, EntityDefinition[]>();
@@ -485,6 +591,9 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     // Ensure even distribution by starting from a consistent angle
     const startAngle = -Math.PI / 2; // Start from top (12 o'clock position)
     
+    // Calculate positions for all connected nodes
+    const newPositions: Array<{ entity: EntityDefinition; x: number; y: number }> = [];
+    
     connectedNodes.forEach((entity, i) => {
       // Calculate angle with even distribution, starting from top
       const angle = startAngle + (2 * Math.PI * i) / N;
@@ -495,13 +604,63 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
       // Clamp to SVG bounds
       newX = Math.max(minX, Math.min(maxX, newX));
       newY = Math.max(minY, Math.min(maxY, newY));
-
-      updatedPositions.set(entity.id, { x: newX, y: newY });
+      
+      newPositions.push({ entity, x: newX, y: newY });
+    });
+    
+    // Resolve overlaps between connected nodes
+    const nodeRadius = 30;
+    const minDistance = nodeRadius * 2.8;
+    let hasOverlaps = true;
+    let iterations = 0;
+    const maxIterations = 15;
+    
+    while (hasOverlaps && iterations < maxIterations) {
+      hasOverlaps = false;
+      iterations++;
+      
+      for (let i = 0; i < newPositions.length; i++) {
+        for (let j = i + 1; j < newPositions.length; j++) {
+          const pos1 = newPositions[i];
+          const pos2 = newPositions[j];
+          
+          const dx = pos1.x - pos2.x;
+          const dy = pos1.y - pos2.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          
+          if (distance < minDistance) {
+            hasOverlaps = true;
+            
+            // Move both nodes apart
+            const angle = Math.atan2(dy, dx);
+            const pushDistance = (minDistance - distance) / 2 + 10;
+            
+            // Move first node
+            pos1.x += Math.cos(angle) * pushDistance;
+            pos1.y += Math.sin(angle) * pushDistance;
+            
+            // Move second node
+            pos2.x -= Math.cos(angle) * pushDistance;
+            pos2.y -= Math.sin(angle) * pushDistance;
+            
+            // Keep within bounds
+            pos1.x = Math.max(minX, Math.min(maxX, pos1.x));
+            pos1.y = Math.max(minY, Math.min(maxY, pos1.y));
+            pos2.x = Math.max(minX, Math.min(maxX, pos2.x));
+            pos2.y = Math.max(minY, Math.min(maxY, pos2.y));
+          }
+        }
+      }
+    }
+    
+    // Update the positions map
+    newPositions.forEach(({ entity, x, y }) => {
+      updatedPositions.set(entity.id, { x, y });
     });
 
     setNodePositions(updatedPositions);
     
-    console.log(`🔄 Arranging ${N} connected nodes in circle around ${centerEntity.name} with radius ${dynamicRadius}`);
+    console.log(`🔄 Arranging ${N} connected nodes in circle around ${centerEntity.name} with radius ${dynamicRadius} (overlaps resolved in ${iterations} iterations)`);
   };
 
   const handleEntityClick = (entityDef: EntityDefinition) => {
@@ -631,7 +790,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
   // Enhanced collision avoidance that moves other nodes away
   const resolveCollisionsOnDrop = (droppedPosition: { x: number; y: number }, droppedEntityId: number): Map<number, { x: number; y: number }> => {
     const nodeRadius = 30;
-    const minDistance = nodeRadius * 2.5;
+    const minDistance = nodeRadius * 2.8; // Increased minimum distance for better separation
     const newPositions = new Map(nodePositions);
     
     console.log(`🎯 COLLISION CHECK: Dropping node ${droppedEntityId} at position:`, droppedPosition);
@@ -665,7 +824,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     
     console.log(`🚨 Found ${collidingNodes.length} colliding nodes:`, collidingNodes.map(n => n.id));
     
-    // Move colliding nodes away from the dropped node
+    // Move colliding nodes away from the dropped node with more aggressive pushing
     collidingNodes.forEach(({ id: collidingId, pos: collidingPos, distance }) => {
       const dx = collidingPos.x - droppedPosition.x;
       const dy = collidingPos.y - droppedPosition.y;
@@ -673,7 +832,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
       if (distance === 0) {
         // If nodes are exactly on top of each other, move in a random direction
         const angle = Math.random() * Math.PI * 2;
-        const pushDistance = minDistance + 10;
+        const pushDistance = minDistance + 20; // Increased push distance
         const newPos = {
           x: droppedPosition.x + Math.cos(angle) * pushDistance,
           y: droppedPosition.y + Math.sin(angle) * pushDistance
@@ -686,9 +845,9 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
         newPositions.set(collidingId, newPos);
         console.log(`📍 Moved overlapping node ${collidingId} randomly to:`, newPos);
       } else {
-        // Calculate push-away vector
+        // Calculate push-away vector with more aggressive pushing
         const angle = Math.atan2(dy, dx);
-        const pushDistance = minDistance - distance + 15; // Increased buffer
+        const pushDistance = minDistance - distance + 25; // Increased buffer
         
         const newPos = {
           x: collidingPos.x + Math.cos(angle) * pushDistance,
@@ -707,7 +866,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     // Check if any moved nodes now collide with other nodes and resolve recursively
     let hasNewCollisions = true;
     let iterations = 0;
-    const maxIterations = 15; // Increased iterations
+    const maxIterations = 20; // Increased iterations for better resolution
     
     while (hasNewCollisions && iterations < maxIterations) {
       hasNewCollisions = false;
@@ -726,9 +885,9 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
           const distance = Math.sqrt(dx * dx + dy * dy);
           
           if (distance < minDistance) {
-            // Move the other node away
+            // Move the other node away with more aggressive pushing
             const angle = Math.atan2(-dy, -dx); // Push in opposite direction
-            const pushDistance = minDistance - distance + 10;
+            const pushDistance = minDistance - distance + 20; // Increased buffer
             
             const newPos = {
               x: otherPos.x + Math.cos(angle) * pushDistance,
