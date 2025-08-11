@@ -1,7 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 // https://vitejs.dev/config/
-import basicSsl from "@vitejs/plugin-basic-ssl";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
 // Provide a fallback if npm_config_component is not defined
@@ -15,27 +14,27 @@ export default defineConfig({
     "process.env.NODE_ENV": JSON.stringify("production"),
     "process.env": process.env,
   },
-  plugins: [react(), basicSsl(), cssInjectedByJsPlugin()],
+  plugins: [react(), cssInjectedByJsPlugin()],
   build: {
     sourcemap: false,
     commonjsOptions: {
       sourceMap: false,
     },
-    // Define the output directory, unchanged
-    outDir: `./../../configuration/userinterface/components`,
+    outDir: `./dist`,
     rollupOptions: {
       output: [
         {
           format: "es",
-          entryFileNames: `${component}.js`, // Use the fallback or passed component name
+          entryFileNames: `CHVisualiser.js`,
           preserveModules: false
         },
       ],
     },
     lib: {
-      fileName: component, // Use the fallback or passed component name
-      entry: `./src/components/${component}/index.tsx`, // Fallback path if env var is not set
+      entry: "./src/components/CHVisualiser/index.tsx",
+      name: "CHVisualiser",
+      fileName: "CHVisualiser",
     },
-    emptyOutDir: false,
+    emptyOutDir: true,
   },
 });
