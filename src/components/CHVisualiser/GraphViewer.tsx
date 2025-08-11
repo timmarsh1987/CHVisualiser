@@ -1,26 +1,11 @@
 import React, { FC, useEffect, useState, useMemo } from 'react';
 import { IEntity } from '@sitecore/sc-contenthub-webclient-sdk/dist/contracts/base/entity';
-import { ContentHubProps } from "../../models/base";
-import { loadReletionsFromEntity } from '../../helpers/Helpers';
-import { EntityLoadConfiguration } from "@sitecore/sc-contenthub-webclient-sdk/dist/contracts/querying/entity-load-configuration";
 import { ContentHubClient } from '@sitecore/sc-contenthub-webclient-sdk/dist/clients/content-hub-client';
 import './index.css';
 
 interface GraphViewerOptions {
   showGraphViewer?: boolean;
   entityId?: number;
-  culture?: string;
-  editingMode?: string;
-  isDisabled?: boolean;
-  isEditing?: boolean;
-  isInModal?: boolean;
-  isInSidebar?: boolean;
-  isInTab?: boolean;
-  modalEntityId?: number;
-  modalPageName?: string;
-  nestingLevel?: number;
-  setCulture?: () => void;
-  setEntityId?: () => void;
   // Add other option fields as needed
 }
 
@@ -141,12 +126,12 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
       const allData: any[] = [];
       let page = 0;
       let hasMore = true;
-      let totalEstimate = 160; // Estimated total
+      let totalEstimate = 200; // Estimated total
       const baseUrl = window.location.origin;
       
       while (hasMore && page < 20) { // Safety limit of 20 pages (500 items max)
         try {
-          setLoadingProgress({ current: page * 25, total: totalEstimate });
+          setLoadingProgress({ current: allData.length, total: totalEstimate });
           
           const pageParams = new URLSearchParams({
             'skip': (page * 25).toString(),
@@ -192,6 +177,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
             // Update total estimate if we got pagination info
             if (pageData.totalItems) {
               totalEstimate = pageData.totalItems;
+              console.log(`Updated total estimate from API: ${totalEstimate}`);
             }
             
             if (pageItems.length < 25) {
