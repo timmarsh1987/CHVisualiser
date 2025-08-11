@@ -792,6 +792,10 @@ code {
   filter: none;
 }
 
+.network-node.hidden {
+  display: none;
+}
+
 .network-node:active,
 .network-node.dragging {
   cursor: grabbing;
@@ -821,6 +825,10 @@ code {
   opacity: 0.5;
 }
 
+.network-label.hidden {
+  display: none;
+}
+
 .network-count {
   font-size: 12px;
   font-weight: bold;
@@ -831,6 +839,10 @@ code {
 
 .network-count.dimmed {
   opacity: 0.5;
+}
+
+.network-count.hidden {
+  display: none;
 }
 
 .connection-line {
@@ -853,6 +865,10 @@ code {
 .connection-line.dimmed {
   stroke: #e0e0e0;
   stroke-opacity: 0.1;
+}
+
+.connection-line.hidden {
+  display: none;
 }
 
 @keyframes flow {

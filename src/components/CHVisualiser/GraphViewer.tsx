@@ -454,11 +454,15 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     const nodePos = getNodePosition(entityDef, filteredAndSortedDefinitions);
     const centerX = 600; // SVG center X
     const centerY = 400; // SVG center Y
+    
+    // Ensure the selected node is perfectly centered
     setNetworkTransform(prev => ({
       ...prev,
       x: centerX - nodePos.x * prev.scale,
       y: centerY - nodePos.y * prev.scale,
     }));
+    
+    console.log(`🎯 Centering node ${entityDef.name} at (${centerX}, ${centerY})`);
   };
 
   // Helper function to arrange directly connected nodes in a circle around the selected node
@@ -468,9 +472,9 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     const N = connectedNodes.length;
     if (N === 0) return;
 
-    // Reduce the base radius for a more compact circle
-    const baseRadius = 180;
-    const dynamicRadius = baseRadius + Math.max(0, N - 12) * 16;
+    // Optimize radius based on number of connections for better spacing
+    const baseRadius = 160; // Slightly smaller base radius for tighter grouping
+    const dynamicRadius = baseRadius + Math.max(0, N - 8) * 20; // More gradual scaling
 
     const updatedPositions = new Map(nodePositions);
 
@@ -478,8 +482,13 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     const minX = 40, maxX = 1200 - 40;
     const minY = 40, maxY = 800 - 40;
 
+    // Ensure even distribution by starting from a consistent angle
+    const startAngle = -Math.PI / 2; // Start from top (12 o'clock position)
+    
     connectedNodes.forEach((entity, i) => {
-      const angle = (2 * Math.PI * i) / N;
+      // Calculate angle with even distribution, starting from top
+      const angle = startAngle + (2 * Math.PI * i) / N;
+      
       let newX = centerPos.x + dynamicRadius * Math.cos(angle);
       let newY = centerPos.y + dynamicRadius * Math.sin(angle);
 
@@ -491,6 +500,8 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     });
 
     setNodePositions(updatedPositions);
+    
+    console.log(`🔄 Arranging ${N} connected nodes in circle around ${centerEntity.name} with radius ${dynamicRadius}`);
   };
 
   const handleEntityClick = (entityDef: EntityDefinition) => {
@@ -521,8 +532,14 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
       });
       
       setHighlightedPaths(pathIds);
-      centerNodeInView(entityDef); // Center the node in the view
-      arrangeConnectedNodesInCircle(entityDef); // Arrange connected nodes in a circle
+      
+      // Arrange connected nodes first, then center the view for better positioning
+      arrangeConnectedNodesInCircle(entityDef);
+      
+      // Small delay to ensure node positions are updated before centering
+      setTimeout(() => {
+        centerNodeInView(entityDef);
+      }, 50);
     }
   };
 
@@ -539,9 +556,10 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     }, 100);
   };
 
-  // Make background click a no-op so it doesn't deselect
+  // Handle background click - no deselection on whitespace click
   const handleBackgroundClick = (event: React.MouseEvent) => {
-    // Do nothing
+    // No deselection when clicking on whitespace - only reset button deselects
+    // This allows users to click on whitespace without losing their selection
   };
 
   const handleNetworkNodeClick = (entityDef: EntityDefinition) => {
@@ -553,6 +571,11 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     setNetworkTransform({ x: 0, y: 0, scale: 1 });
     setFocusedNode(null);
     setHighlightedPaths(new Set());
+    // This is the ONLY way to deselect entities - clicking whitespace no longer deselects
+    if (selectedEntity) {
+      setSelectedEntity(null);
+      setShowDetailPanel(false);
+    }
   };
 
   const zoomIn = () => {
@@ -1142,12 +1165,19 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                         const adjStartY = startY + dy * (nodeRadius / distance);
                         const adjEndX = startX + dx * factor;
                         const adjEndY = startY + dy * factor;
-                        // Check if this connection should be highlighted
+                        // Check if this connection should be highlighted or hidden
                         const isHighlighted = highlightedPaths.has(connectionId);
                         const isConnectedToFocused = focusedNode && 
                           (def.id === focusedNode.id || connectedDef.id === focusedNode.id);
                         const isConnectedToSelected = selectedEntity &&
                           (def.id === selectedEntity.id || connectedDef.id === selectedEntity.id);
+                        const shouldHideConnection = focusedNode && !isConnectedToFocused;
+                        
+                        // Don't render hidden connections at all for better performance
+                        if (shouldHideConnection) {
+                          return null;
+                        }
+                        
                         return (
                           <line
                             key={`${connectionId}-${index}`}
@@ -1155,10 +1185,10 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                             y1={adjStartY}
                             x2={adjEndX}
                             y2={adjEndY}
-                            className={`connection-line ${isHighlighted || isConnectedToSelected ? 'highlighted' : ''} ${focusedNode && !isConnectedToFocused ? 'dimmed' : ''}`}
+                            className={`connection-line ${isHighlighted || isConnectedToSelected ? 'highlighted' : ''}`}
                             strokeWidth={isHighlighted || isConnectedToSelected ? "3" : "1"}
                             stroke={isHighlighted || isConnectedToSelected ? "#2c5aa0" : "#b0bec5"}
-                            strokeOpacity={isHighlighted || isConnectedToSelected ? "0.8" : (focusedNode && !isConnectedToFocused ? "0.1" : "0.3")}
+                            strokeOpacity={isHighlighted || isConnectedToSelected ? "0.8" : "0.3"}
                             markerEnd={isHighlighted || isConnectedToSelected ? "url(#arrowhead-highlight)" : "url(#arrowhead)"}
                           />
                         );
@@ -1179,7 +1209,8 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                       getEntityConnections(focusedNode).some(conn => conn.id === def.id);
                     const isConnectedToSelected = selectedEntity &&
                       getEntityConnections(selectedEntity).some(conn => conn.id === def.id);
-                    const isDimmed = focusedNode && !isFocused && !isConnectedToFocused;
+                    // Hide all nodes except the focused one and its connections when a node is selected
+                    const shouldHide = focusedNode && !isFocused && !isConnectedToFocused;
                     
                     return (
                       <g key={def.id} className="network-node-group">
@@ -1188,7 +1219,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                           cx={position.x}
                           cy={position.y}
                           r={nodeRadius}
-                          className={`network-node ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${isConnectedToSelected ? 'connected-to-selected' : ''} ${isDimmed ? 'dimmed' : ''}`}
+                          className={`network-node ${isSelected ? 'selected' : ''} ${isFocused ? 'focused' : ''} ${isConnectedToSelected ? 'connected-to-selected' : ''} ${shouldHide ? 'hidden' : ''}`}
                           fill={isSelected ? entityColor : 'white'}
                           stroke={entityColor}
                           strokeWidth={isSelected ? 4 : 2.5}
@@ -1208,7 +1239,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                         <text
                           x={position.x}
                           y={position.y + 3}
-                          className={`network-count ${isDimmed ? 'dimmed' : ''}`}
+                          className={`network-count ${shouldHide ? 'hidden' : ''}`}
                           textAnchor="middle"
                           fill={isSelected ? 'white' : entityColor}
                           onClick={() => handleNetworkNodeClick(def)}
@@ -1222,7 +1253,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                         <text
                           x={position.x}
                           y={position.y + nodeRadius + 12}
-                          className={`network-label ${isDimmed ? 'dimmed' : ''}`}
+                          className={`network-label ${shouldHide ? 'hidden' : ''}`}
                           textAnchor="middle"
                           fill={entityColor}
                           onClick={() => handleNetworkNodeClick(def)}
