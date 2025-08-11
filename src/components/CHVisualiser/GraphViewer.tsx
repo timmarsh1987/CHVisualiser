@@ -126,12 +126,13 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
       const allData: any[] = [];
       let page = 0;
       let hasMore = true;
-      let totalEstimate = 200; // Estimated total
+      let totalItems = 0; // Will be set from first API response
       const baseUrl = window.location.origin;
       
       while (hasMore && page < 20) { // Safety limit of 20 pages (500 items max)
         try {
-          setLoadingProgress({ current: allData.length, total: totalEstimate });
+          // Update progress with actual total once we have it
+          setLoadingProgress({ current: allData.length, total: totalItems || allData.length + 25 });
           
           const pageParams = new URLSearchParams({
             'skip': (page * 25).toString(),
@@ -167,18 +168,34 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
             pageItems = pageData.content;
           }
           
+          // Extract total count from any page response
+          if (pageData.totalItems !== undefined) {
+            totalItems = pageData.totalItems;
+            console.log(`📊 Total items from API: ${totalItems}`);
+          } else if (pageData.total !== undefined) {
+            totalItems = pageData.total;
+            console.log(`📊 Total items from API (total): ${totalItems}`);
+          } else if (pageData.count !== undefined) {
+            totalItems = pageData.count;
+            console.log(`📊 Total items from API (count): ${totalItems}`);
+          } else if (pageData.totalCount !== undefined) {
+            totalItems = pageData.totalCount;
+            console.log(`📊 Total items from API (totalCount): ${totalItems}`);
+          } else if (pageData.total_items !== undefined) {
+            totalItems = pageData.total_items;
+            console.log(`📊 Total items from API (total_items): ${totalItems}`);
+          } else if (page === 0 && totalItems === 0) {
+            // Only apply fallback estimation on first page if no total found yet
+            console.warn('⚠️ No total count found in API response, using fallback estimation');
+            totalItems = pageItems.length * 4; // Rough estimate based on first page
+          }
+          
           if (pageItems.length === 0) {
             console.log(`Page ${page + 1}: No items found, stopping pagination`);
             hasMore = false;
           } else {
             allData.push(...pageItems);
-            console.log(`Page ${page + 1}: Got ${pageItems.length} items, total so far: ${allData.length}`);
-            
-            // Update total estimate if we got pagination info
-            if (pageData.totalItems) {
-              totalEstimate = pageData.totalItems;
-              console.log(`Updated total estimate from API: ${totalEstimate}`);
-            }
+            console.log(`Page ${page + 1}: Got ${pageItems.length} items, total so far: ${allData.length}/${totalItems}`);
             
             if (pageItems.length < 25) {
               console.log(`Page ${page + 1}: Got less than 25 items, this is the last page`);
@@ -197,7 +214,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
         }
       }
       
-      console.log(`Fetched total of ${allData.length} raw items across ${page} pages`);
+      console.log(`Fetched total of ${allData.length} raw items across ${page} pages (API total: ${totalItems})`);
       
       // Process the collected data
       const processedDefinitions = await processEntityDefinitions(allData);
@@ -880,7 +897,7 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
               ></div>
             </div>
             <div className="progress-text">
-              {loadingProgress.current} of ~{loadingProgress.total} loaded
+              {loadingProgress.current} of {loadingProgress.total} loaded
             </div>
           </div>
         )}
