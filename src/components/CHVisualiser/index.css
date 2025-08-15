@@ -25,12 +25,12 @@ code {
 
 /* Always use three-column layout */
 .contentful-layout.three-column .sidebar {
-  width: 25%;
+  width: 15%;
   min-width: 280px;
 }
 
 .contentful-layout.three-column .main-content {
-  width: 50%;
+  width: 60%;
   flex: none;
 }
 

@@ -1066,6 +1066,45 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
     };
   }, [definitions, nodePositions]);
 
+  // Helper function to determine arrow markers based on cardinality
+  const getArrowMarkers = (cardinality: string | undefined, isHighlighted: boolean) => {
+    const highlightSuffix = isHighlighted ? '-highlight' : '';
+    
+    switch (cardinality) {
+      case 'OneToOne':
+        // No arrows for one-to-one relationships
+        return { start: '', end: '' };
+        
+      case 'OneToMany':
+        // Arrow at the "many" end (target)
+        return { 
+          start: '', 
+          end: `url(#arrowhead${highlightSuffix})` 
+        };
+        
+      case 'ManyToOne':
+        // Arrow at the "one" end (source) - reverse arrow
+        return { 
+          start: `url(#arrowhead-reverse${highlightSuffix})`, 
+          end: '' 
+        };
+        
+      case 'ManyToMany':
+        // Arrows at both ends
+        return { 
+          start: `url(#arrowhead-reverse${highlightSuffix})`, 
+          end: `url(#arrowhead${highlightSuffix})` 
+        };
+        
+      default:
+        // Default to single arrow for unknown relationships
+        return { 
+          start: '', 
+          end: `url(#arrowhead${highlightSuffix})` 
+        };
+    }
+  };
+
   if (loading) {
     return (
       <div className="graph-loading">
@@ -1268,6 +1307,14 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                    refX="9" refY="3.5" orient="auto">
                     <polygon points="0 0, 10 3.5, 0 7" fill="#2c5aa0" />
                   </marker>
+                  <marker id="arrowhead-reverse" markerWidth="10" markerHeight="7" 
+                   refX="1" refY="3.5" orient="auto">
+                    <polygon points="10 0, 0 3.5, 10 7" fill="#b0bec5" />
+                  </marker>
+                  <marker id="arrowhead-reverse-highlight" markerWidth="10" markerHeight="7" 
+                   refX="1" refY="3.5" orient="auto">
+                    <polygon points="10 0, 0 3.5, 10 7" fill="#2c5aa0" />
+                  </marker>
                 </defs>
                 
                 <g transform={`translate(${networkTransform.x}, ${networkTransform.y}) scale(${networkTransform.scale})`}>
@@ -1282,60 +1329,63 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                       return connections.slice(0, 4).map((connectedDef, index) => {
                         const connectionKey = `${def.id}->${connectedDef.id}`;
                         const reverseKey = `${connectedDef.id}->${def.id}`;
-                        if (renderedConnections.has(connectionKey) || renderedConnections.has(reverseKey)) {
-                          return null; // Already rendered this connection in one direction
-                        }
-                        renderedConnections.add(connectionKey);
-                        const targetPos = getNodePosition(connectedDef, filteredAndSortedDefinitions);
-                        const connectionId = `${def.id}-${connectedDef.id}`;
-                        // Only render connection if both nodes are in filtered list
-                        const targetInFiltered = filteredAndSortedDefinitions.find((d: EntityDefinition) => d.id === connectedDef.id);
-                        if (!targetInFiltered) return null;
+                        
                         // Find the relation from def to connectedDef
                         const relation = def.relations.find(rel => {
                           // Try to match by name or id
                           return (rel.target === connectedDef.name || rel.target === connectedDef.id.toString());
                         });
-                        // Determine direction based on relation.role
-                        let startX = sourcePos.x, startY = sourcePos.y, endX = targetPos.x, endY = targetPos.y;
-                        if (relation) {
-                          if (relation.role === 'Parent') {
-                            // Arrow from child (def) to parent (connectedDef)
-                            startX = sourcePos.x;
-                            startY = sourcePos.y;
-                            endX = targetPos.x;
-                            endY = targetPos.y;
-                          } else if (relation.role === 'Child') {
-                            // Arrow from parent (def) to child (connectedDef)
-                            startX = sourcePos.x;
-                            startY = sourcePos.y;
-                            endX = targetPos.x;
-                            endY = targetPos.y;
-                          } // else, default direction
+                        
+                        // For ManyToMany relationships, we need to render both directions
+                        const isManyToMany = relation?.cardinality === 'ManyToMany';
+                        
+                        // Skip if already rendered (except for ManyToMany which needs both directions)
+                        if (!isManyToMany && (renderedConnections.has(connectionKey) || renderedConnections.has(reverseKey))) {
+                          return null;
                         }
+                        
+                        // Mark as rendered for non-ManyToMany
+                        if (!isManyToMany) {
+                          renderedConnections.add(connectionKey);
+                        }
+                        
+                        const targetPos = getNodePosition(connectedDef, filteredAndSortedDefinitions);
+                        const connectionId = `${def.id}-${connectedDef.id}`;
+                        
+                        // Only render connection if both nodes are in filtered list
+                        const targetInFiltered = filteredAndSortedDefinitions.find((d: EntityDefinition) => d.id === connectedDef.id);
+                        if (!targetInFiltered) return null;
+                        
                         // Calculate line endpoints to stop at node edges
-                        const dx = endX - startX;
-                        const dy = endY - startY;
+                        const dx = targetPos.x - sourcePos.x;
+                        const dy = targetPos.y - sourcePos.y;
                         const distance = Math.sqrt(dx * dx + dy * dy);
-                        if (distance < 20) return null; // Allow shorter lines
+                        if (distance < 20) return null;
+                        
                         const nodeRadius = 30;
                         const factor = (distance - nodeRadius) / distance;
-                        const adjStartX = startX + dx * (nodeRadius / distance);
-                        const adjStartY = startY + dy * (nodeRadius / distance);
-                        const adjEndX = startX + dx * factor;
-                        const adjEndY = startY + dy * factor;
-                        // Check if this connection should be highlighted or hidden
-                        const isHighlighted = highlightedPaths.has(connectionId);
-                        const isConnectedToFocused = focusedNode && 
-                          (def.id === focusedNode.id || connectedDef.id === focusedNode.id);
-                        const isConnectedToSelected = selectedEntity &&
-                          (def.id === selectedEntity.id || connectedDef.id === selectedEntity.id);
-                        const shouldHideConnection = focusedNode && !isConnectedToFocused;
+                        const adjStartX = sourcePos.x + dx * (nodeRadius / distance);
+                        const adjStartY = sourcePos.y + dy * (nodeRadius / distance);
+                        const adjEndX = sourcePos.x + dx * factor;
+                        const adjEndY = sourcePos.y + dy * factor;
                         
-                        // Don't render hidden connections at all for better performance
+                        // Check if this connection should be highlighted
+                        const isHighlighted = highlightedPaths.has(connectionId);
+                        const isConnectedToFocused = Boolean(focusedNode && 
+                          (def.id === focusedNode.id || connectedDef.id === focusedNode.id));
+                        const isConnectedToSelected = Boolean(selectedEntity &&
+                          (def.id === selectedEntity.id || connectedDef.id === selectedEntity.id));
+                        const shouldHideConnection = Boolean(focusedNode && !isConnectedToFocused);
+                        
+                        // Don't render hidden connections
                         if (shouldHideConnection) {
                           return null;
                         }
+                        
+                        const highlighted = isHighlighted || isConnectedToSelected;
+                        const arrows = getArrowMarkers(relation?.cardinality, highlighted);
+                        
+                        console.log(`🔗 Rendering ${relation?.cardinality || 'unknown'} relationship: ${def.name} -> ${connectedDef.name}`, arrows);
                         
                         return (
                           <line
@@ -1344,11 +1394,12 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                             y1={adjStartY}
                             x2={adjEndX}
                             y2={adjEndY}
-                            className={`connection-line ${isHighlighted || isConnectedToSelected ? 'highlighted' : ''}`}
-                            strokeWidth={isHighlighted || isConnectedToSelected ? "3" : "1"}
-                            stroke={isHighlighted || isConnectedToSelected ? "#2c5aa0" : "#b0bec5"}
-                            strokeOpacity={isHighlighted || isConnectedToSelected ? "0.8" : "0.3"}
-                            markerEnd={isHighlighted || isConnectedToSelected ? "url(#arrowhead-highlight)" : "url(#arrowhead)"}
+                            className={`connection-line ${highlighted ? 'highlighted' : ''}`}
+                            strokeWidth={highlighted ? "3" : "1"}
+                            stroke={highlighted ? "#2c5aa0" : "#b0bec5"}
+                            strokeOpacity={highlighted ? "0.8" : "0.3"}
+                            markerStart={arrows.start}
+                            markerEnd={arrows.end}
                           />
                         );
                       });
@@ -1364,12 +1415,12 @@ const GraphViewer: FC<GraphViewerProps> = ({ client, options, entity }) => {
                     
                     const isFocused = focusedNode?.id === def.id;
                     const isSelected = selectedEntity?.id === def.id;
-                    const isConnectedToFocused = focusedNode && 
-                      getEntityConnections(focusedNode).some(conn => conn.id === def.id);
-                    const isConnectedToSelected = selectedEntity &&
-                      getEntityConnections(selectedEntity).some(conn => conn.id === def.id);
+                    const isConnectedToFocused = Boolean(focusedNode && 
+                      getEntityConnections(focusedNode).some(conn => conn.id === def.id));
+                    const isConnectedToSelected = Boolean(selectedEntity &&
+                      getEntityConnections(selectedEntity).some(conn => conn.id === def.id));
                     // Hide all nodes except the focused one and its connections when a node is selected
-                    const shouldHide = focusedNode && !isFocused && !isConnectedToFocused;
+                    const shouldHide = Boolean(focusedNode && !isFocused && !isConnectedToFocused);
                     
                     return (
                       <g key={def.id} className="network-node-group">
