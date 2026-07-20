@@ -1,16 +1,32 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-// https://vitejs.dev/config/
+import { resolve } from "path";
 import cssInjectedByJsPlugin from "vite-plugin-css-injected-by-js";
 
-// Provide a fallback if npm_config_component is not defined
-const component = process.env.npm_config_component || 'defaultComponent';
+export const COMPONENTS = [
+  "CHEntityAncestry",
+  "CHEntityMap",
+  "CHFloorplan",
+  "CHSalesforce",
+  "CHArticheck",
+  "CHVisualiser",
+  "CHIntentIntelligence",
+  "CHComponentLibrary",
+  "CHMarketingBuilder",
+  "CHBrandCompliance",
+] as const;
+export type ComponentName = (typeof COMPONENTS)[number];
+
+const requested =
+  process.env.COMPONENT ?? process.env.npm_config_component ?? "";
+const component: ComponentName = COMPONENTS.includes(requested as ComponentName)
+  ? (requested as ComponentName)
+  : "CHEntityAncestry";
 
 export default defineConfig({
   mode: "production",
   publicDir: false,
   define: {
-    // @mui/material won't compile unless you mark it like this
     "process.env.NODE_ENV": JSON.stringify("production"),
     "process.env": process.env,
   },
@@ -20,21 +36,17 @@ export default defineConfig({
     commonjsOptions: {
       sourceMap: false,
     },
-    outDir: `./dist`,
-    rollupOptions: {
-      output: [
-        {
-          format: "es",
-          entryFileNames: `CHVisualiser.js`,
-          preserveModules: false
-        },
-      ],
-    },
+    outDir: "./dist",
+    emptyOutDir: false,
     lib: {
-      entry: "./src/components/CHVisualiser/index.tsx",
-      name: "CHVisualiser",
-      fileName: "CHVisualiser",
+      entry: resolve(__dirname, `src/components/${component}/index.tsx`),
+      formats: ["es"],
+      fileName: () => `${component}.js`,
     },
-    emptyOutDir: true,
+    rollupOptions: {
+      output: {
+        entryFileNames: `${component}.js`,
+      },
+    },
   },
 });

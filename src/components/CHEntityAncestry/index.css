@@ -1,0 +1,378 @@
+/* ==========================================================================
+   Ancestry — Content Hub External Component
+   ========================================================================== */
+
+/* Root */
+.ancestry-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 13px;
+  color: #2c2c2a;
+  width: 100%;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.ancestry-root *,
+.ancestry-root *::before,
+.ancestry-root *::after {
+  box-sizing: border-box;
+}
+
+/* --------------------------------------------------------------------------
+   Toolbar
+   -------------------------------------------------------------------------- */
+
+.ancestry-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.ancestry-toolbar-btn {
+  font-size: 12px;
+  font-family: inherit;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #d3d1c7;
+  background: #ffffff;
+  color: #5f5e5a;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.12s, opacity 0.15s;
+  line-height: 1.4;
+}
+
+.ancestry-toolbar-btn:hover:not(.ancestry-toolbar-btn--disabled) {
+  background: #f1efe8;
+}
+
+.ancestry-toolbar-btn--disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Breadcrumb
+   -------------------------------------------------------------------------- */
+
+.ancestry-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  min-height: 26px;
+}
+
+.ancestry-breadcrumb__sep {
+  font-size: 11px;
+  color: #b4b2a9;
+}
+
+.ancestry-breadcrumb__item {
+  font-size: 11px;
+  font-family: inherit;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #5f5e5a;
+  cursor: pointer;
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background 0.12s;
+  line-height: 1.4;
+}
+
+.ancestry-breadcrumb__item:hover:not(:disabled) {
+  background: #f1efe8;
+}
+
+.ancestry-breadcrumb__item--active {
+  background: #e6f1fb;
+  color: #185fa5;
+  cursor: default;
+}
+
+/* --------------------------------------------------------------------------
+   Canvas
+   -------------------------------------------------------------------------- */
+
+.ancestry-canvas {
+  width: 100%;
+  background: #ffffff;
+  border: 1px solid #d3d1c7;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+  cursor: grab;
+}
+
+.ancestry-canvas:active {
+  cursor: grabbing;
+}
+
+/* --------------------------------------------------------------------------
+   Graph layer (fades during transition)
+   -------------------------------------------------------------------------- */
+
+.ancestry-graph-layer {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: #ffffff;
+  transition: opacity 150ms ease-in-out;
+}
+
+/* --------------------------------------------------------------------------
+   Nodes
+   -------------------------------------------------------------------------- */
+
+.ancestry-node {
+  position: absolute;
+  background: #ffffff;
+  border-style: solid;
+  border-radius: 10px;
+  padding: 10px 10px 8px;
+  text-align: center;
+  user-select: none;
+  transition: transform 0.15s ease, border-color 0.15s ease, z-index 0s;
+}
+
+.ancestry-node:not(.ancestry-node--center):hover {
+  transform: translateY(-2px);
+  z-index: 10 !important;
+}
+
+.ancestry-node__thumb {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+  margin: 0 auto 6px;
+}
+
+.ancestry-node__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 6px;
+  border: 1px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 6px;
+  font-size: 20px;
+}
+
+.ancestry-node__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: #2c2c2a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.ancestry-node__domain {
+  font-size: 10px;
+  font-weight: 500;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ancestry-node__definition {
+  font-size: 9px;
+  color: #b4b2a9;
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Spinner
+   -------------------------------------------------------------------------- */
+
+.ancestry-spinner-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.ancestry-spinner {
+  width: 26px;
+  height: 26px;
+  border: 2px solid #d3d1c7;
+  border-top-color: #185fa5;
+  border-radius: 50%;
+  animation: ancestry-spin 0.7s linear infinite;
+}
+
+/* --------------------------------------------------------------------------
+   Hover bar
+   -------------------------------------------------------------------------- */
+
+.ancestry-hover-bar {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: #ffffff;
+  border: 1px solid #d3d1c7;
+  border-radius: 8px;
+  padding: 5px 12px;
+  font-size: 11px;
+  color: #5f5e5a;
+  pointer-events: none;
+  max-width: 360px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* --------------------------------------------------------------------------
+   Empty / error states
+   -------------------------------------------------------------------------- */
+
+.ancestry-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  pointer-events: none;
+  color: #b4b2a9;
+  text-align: center;
+  padding: 24px;
+}
+
+.ancestry-empty__icon {
+  font-size: 28px;
+}
+
+.ancestry-empty p {
+  font-size: 13px;
+  margin: 0;
+}
+
+.ancestry-error {
+  padding: 24px;
+  font-size: 13px;
+  color: #a32d2d;
+  font-family: inherit;
+  background: #ffffff;
+}
+
+/* --------------------------------------------------------------------------
+   Legend
+   -------------------------------------------------------------------------- */
+
+.ancestry-legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.ancestry-legend__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #5f5e5a;
+}
+
+.ancestry-legend__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* --------------------------------------------------------------------------
+   Dark mode
+   -------------------------------------------------------------------------- */
+
+@media (prefers-color-scheme: dark) {
+  .ancestry-root {
+    background: #ffffff;
+    color: #2c2c2a;
+  }
+
+  .ancestry-toolbar-btn {
+    background: #ffffff;
+    border-color: #d3d1c7;
+    color: #5f5e5a;
+  }
+
+  .ancestry-toolbar-btn:hover:not(.ancestry-toolbar-btn--disabled) {
+    background: #f1efe8;
+  }
+
+  .ancestry-breadcrumb__item {
+    color: #5f5e5a;
+  }
+
+  .ancestry-breadcrumb__item:hover:not(:disabled) {
+    background: #f1efe8;
+  }
+
+  .ancestry-breadcrumb__item--active {
+    background: #e6f1fb;
+    color: #185fa5;
+  }
+
+  .ancestry-breadcrumb__sep {
+    color: #b4b2a9;
+  }
+
+  .ancestry-canvas {
+    background: #ffffff;
+    border-color: #d3d1c7;
+  }
+
+  .ancestry-node {
+    background: #ffffff;
+  }
+
+  .ancestry-node__label {
+    color: #2c2c2a;
+  }
+
+  .ancestry-node__definition {
+    color: #b4b2a9;
+  }
+
+  .ancestry-hover-bar {
+    background: #ffffff;
+    border-color: #d3d1c7;
+    color: #5f5e5a;
+  }
+
+  .ancestry-spinner {
+    border-color: #d3d1c7;
+    border-top-color: #7F77DD;
+  }
+
+  .ancestry-empty {
+    color: #2c2c2a;
+  }
+
+  .ancestry-legend__item {
+    color: #5f5e5a;
+  }
+}

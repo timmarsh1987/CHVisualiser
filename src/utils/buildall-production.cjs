@@ -1,5 +1,4 @@
 const { spawn } = require('child_process');
-const { readdir } = require('fs').promises;
 
 function runCommand(command) {
   return new Promise((resolve, reject) => {
@@ -21,24 +20,13 @@ function runCommand(command) {
 }
 
 async function main() {
-  const componentsPath = './src/components';
-
   try {
-    const files = await readdir(componentsPath, { withFileTypes: true });
-
-    const components = files
-      .filter(dirent => dirent.isDirectory())
-      .map(dirent => dirent.name);
-
-    const commandPromises = components.map(component => {
-      const command = `npm run build --component=${component} -define:production=production`;
-      return runCommand(command);
-    });
-
-    await Promise.all(commandPromises);
-    console.log('All commands completed.');
+    await runCommand('npm run lint');
+    await runCommand('npm run build');
+    console.log('All components built (CHEntityAncestry.js, CHEntityMap.js, CHFloorplan.js, CHSalesforce.js, CHArticheck.js, CHVisualiser.js, CHIntentIntelligence.js, CHComponentLibrary.js, CHMarketingBuilder.js, CHBrandCompliance.js).');
   } catch (error) {
     console.error('Error:', error);
+    process.exit(1);
   }
 }
 

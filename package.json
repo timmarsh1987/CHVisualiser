@@ -1,25 +1,31 @@
 {
-  "name": "chvisualiser",
+  "name": "chcomponents",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "watch": "vite build --watch --mode production",
     "dev": "vite --host --cors",
-    "comment": "The build does not work without specifying a specific component as a parameter. For a more detailed description, see the comments to task 60604",
-    "build": "tsc && vite build",
+    "build": "tsc && node ./src/utils/build-components.cjs",
     "lint": "eslint --ext .ts,.tsx src",
-    "localbuild": "tsc && vite build",
+    "localbuild": "tsc && node ./src/utils/build-components.cjs",
     "buildall-development": "npm run lint && node ./src/utils/buildall-development.cjs",
-    "buildall-production": "npm run lint && node ./src/utils/buildall-production.cjs"
+    "buildall-production": "npm run lint && node ./src/utils/buildall-production.cjs",
+    "prepare-hosting": "node ./src/utils/copy-dist-to-public.cjs",
+    "codemie:smoke": "node ./api/scripts/codemie-smoke-test.js"
   },
   "dependencies": {
     "@mui/material": "^5.11.13",
     "@sitecore/sc-contenthub-webclient-sdk": "^1.2.8",
+    "dompurify": "^3.4.11",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.383.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@types/dompurify": "^3.0.5",
+    "@types/leaflet": "^1.9.21",
     "@types/react": "^18.0.26",
     "@types/react-dom": "^18.0.9",
     "@typescript-eslint/eslint-plugin": "^5.58.0",
@@ -29,6 +35,6 @@
     "eslint-plugin-react": "^7.32.2",
     "typescript": "^4.9.3",
     "vite": "^4.2.1",
-        "vite-plugin-css-injected-by-js": "^3.1.0"
+    "vite-plugin-css-injected-by-js": "^3.1.0"
   }
 }

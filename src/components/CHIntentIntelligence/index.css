@@ -1,0 +1,536 @@
+.ch-intent-intelligence {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 480px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #18181b;
+  background: #fafafa;
+}
+
+.ch-intent-intelligence__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e4e4e7;
+  background: #fff;
+}
+
+.ch-intent-intelligence__title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.ch-intent-intelligence__tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.ch-intent-intelligence__tab {
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ch-intent-intelligence__tab--active {
+  background: #18181b;
+  border-color: #18181b;
+  color: #fff;
+}
+
+.ch-intent-intelligence__body {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+}
+
+.ch-intent-intelligence__sidebar {
+  border-right: 1px solid #e4e4e7;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.ch-intent-intelligence__search {
+  padding: 12px;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.ch-intent-intelligence__history-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ch-intent-intelligence__history-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ch-intent-intelligence__history-refresh {
+  padding: 6px 10px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ch-intent-intelligence__ask-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.ch-intent-intelligence__ask-toolbar .ch-intent-intelligence__panel-title {
+  margin: 0;
+}
+
+.ch-intent-intelligence__trend-list {
+  overflow: auto;
+  flex: 1;
+  padding: 8px;
+}
+
+.ch-intent-intelligence__trend-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 10px;
+  padding: 12px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+
+.ch-intent-intelligence__trend-item:hover {
+  background: #f4f4f5;
+}
+
+.ch-intent-intelligence__trend-item--selected {
+  border-color: #d4d4d8;
+  background: #f4f4f5;
+}
+
+.ch-intent-intelligence__trend-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.ch-intent-intelligence__trend-meta {
+  font-size: 11px;
+  color: #71717a;
+}
+
+.ch-intent-intelligence__main {
+  overflow: auto;
+  padding: 20px;
+}
+
+.ch-intent-intelligence__panel {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.ch-intent-intelligence__panel-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #71717a;
+}
+
+.ch-intent-intelligence__textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.ch-intent-intelligence__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ch-intent-intelligence__button {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ch-intent-intelligence__button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.ch-intent-intelligence__button--primary {
+  background: #18181b;
+  color: #fff;
+}
+
+.ch-intent-intelligence__button--secondary {
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  color: #18181b;
+}
+
+.ch-intent-intelligence__chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.ch-intent-intelligence__chip {
+  border: 1px solid #e4e4e7;
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ch-intent-intelligence__chip--selected {
+  background: #18181b;
+  border-color: #18181b;
+  color: #fff;
+}
+
+.ch-intent-intelligence__badge {
+  display: inline-block;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  margin-right: 6px;
+}
+
+.ch-intent-intelligence__badge--analyzed {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.ch-intent-intelligence__badge--status {
+  background: #f4f4f5;
+  color: #52525b;
+}
+
+.ch-intent-intelligence__list {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.ch-intent-intelligence__answer {
+  white-space: pre-wrap;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ch-intent-intelligence__error {
+  color: #dc2626;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.ch-intent-intelligence__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: #71717a;
+  font-size: 14px;
+  text-align: center;
+  padding: 24px;
+}
+
+.ch-intent-intelligence__loading-panel {
+  min-height: 280px;
+  background: #fff;
+  border: 1px solid #e4e4e7;
+  border-radius: 12px;
+  margin-top: 16px;
+}
+
+.ch-intent-intelligence__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 420px;
+}
+
+.ch-intent-intelligence__loading-label {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.6;
+  color: #52525b;
+}
+
+.ch-intent-intelligence__inline-loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ch-intent-intelligence__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #e4e4e7;
+  border-top-color: #18181b;
+  border-radius: 50%;
+  animation: ch-intent-intelligence-spin 0.8s linear infinite;
+}
+
+.ch-intent-intelligence__spinner--small {
+  width: 16px;
+  height: 16px;
+  border-width: 2px;
+}
+
+@keyframes ch-intent-intelligence-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.ch-intent-intelligence__generated {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f4f4f5;
+  white-space: pre-wrap;
+  font-size: 13px;
+  line-height: 1.6;
+  max-height: 320px;
+  overflow: auto;
+}
+
+.ch-intent-intelligence__sidebar-actions {
+  padding: 0 12px 12px;
+}
+
+.ch-intent-intelligence__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ch-intent-intelligence__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.ch-intent-intelligence__field span {
+  font-weight: 500;
+}
+
+.ch-intent-intelligence__field input,
+.ch-intent-intelligence__field select,
+.ch-intent-intelligence__field textarea {
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.ch-intent-intelligence__checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.ch-intent-intelligence__button--danger {
+  border-color: #fecaca;
+  color: #b91c1c;
+  background: #fff;
+}
+
+.ch-intent-intelligence__source-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ch-intent-intelligence__stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.ch-intent-intelligence__stat {
+  border: 1px solid #f4f4f5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+}
+
+.ch-intent-intelligence__stat-value {
+  margin: 4px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ch-intent-intelligence__progress {
+  height: 8px;
+  margin: 12px 0;
+  border-radius: 999px;
+  background: #f4f4f5;
+  overflow: hidden;
+}
+
+.ch-intent-intelligence__progress-bar {
+  height: 100%;
+  background: #18181b;
+  transition: width 0.2s ease;
+}
+
+.ch-intent-intelligence__notice {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #c2410c;
+}
+
+.ch-intent-intelligence__crawl-log {
+  max-height: 240px;
+  overflow: auto;
+  border: 1px solid #f4f4f5;
+  border-radius: 8px;
+  padding: 10px;
+  background: #fafafa;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+}
+
+.ch-intent-intelligence__crawl-log-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ch-intent-intelligence__log-time {
+  color: #a1a1aa;
+}
+
+.ch-intent-intelligence__log-status {
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ch-intent-intelligence__log-status--crawling { color: #2563eb; }
+.ch-intent-intelligence__log-status--crawled { color: #059669; }
+.ch-intent-intelligence__log-status--skipped { color: #d97706; }
+.ch-intent-intelligence__log-status--failed { color: #dc2626; }
+.ch-intent-intelligence__log-status--cancelled { color: #ea580c; }
+.ch-intent-intelligence__log-status--queued,
+.ch-intent-intelligence__log-status--completed { color: #71717a; }
+
+.ch-intent-intelligence__log-url {
+  color: #71717a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ch-intent-intelligence__tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.ch-intent-intelligence__page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ch-intent-intelligence__page-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f4f4f5;
+}
+
+.ch-intent-intelligence__page-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ch-intent-intelligence__page-url {
+  font-size: 12px;
+  color: #52525b;
+  word-break: break-all;
+}
+
+.ch-intent-intelligence__page-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.ch-intent-intelligence__entity-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ch-intent-intelligence__entity-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.ch-intent-intelligence__entity-name {
+  font-weight: 600;
+}
+
+@media (max-width: 900px) {
+  .ch-intent-intelligence__body {
+    grid-template-columns: 1fr;
+  }
+
+  .ch-intent-intelligence__sidebar {
+    max-height: 240px;
+    border-right: none;
+    border-bottom: 1px solid #e4e4e7;
+  }
+}
