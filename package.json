@@ -12,6 +12,7 @@
     "buildall-development": "npm run lint && node ./src/utils/buildall-development.cjs",
     "buildall-production": "npm run lint && node ./src/utils/buildall-production.cjs",
     "prepare-hosting": "node ./src/utils/copy-dist-to-public.cjs",
+    "vercel-build": "node -e \"console.log('Skipping local tsc build — serving committed public/ bundles')\"",
     "codemie:smoke": "node ./api/scripts/codemie-smoke-test.js"
   },
   "dependencies": {

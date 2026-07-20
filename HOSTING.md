@@ -32,9 +32,11 @@ Commit `public/CHBrandCompliance.js` (and other bundles you need). Vercel serves
 2. Import the GitHub repo (`timmarsh1987/CHVisualiser` or your fork)
 3. Framework Preset: **Other**
 4. Root Directory: `.` (repo root)
-5. Build Command: leave empty (or null — already set in `vercel.json`)
+5. Build Command: `npm run vercel-build` (skips `tsc`; serves committed `public/`)
 6. Output Directory: `public` (already set in `vercel.json`)
 7. Click **Deploy**
+
+> Note: Setting `buildCommand` to `null` does **not** skip the build — Vercel falls back to `npm run build`, which runs `tsc` and fails. Use `npm run vercel-build` instead.
 
 ### 3. Add environment variables
 
