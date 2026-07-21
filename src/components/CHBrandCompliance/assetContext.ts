@@ -45,12 +45,36 @@ function readPropertyValue(value: unknown): unknown {
   }
 
   const record = value as Record<string, unknown>;
-  if ('Invariant' in record) {
-    return record.Invariant;
+  const preferredKeys = [
+    'Invariant',
+    'invariant',
+    '_value',
+    'value',
+    'en-US',
+    'en-us',
+    'en',
+  ];
+
+  for (const key of preferredKeys) {
+    if (key in record) {
+      const nested = readPropertyValue(record[key]);
+      if (nested != null && typeof nested !== 'object') {
+        return nested;
+      }
+      if (typeof nested === 'string' && nested.trim()) {
+        return nested;
+      }
+    }
   }
 
-  const firstString = Object.values(record).find((entry) => typeof entry === 'string');
-  return firstString ?? value;
+  const firstPrimitive = Object.values(record).find(
+    (entry) =>
+      (typeof entry === 'string' && entry.trim()) ||
+      typeof entry === 'number' ||
+      typeof entry === 'boolean'
+  );
+
+  return firstPrimitive;
 }
 
 function readStringProperty(
@@ -63,12 +87,12 @@ function readStringProperty(
 
   for (const key of keys) {
     const raw = readPropertyValue(properties[key]);
-    if (raw == null) {
+    if (raw == null || typeof raw === 'object') {
       continue;
     }
 
     const text = String(raw).trim();
-    if (text) {
+    if (text && text !== '[object Object]') {
       return text;
     }
   }
@@ -156,6 +180,26 @@ async function resolvePreviewUrl(client: any, entity: any, entityId: string): Pr
   return undefined;
 }
 
+function coerceDisplayString(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    return text === '[object Object]' ? '' : text;
+  }
+
+  if (typeof value === 'object') {
+    const nested = readPropertyValue(value);
+    if (nested != null && nested !== value) {
+      return coerceDisplayString(nested);
+    }
+  }
+
+  return '';
+}
+
 function buildMetadata(
   properties: Record<string, unknown> | undefined,
   configuredKeys: string[]
@@ -168,12 +212,7 @@ function buildMetadata(
 
   return keys
     .map((key) => {
-      const raw = readPropertyValue(properties[key]);
-      if (raw == null) {
-        return null;
-      }
-
-      const value = String(raw).trim();
+      const value = coerceDisplayString(readPropertyValue(properties[key]));
       if (!value) {
         return null;
       }
@@ -181,6 +220,24 @@ function buildMetadata(
       return { key, value };
     })
     .filter((entry): entry is AssetMetadataEntry => entry != null);
+}
+
+function resolveDefinitionName(entity: any): string {
+  const fromProperty = coerceDisplayString(entity?.definition?.name);
+  if (fromProperty) {
+    return fromProperty;
+  }
+
+  const fromDefinitionName = coerceDisplayString(entity?.definitionName);
+  if (fromDefinitionName) {
+    return fromDefinitionName;
+  }
+
+  if (typeof entity?.definition === 'string') {
+    return entity.definition.trim();
+  }
+
+  return '';
 }
 
 export async function resolveAssetContext(
@@ -223,7 +280,7 @@ export async function resolveAssetContext(
     previewUrl,
     definition:
       readStringProperty(properties, ['Definition', 'definition']) ||
-      String(entity?.definition?.name ?? entity?.definitionName ?? '').trim() ||
+      resolveDefinitionName(entity) ||
       undefined,
     metadata: buildMetadata(properties, metadataKeys),
   };

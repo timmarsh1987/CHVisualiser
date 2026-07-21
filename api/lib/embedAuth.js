@@ -25,12 +25,22 @@ export function getEmbedApiSecret() {
 export function verifyEmbedAuth(req) {
   const secret = getEmbedApiSecret();
   if (!secret) {
-    return { ok: false, status: 503, error: 'Embed API is not configured on the server' };
+    return {
+      ok: false,
+      status: 503,
+      error:
+        'Embed API is not configured on the server — set BRAND_COMPLIANCE_API_SECRET in Vercel env vars and redeploy',
+    };
   }
 
   const token = getBearerToken(req);
   if (!token || token !== secret) {
-    return { ok: false, status: 401, error: 'Unauthorized' };
+    return {
+      ok: false,
+      status: 401,
+      error:
+        'Unauthorized — Content Hub apiToken must exactly match BRAND_COMPLIANCE_API_SECRET on Vercel',
+    };
   }
 
   return { ok: true };

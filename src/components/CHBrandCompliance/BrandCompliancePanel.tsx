@@ -130,14 +130,14 @@ function AssetSummary({ asset }: { asset: BrandComplianceAsset }) {
         </div>
       ) : (
         <div className="ch-brand-compliance__asset-preview ch-brand-compliance__asset-preview--empty">
-          No preview available
+          No preview
         </div>
       )}
       <div className="ch-brand-compliance__asset-meta">
         <h3 className="ch-brand-compliance__asset-title">{asset.name}</h3>
         <dl className="ch-brand-compliance__asset-details">
           <div>
-            <dt>Asset ID</dt>
+            <dt>ID</dt>
             <dd>{asset.id}</dd>
           </div>
           {asset.fileName ? (
@@ -152,16 +152,7 @@ function AssetSummary({ asset }: { asset: BrandComplianceAsset }) {
               <dd>{asset.mimeType}</dd>
             </div>
           ) : null}
-          {asset.definition ? (
-            <div>
-              <dt>Definition</dt>
-              <dd>{asset.definition}</dd>
-            </div>
-          ) : null}
         </dl>
-        {asset.description ? (
-          <p className="ch-brand-compliance__asset-description">{asset.description}</p>
-        ) : null}
       </div>
     </div>
   );
@@ -331,7 +322,7 @@ export default function BrandCompliancePanel({
             <div className="ch-brand-compliance__report">
               <div className="ch-brand-compliance__report-header">
                 <ScoreRing score={report.score} status={report.status} />
-                <div>
+                <div className="ch-brand-compliance__report-copy">
                   <span
                     className={`ch-brand-compliance__status ch-brand-compliance__status--${report.status}`}
                   >
