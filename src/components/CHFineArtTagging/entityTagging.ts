@@ -288,23 +288,204 @@ async function getEntityPayload(client: any, entityId: string): Promise<EntityPa
   return response.content;
 }
 
+function looksMultilingual(value: unknown): boolean {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    'Invariant' in record ||
+    'invariant' in record ||
+    'en-US' in record ||
+    'en-us' in record
+  );
+}
+
+function findExistingProperty(
+  properties: Record<string, unknown> | undefined,
+  propertyName: string
+): unknown {
+  if (!properties) {
+    return undefined;
+  }
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (key.toLowerCase() === propertyName.toLowerCase()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function formatStringProperty(value: string, existing: unknown): unknown {
+  if (looksMultilingual(existing)) {
+    return { Invariant: value };
+  }
+  // Non-multilingual String members expect a bare string (Invariant wrappers often 500).
+  return value;
+}
+
+function extractErrorDetail(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return '';
+    }
+    if (trimmed.startsWith('<')) {
+      return 'HTML error page from Content Hub';
+    }
+    return trimmed.slice(0, 300);
+  }
+
+  if (typeof content === 'object') {
+    const record = content as Record<string, unknown>;
+    const candidates = [record.Message, record.message, record.title, record.detail, record.error];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    try {
+      return JSON.stringify(content).slice(0, 300);
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+type SaveOptions = {
+  reportProperty: string;
+  reportStorage?: 'json' | 'string';
+  mustHaveTagsProperty?: string;
+  niceToHaveTagsProperty?: string;
+  analyzedAtProperty?: string;
+  definitionName?: string;
+};
+
+function buildPropertyAttempts(
+  report: FineArtTaggingReport,
+  options: SaveOptions,
+  existingProperties: Record<string, unknown> | undefined
+): Array<{ label: string; properties: Record<string, unknown> }> {
+  const reportProperty = options.reportProperty.trim();
+  const mustHaveProperty = options.mustHaveTagsProperty?.trim();
+  const niceToHaveProperty = options.niceToHaveTagsProperty?.trim();
+  const analyzedAtProperty = options.analyzedAtProperty?.trim();
+  const preferString = options.reportStorage === 'string';
+
+  const existingReport = findExistingProperty(existingProperties, reportProperty);
+  const existingMustHave = mustHaveProperty
+    ? findExistingProperty(existingProperties, mustHaveProperty)
+    : undefined;
+  const existingNiceToHave = niceToHaveProperty
+    ? findExistingProperty(existingProperties, niceToHaveProperty)
+    : undefined;
+  const existingAnalyzedAt = analyzedAtProperty
+    ? findExistingProperty(existingProperties, analyzedAtProperty)
+    : undefined;
+
+  const mustHaveValue = report.tag_pack.must_have.join(', ');
+  const niceToHaveValue = report.tag_pack.nice_to_have.join(', ');
+
+  const withCompanions = (
+    reportValue: unknown,
+    stringMode: 'plain' | 'invariant'
+  ): Record<string, unknown> => {
+    const properties: Record<string, unknown> = {
+      [reportProperty]: reportValue,
+    };
+
+    if (mustHaveProperty) {
+      properties[mustHaveProperty] =
+        stringMode === 'invariant'
+          ? { Invariant: mustHaveValue }
+          : formatStringProperty(mustHaveValue, existingMustHave);
+    }
+
+    if (niceToHaveProperty) {
+      properties[niceToHaveProperty] =
+        stringMode === 'invariant'
+          ? { Invariant: niceToHaveValue }
+          : formatStringProperty(niceToHaveValue, existingNiceToHave);
+    }
+
+    if (analyzedAtProperty) {
+      properties[analyzedAtProperty] =
+        stringMode === 'invariant'
+          ? { Invariant: report.analyzedAt }
+          : formatStringProperty(report.analyzedAt, existingAnalyzedAt);
+    }
+
+    return properties;
+  };
+
+  const attempts: Array<{ label: string; properties: Record<string, unknown> }> = [];
+
+  if (preferString) {
+    attempts.push({
+      label: 'report-string-plain',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+    attempts.push({
+      label: 'report-string-invariant',
+      properties: { [reportProperty]: { Invariant: JSON.stringify(report) } },
+    });
+  } else {
+    // JSON member only first — companion String fields often cause the 500
+    attempts.push({
+      label: 'report-json-only',
+      properties: { [reportProperty]: report },
+    });
+    attempts.push({
+      label: 'report-json-with-plain-companions',
+      properties: withCompanions(report, 'plain'),
+    });
+    attempts.push({
+      label: 'report-json-invariant-object',
+      properties: { [reportProperty]: { Invariant: report } },
+    });
+    attempts.push({
+      label: 'report-json-stringified',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+  }
+
+  attempts.push({
+    label: 'report-with-invariant-companions',
+    properties: withCompanions(
+      preferString ? { Invariant: JSON.stringify(report) } : report,
+      'invariant'
+    ),
+  });
+
+  if (!preferString && typeof existingReport === 'string') {
+    attempts.unshift({
+      label: 'report-match-existing-string',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+  }
+
+  return attempts;
+}
+
 /**
  * Saves the full fine-art tagging report onto the asset entity.
- * Default storage is a Content Hub **JSON** member (object).
- * Set reportStorage to "string" if the member is a long-text String type instead.
+ * Tries several Content Hub property encodings because JSON/String/multilingual
+ * members reject mismatched shapes with HTTP 500.
  */
 export async function saveFineArtTaggingReportToEntity(
   client: any,
   entityId: string,
   report: FineArtTaggingReport,
-  options: {
-    reportProperty: string;
-    reportStorage?: 'json' | 'string';
-    mustHaveTagsProperty?: string;
-    niceToHaveTagsProperty?: string;
-    analyzedAtProperty?: string;
-    definitionName?: string;
-  }
+  options: SaveOptions
 ): Promise<void> {
   if (!client?.raw?.putAsync) {
     throw new Error('Content Hub client is not available for saving tagging results.');
@@ -316,54 +497,36 @@ export async function saveFineArtTaggingReportToEntity(
   }
 
   const payload = await getEntityPayload(client, entityId);
-  const storage = options.reportStorage === 'string' ? 'string' : 'json';
+  const definitionHref = resolveDefinitionHref(payload, options.definitionName);
+  const attempts = buildPropertyAttempts(report, options, payload.properties);
 
-  const properties: Record<string, unknown> = {
-    [reportProperty]:
-      storage === 'string' ? { Invariant: JSON.stringify(report) } : report,
-  };
+  const errors: string[] = [];
 
-  if (options.mustHaveTagsProperty?.trim()) {
-    properties[options.mustHaveTagsProperty.trim()] = {
-      Invariant: report.tag_pack.must_have.join(', '),
+  for (const attempt of attempts) {
+    const body = {
+      entitydefinition: {
+        href: definitionHref,
+      },
+      properties: attempt.properties,
     };
+
+    const response = (await client.raw.putAsync(
+      `/api/entities/${entityId}`,
+      body
+    )) as RawResponse<unknown>;
+
+    if (response.isSuccessStatusCode) {
+      return;
+    }
+
+    const statusCode = response.statusCode ?? 'unknown';
+    const detail = extractErrorDetail(response.content);
+    errors.push(
+      `${attempt.label} → HTTP ${statusCode}${detail ? ` (${detail})` : ''}`
+    );
   }
-
-  if (options.niceToHaveTagsProperty?.trim()) {
-    properties[options.niceToHaveTagsProperty.trim()] = {
-      Invariant: report.tag_pack.nice_to_have.join(', '),
-    };
-  }
-
-  if (options.analyzedAtProperty?.trim()) {
-    properties[options.analyzedAtProperty.trim()] = { Invariant: report.analyzedAt };
-  }
-
-  const body = {
-    entitydefinition: {
-      href: resolveDefinitionHref(payload, options.definitionName),
-    },
-    properties,
-  };
-
-  const response = (await client.raw.putAsync(
-    `/api/entities/${entityId}`,
-    body
-  )) as RawResponse<unknown>;
-
-  if (response.isSuccessStatusCode) {
-    return;
-  }
-
-  const statusCode = response.statusCode ?? 'unknown';
-  const detail =
-    response.content != null && typeof response.content === 'object'
-      ? String((response.content as Record<string, unknown>).Message ?? '')
-      : '';
 
   throw new Error(
-    `Failed to save fine-art tagging report to Content Hub (HTTP ${statusCode})${
-      detail ? `: ${detail}` : ''
-    }`
+    `Failed to save fine-art tagging report to Content Hub after ${attempts.length} attempts: ${errors.join('; ')}`
   );
 }
