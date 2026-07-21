@@ -36,15 +36,26 @@ function buildTaggingPrompt(asset, options = {}, imageContext = { imageAttached:
 
   const assetLines = [
     `Asset ID: ${asString(asset.id) || 'unknown'}`,
+    `Title: ${asString(asset.title) || asString(asset.name) || 'unknown'}`,
     `Name: ${asString(asset.name) || 'unknown'}`,
     `File name: ${asString(asset.fileName) || 'unknown'}`,
     `MIME type: ${asString(asset.mimeType) || 'unknown'}`,
+    `Artist: ${asString(asset.artist) || 'unknown'}`,
+    `Medium: ${asString(asset.medium) || 'unknown'}`,
+    `Year: ${asString(asset.year) || 'unknown'}`,
+    `Dimensions: ${asString(asset.dimensions) || 'unknown'}`,
     `Description: ${asString(asset.description) || 'none'}`,
     `Entity definition: ${asString(asset.definition) || 'unknown'}`,
   ];
 
+  if (Array.isArray(asset.exhibitions) && asset.exhibitions.length > 0) {
+    assetLines.push(
+      `Exhibitions: ${asset.exhibitions.map((entry) => asString(entry)).filter(Boolean).join('; ') || 'none'}`
+    );
+  }
+
   if (Array.isArray(asset.metadata) && asset.metadata.length > 0) {
-    assetLines.push('Metadata:');
+    assetLines.push('Catalog metadata:');
     for (const entry of asset.metadata) {
       if (entry && typeof entry === 'object') {
         const record = /** @type {Record<string, unknown>} */ (entry);
@@ -56,14 +67,16 @@ function buildTaggingPrompt(asset, options = {}, imageContext = { imageAttached:
   const visionInstructions = imageContext.imageAttached
     ? `An image file of this artwork is attached to this message. Visually inspect it for subject, medium cues, style/movement, composition, palette, and tagging. Do not say you cannot see the image.`
     : imageContext.imageUploadError
-      ? `No image file could be attached (${imageContext.imageUploadError}). Base your assessment on metadata only and note that visual review was unavailable.`
-      : `No preview image was available. Base your assessment on metadata, file name, and MIME type, and note that visual review was unavailable.`;
+      ? `No image file could be attached (${imageContext.imageUploadError}). Base your assessment on catalog metadata only and note that visual review was unavailable.`
+      : `No preview image was available. Base your assessment on catalog metadata, and note that visual review was unavailable.`;
 
-  return `You are a ${displayName} tagging analyst for a museum / DAM collection.
+  return `You are a ${displayName} tagging analyst for a museum / gallery DAM collection.
 
 ${visionInstructions}
 
-Analyze the digital artwork asset and return ONLY valid JSON (no markdown fences) matching this schema:
+Catalog fields (title, artist, medium, year, dimensions, description, exhibitions) are provided when available. Use them to ground tags and hypotheses when they are consistent with the image. Prefer visual evidence for what you can see; do not invent contradictory catalog facts. If catalog medium/year/artist are present, reflect them in tags when appropriate and note uncertainty only where the image cannot confirm a detail.
+
+Analyze the artwork and return ONLY valid JSON (no markdown fences) matching this schema:
 {
   "artworks": [
     {
@@ -109,7 +122,7 @@ Analyze the digital artwork asset and return ONLY valid JSON (no markdown fences
   ]
 }
 
-Asset to analyze:
+Artwork / catalog context:
 ${assetLines.join('\n')}
 
 Prefer visual evidence from the attached image when available. Keep confidence values between 0 and 1.`;

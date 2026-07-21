@@ -10,15 +10,46 @@ const RENDITION_PRIORITY = [
   'downloadPreview',
 ] as const;
 
-const DEFAULT_NAME_PROPERTIES = ['FileName', 'fileName', 'Title', 'title', 'Name', 'name'];
+const DEFAULT_NAME_PROPERTIES = [
+  'ArtworkTitle',
+  'Title',
+  'title',
+  'FileName',
+  'fileName',
+  'Name',
+  'name',
+];
 const DEFAULT_FILE_NAME_PROPERTIES = ['FileName', 'fileName'];
 const DEFAULT_DESCRIPTION_PROPERTIES = [
+  'ArtworkDescription',
   'Description',
   'description',
   'AssetDescription',
   'Summary',
   'summary',
 ];
+
+/** Catalog fields sent to CodeMie unless metadataProperties overrides the list */
+const DEFAULT_ARTWORK_METADATA_PROPERTIES = [
+  'ArtworkTitle',
+  'ArtworkDescription',
+  'DimensionUnframed',
+  'DimensionFramed',
+  'ArtWidth',
+  'ArtHeight',
+  'ArtDepth',
+  'ArtLength',
+  'ArtDiameter',
+  'ArtworkHasFrame',
+  'ArtworkWeight',
+];
+
+const RELATED_PATH_RELATIONS = [
+  { relation: 'ArtistsWorks', key: 'Artist' },
+  { relation: 'ArtworkMedium', key: 'Medium' },
+  { relation: 'ArtworkYear', key: 'Year' },
+  { relation: 'ExhibitionToArtwork', key: 'Exhibition' },
+] as const;
 
 function hrefToString(href: unknown): string | undefined {
   if (typeof href === 'string' && href.trim()) {
@@ -205,7 +236,8 @@ function buildMetadata(
     return [];
   }
 
-  const keys = configuredKeys.length > 0 ? configuredKeys : Object.keys(properties).slice(0, 12);
+  const keys =
+    configuredKeys.length > 0 ? configuredKeys : DEFAULT_ARTWORK_METADATA_PROPERTIES;
 
   return keys
     .map((key) => {
@@ -217,6 +249,84 @@ function buildMetadata(
       return { key, value };
     })
     .filter((entry): entry is AssetMetadataEntry => entry != null);
+}
+
+function cultureLabel(values: unknown): string {
+  if (values == null) {
+    return '';
+  }
+
+  if (typeof values === 'string' || typeof values === 'number' || typeof values === 'boolean') {
+    return String(values).trim();
+  }
+
+  if (typeof values !== 'object' || Array.isArray(values)) {
+    return '';
+  }
+
+  const record = values as Record<string, unknown>;
+  const preferredKeys = ['en-US', 'en-us', 'Invariant', 'invariant', 'en'];
+  for (const key of preferredKeys) {
+    const value = coerceDisplayString(record[key]);
+    if (value) {
+      return value;
+    }
+  }
+
+  for (const value of Object.values(record)) {
+    const text = coerceDisplayString(value);
+    if (text) {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+/**
+ * Flatten Content Hub related_paths into unique labels (leaf-first, then parents).
+ */
+function labelsFromRelatedPath(relatedPaths: unknown, relationName: string): string[] {
+  if (relatedPaths == null || typeof relatedPaths !== 'object') {
+    return [];
+  }
+
+  const paths = (relatedPaths as Record<string, unknown>)[relationName];
+  if (!Array.isArray(paths)) {
+    return [];
+  }
+
+  const labels: string[] = [];
+  const seen = new Set<string>();
+
+  for (const path of paths) {
+    if (!Array.isArray(path) || path.length === 0) {
+      continue;
+    }
+
+    // Prefer the most specific node (last), then include parents if useful
+    for (let index = path.length - 1; index >= 0; index -= 1) {
+      const node = path[index];
+      if (!node || typeof node !== 'object') {
+        continue;
+      }
+
+      const label = cultureLabel((node as { values?: unknown }).values);
+      if (!label) {
+        continue;
+      }
+
+      const key = label.toLowerCase();
+      if (seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      labels.push(label);
+    }
+  }
+
+  return labels;
 }
 
 function resolveDefinitionName(entity: any): string {
@@ -237,6 +347,44 @@ function resolveDefinitionName(entity: any): string {
   return '';
 }
 
+async function loadEntitySnapshot(
+  client: any,
+  entity: any,
+  entityId: string
+): Promise<{
+  properties: Record<string, unknown>;
+  relatedPaths: unknown;
+  renditions: unknown;
+}> {
+  let properties = { ...((entity?.properties ?? {}) as Record<string, unknown>) };
+  let relatedPaths = entity?.related_paths ?? entity?.relatedPaths;
+  let renditions = entity?.renditions;
+
+  const needsRelatedPaths = RELATED_PATH_RELATIONS.some(
+    ({ relation }) => labelsFromRelatedPath(relatedPaths, relation).length === 0
+  );
+
+  if ((!relatedPaths || needsRelatedPaths) && client?.raw?.getAsync) {
+    try {
+      const response = await client.raw.getAsync(`/api/entities/${entityId}`);
+      if (response.isSuccessStatusCode && response.content) {
+        const content = response.content as Record<string, unknown>;
+        const remoteProperties =
+          content.properties && typeof content.properties === 'object'
+            ? (content.properties as Record<string, unknown>)
+            : {};
+        properties = { ...remoteProperties, ...properties };
+        relatedPaths = content.related_paths ?? content.relatedPaths ?? relatedPaths;
+        renditions = content.renditions ?? renditions;
+      }
+    } catch {
+      // Keep page entity snapshot
+    }
+  }
+
+  return { properties, relatedPaths, renditions };
+}
+
 export async function resolveAssetContext(
   client: any,
   entity: any,
@@ -248,7 +396,12 @@ export async function resolveAssetContext(
     return null;
   }
 
-  const properties = (entity?.properties ?? {}) as Record<string, unknown>;
+  const { properties, relatedPaths, renditions } = await loadEntitySnapshot(
+    client,
+    entity,
+    entityId
+  );
+
   const nameKeys = options.nameProperty
     ? [options.nameProperty]
     : DEFAULT_NAME_PROPERTIES;
@@ -260,25 +413,65 @@ export async function resolveAssetContext(
     : DEFAULT_DESCRIPTION_PROPERTIES;
   const metadataKeys = parseMetadataPropertyList(options.metadataProperties);
 
-  const previewUrl = await resolvePreviewUrl(client, entity, entityId);
+  // Prefer page-entity preview helpers, then remote renditions from snapshot
+  let previewUrl = await resolvePreviewUrl(client, entity, entityId);
+  if (!previewUrl) {
+    previewUrl = getPreviewFromRenditions(renditions);
+  }
+
+  const title =
+    readStringProperty(properties, ['ArtworkTitle', 'Title', 'title']) || undefined;
+  const description = readStringProperty(properties, descriptionKeys) || undefined;
+  const dimensions =
+    readStringProperty(properties, ['DimensionUnframed', 'DimensionFramed']) ||
+    undefined;
+
+  const artists = labelsFromRelatedPath(relatedPaths, 'ArtistsWorks');
+  const mediums = labelsFromRelatedPath(relatedPaths, 'ArtworkMedium');
+  const years = labelsFromRelatedPath(relatedPaths, 'ArtworkYear');
+  const exhibitions = labelsFromRelatedPath(relatedPaths, 'ExhibitionToArtwork');
+
+  const metadata = buildMetadata(properties, metadataKeys);
+
+  for (const { relation, key } of RELATED_PATH_RELATIONS) {
+    const labels = labelsFromRelatedPath(relatedPaths, relation);
+    if (labels.length === 0) {
+      continue;
+    }
+
+    // Avoid duplicating if already present from property list
+    if (metadata.some((entry) => entry.key.toLowerCase() === key.toLowerCase())) {
+      continue;
+    }
+
+    metadata.push({ key, value: labels.join(' › ') });
+  }
+
   const name =
     readStringProperty(properties, nameKeys) ||
+    title ||
     readStringProperty(properties, fileNameKeys) ||
     `Asset ${entityId}`;
 
   return {
     id: entityId,
     name,
+    title,
     fileName: readStringProperty(properties, fileNameKeys) || undefined,
     mimeType:
       readStringProperty(properties, ['MimeType', 'mimeType', 'ContentType', 'contentType']) ||
       undefined,
-    description: readStringProperty(properties, descriptionKeys) || undefined,
+    description,
+    artist: artists.length > 0 ? artists.join(', ') : undefined,
+    medium: mediums.length > 0 ? mediums.join(' › ') : undefined,
+    year: years.length > 0 ? years.join(', ') : undefined,
+    exhibitions: exhibitions.length > 0 ? exhibitions : undefined,
+    dimensions,
     previewUrl,
     definition:
       readStringProperty(properties, ['Definition', 'definition']) ||
       resolveDefinitionName(entity) ||
       undefined,
-    metadata: buildMetadata(properties, metadataKeys),
+    metadata,
   };
 }

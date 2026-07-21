@@ -11,6 +11,18 @@ export type FineArtAsset = {
   description?: string;
   previewUrl?: string;
   definition?: string;
+  /** Catalog title (e.g. ArtworkTitle) */
+  title?: string;
+  /** Resolved artist name(s) from ArtistsWorks */
+  artist?: string;
+  /** Resolved medium label(s) from ArtworkMedium */
+  medium?: string;
+  /** Resolved year label(s) from ArtworkYear */
+  year?: string;
+  /** Exhibition titles from ExhibitionToArtwork */
+  exhibitions?: string[];
+  /** Framed / unframed dimension text */
+  dimensions?: string;
   metadata?: AssetMetadataEntry[];
 };
 

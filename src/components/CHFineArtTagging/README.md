@@ -14,10 +14,19 @@ Content Hub external component for a **Fine Art Tagging Analyst**. Reviews the c
 | `mustHaveTagsProperty` | No | Optional string property for comma-separated must-have tags |
 | `niceToHaveTagsProperty` | No | Optional string property for comma-separated nice-to-have tags |
 | `taggingAnalyzedAtProperty` | No | Optional string/datetime property for last run timestamp |
-| `nameProperty` | No | Entity property for asset display name |
+| `nameProperty` | No | Entity property for display name (default prefers `ArtworkTitle`) |
 | `fileNameProperty` | No | Entity property for file name |
-| `descriptionProperty` | No | Entity property for description |
-| `metadataProperties` | No | Comma-separated property names to include in the CodeMie prompt |
+| `descriptionProperty` | No | Entity property for description (default prefers `ArtworkDescription`) |
+| `metadataProperties` | No | Comma-separated property names for the CodeMie prompt. Default: title, description, dimensions, size fields |
+
+### Catalog context sent to CodeMie (automatic)
+
+Without extra config, analysis includes:
+
+- **Properties:** `ArtworkTitle`, `ArtworkDescription`, `DimensionUnframed` / `DimensionFramed`, `ArtWidth` / `ArtHeight` / `ArtDepth` / `ArtLength` / `ArtDiameter`, `ArtworkHasFrame`, `ArtworkWeight`
+- **Relations (via `related_paths`):** Artist (`ArtistsWorks`), Medium (`ArtworkMedium`), Year (`ArtworkYear`), Exhibitions (`ExhibitionToArtwork`)
+
+Commercial fields (price, insurance, sales) are **not** sent by default. Add them via `metadataProperties` if needed.
 
 ## Content Hub config (JSON)
 
