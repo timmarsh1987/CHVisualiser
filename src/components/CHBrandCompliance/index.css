@@ -288,6 +288,14 @@
   text-align: left;
 }
 
+.ch-brand-compliance__report-meta--ok {
+  color: #0f7b3a;
+}
+
+.ch-brand-compliance__report-meta--error {
+  color: #ab091e;
+}
+
 .ch-brand-compliance__panel {
   margin-top: 14px;
   padding-top: 14px;

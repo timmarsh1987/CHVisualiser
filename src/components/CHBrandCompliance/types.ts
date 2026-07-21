@@ -48,6 +48,23 @@ export type BrandComplianceOptions = {
   descriptionProperty?: string;
   /** Comma-separated entity property names, or JSON array in config */
   metadataProperties?: string;
+  /**
+   * Asset entity property that stores the full compliance report.
+   * Prefer a Content Hub **JSON** member. Default: BrandComplianceReport
+   */
+  complianceReportProperty?: string;
+  /**
+   * How to write the report property.
+   * - `json` (default): store as a JSON object — use with a JSON member type
+   * - `string`: store stringified JSON in a String/long-text member
+   */
+  complianceReportStorage?: 'json' | 'string';
+  /** Optional string property for status: pass | warning | fail */
+  complianceStatusProperty?: string;
+  /** Optional number property for score 0–100 */
+  complianceScoreProperty?: string;
+  /** Optional string/datetime property for last analyzed timestamp */
+  complianceAnalyzedAtProperty?: string;
 };
 
 export type AnalyzeComplianceInput = {

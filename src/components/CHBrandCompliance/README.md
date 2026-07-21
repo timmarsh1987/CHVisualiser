@@ -10,6 +10,10 @@ Content Hub external component for **Cytiva DAM Brand Compliance Manager**. Revi
 | `apiToken` | Yes | Bearer token matching `BRAND_COMPLIANCE_API_SECRET` on the server |
 | `brandName` | No | Brand label shown in the UI (default: `Cytiva`) |
 | `brandGuidelines` | No | Free-text brand rules sent to CodeMie with each analysis |
+| `complianceReportProperty` | No | Asset property for the full report JSON (default: `BrandComplianceReport`) |
+| `complianceStatusProperty` | No | Optional string property for `pass` / `warning` / `fail` |
+| `complianceScoreProperty` | No | Optional number property for score `0–100` |
+| `complianceAnalyzedAtProperty` | No | Optional string/datetime property for last run timestamp |
 | `nameProperty` | No | Entity property for asset display name |
 | `fileNameProperty` | No | Entity property for file name |
 | `descriptionProperty` | No | Entity property for description |
@@ -24,9 +28,32 @@ Content Hub stores component settings on **`context.config`**, not `context.opti
   "apiBaseUrl": "https://your-project.vercel.app",
   "apiToken": "your-secure-token",
   "brandName": "Cytiva",
-  "brandGuidelines": "Use official Cytiva logo lockups, Pantone 2945 C blue, Helvetica Neue typography, and include regulatory disclaimers on promotional assets."
+  "brandGuidelines": "Use official Cytiva logo lockups, Pantone 2945 C blue, Helvetica Neue typography, and include regulatory disclaimers on promotional assets.",
+  "complianceReportProperty": "BrandComplianceReport",
+  "complianceStatusProperty": "BrandComplianceStatus",
+  "complianceScoreProperty": "BrandComplianceScore",
+  "complianceAnalyzedAtProperty": "BrandComplianceAnalyzedAt"
 }
 ```
+
+## Content Hub entity fields (create these on the asset definition)
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `BrandComplianceReport` | **JSON** (recommended) | Full report object — required for load/save |
+| `BrandComplianceStatus` | String | Optional: `pass` / `warning` / `fail` for filters |
+| `BrandComplianceScore` | Integer / Decimal | Optional: score for sorting |
+| `BrandComplianceAnalyzedAt` | String or DateTime | Optional: last run time |
+
+A **JSON** member type is preferred. The component stores the report as a real JSON object by default (`complianceReportStorage: "json"`).
+
+If you use a String/long-text member instead, set `"complianceReportStorage": "string"` in config.
+
+### Behaviour
+
+1. On open → load `BrandComplianceReport` from the current asset and show the last result
+2. On **Run / Re-run** → call CodeMie, then PUT the JSON back onto the asset
+3. Re-open the asset later → previous result appears immediately (labelled “Saved result”)
 
 ## Server setup (Vercel)
 

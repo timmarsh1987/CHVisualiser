@@ -8,6 +8,11 @@ const STRING_OPTION_KEYS = [
   'nameProperty',
   'fileNameProperty',
   'descriptionProperty',
+  'complianceReportProperty',
+  'complianceReportStorage',
+  'complianceStatusProperty',
+  'complianceScoreProperty',
+  'complianceAnalyzedAtProperty',
 ] as const;
 
 const NESTED_JSON_KEYS = ['config', 'settings', 'json', 'componentOptions'];

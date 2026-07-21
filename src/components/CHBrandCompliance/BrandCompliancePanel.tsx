@@ -3,6 +3,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { resolveAssetContext } from './assetContext';
 import { analyzeBrandCompliance } from './api';
+import {
+  readSavedComplianceReport,
+  saveComplianceReportToEntity,
+} from './entityCompliance';
 import { LoadingState } from './LoadingState';
 import { getOptionsDiagnostics } from './options';
 import type {
@@ -12,6 +16,8 @@ import type {
   ComplianceReport,
 } from './types';
 import './index.css';
+
+const DEFAULT_REPORT_PROPERTY = 'BrandComplianceReport';
 
 interface BrandCompliancePanelProps {
   client?: any;
@@ -38,6 +44,13 @@ function resolveOptions(
     fileNameProperty: options?.fileNameProperty?.trim(),
     descriptionProperty: options?.descriptionProperty?.trim(),
     metadataProperties: options?.metadataProperties?.trim(),
+    complianceReportProperty:
+      options?.complianceReportProperty?.trim() || DEFAULT_REPORT_PROPERTY,
+    complianceReportStorage:
+      options?.complianceReportStorage?.trim() === 'string' ? 'string' : 'json',
+    complianceStatusProperty: options?.complianceStatusProperty?.trim(),
+    complianceScoreProperty: options?.complianceScoreProperty?.trim(),
+    complianceAnalyzedAtProperty: options?.complianceAnalyzedAtProperty?.trim(),
   };
 }
 
@@ -134,12 +147,17 @@ export default function BrandCompliancePanel({
   const [assetError, setAssetError] = useState<string | null>(null);
 
   const [report, setReport] = useState<ComplianceReport | null>(null);
+  const [reportSource, setReportSource] = useState<'saved' | 'fresh' | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!resolvedOptions) {
       setAsset(null);
+      setReport(null);
+      setReportSource(null);
       return undefined;
     }
 
@@ -148,18 +166,40 @@ export default function BrandCompliancePanel({
     const loadAsset = async () => {
       setAssetLoading(true);
       setAssetError(null);
+      setSaveState('idle');
+      setSaveError(null);
 
       try {
         const nextAsset = await resolveAssetContext(client, entity, resolvedOptions);
-        if (!cancelled) {
-          setAsset(nextAsset);
-          if (!nextAsset) {
-            setAssetError('No asset entity found on this page.');
-          }
+        if (cancelled) {
+          return;
+        }
+
+        setAsset(nextAsset);
+        if (!nextAsset) {
+          setAssetError('No asset entity found on this page.');
+          setReport(null);
+          setReportSource(null);
+          return;
+        }
+
+        const saved = readSavedComplianceReport(
+          entity,
+          resolvedOptions.complianceReportProperty || DEFAULT_REPORT_PROPERTY
+        );
+
+        if (saved) {
+          setReport(saved);
+          setReportSource('saved');
+        } else {
+          setReport(null);
+          setReportSource(null);
         }
       } catch (error) {
         if (!cancelled) {
           setAsset(null);
+          setReport(null);
+          setReportSource(null);
           setAssetError(
             error instanceof Error ? error.message : 'Could not load asset context.'
           );
@@ -185,6 +225,8 @@ export default function BrandCompliancePanel({
 
     setAnalyzing(true);
     setAnalysisError(null);
+    setSaveState('idle');
+    setSaveError(null);
 
     try {
       const nextReport = await analyzeBrandCompliance(resolvedOptions, {
@@ -194,7 +236,30 @@ export default function BrandCompliancePanel({
           brandGuidelines: resolvedOptions.brandGuidelines,
         },
       });
+
       setReport(nextReport);
+      setReportSource('fresh');
+
+      setSaveState('saving');
+      try {
+        await saveComplianceReportToEntity(client, asset.id, nextReport, {
+          reportProperty:
+            resolvedOptions.complianceReportProperty || DEFAULT_REPORT_PROPERTY,
+          reportStorage: resolvedOptions.complianceReportStorage,
+          statusProperty: resolvedOptions.complianceStatusProperty,
+          scoreProperty: resolvedOptions.complianceScoreProperty,
+          analyzedAtProperty: resolvedOptions.complianceAnalyzedAtProperty,
+          definitionName: asset.definition,
+        });
+        setSaveState('saved');
+      } catch (error) {
+        setSaveState('error');
+        setSaveError(
+          error instanceof Error
+            ? error.message
+            : 'Could not save compliance report to Content Hub.'
+        );
+      }
     } catch (error) {
       setAnalysisError(
         error instanceof Error ? error.message : 'Brand compliance analysis failed.'
@@ -202,7 +267,7 @@ export default function BrandCompliancePanel({
     } finally {
       setAnalyzing(false);
     }
-  }, [asset, resolvedOptions]);
+  }, [asset, client, resolvedOptions]);
 
   if (!resolvedOptions) {
     return (
@@ -242,7 +307,7 @@ export default function BrandCompliancePanel({
           onClick={() => void runAnalysis()}
           disabled={!asset || analyzing || assetLoading}
         >
-          {analyzing ? 'Analyzing…' : 'Run compliance check'}
+          {analyzing ? 'Analyzing…' : report ? 'Re-run compliance check' : 'Run compliance check'}
         </button>
       </header>
 
@@ -287,6 +352,7 @@ export default function BrandCompliancePanel({
                   </span>
                   <p className="ch-brand-compliance__report-summary">{report.summary}</p>
                   <p className="ch-brand-compliance__report-meta">
+                    {reportSource === 'saved' ? 'Saved result · ' : ''}
                     Analyzed {formatDate(report.analyzedAt)}
                     {report.imageAttached
                       ? ' · Visual review included'
@@ -294,6 +360,19 @@ export default function BrandCompliancePanel({
                         ? ' · Metadata only (image unavailable)'
                         : ''}
                   </p>
+                  {saveState === 'saving' ? (
+                    <p className="ch-brand-compliance__report-meta">Saving to Content Hub…</p>
+                  ) : null}
+                  {saveState === 'saved' ? (
+                    <p className="ch-brand-compliance__report-meta ch-brand-compliance__report-meta--ok">
+                      Saved to asset
+                    </p>
+                  ) : null}
+                  {saveState === 'error' && saveError ? (
+                    <p className="ch-brand-compliance__report-meta ch-brand-compliance__report-meta--error">
+                      Analysis succeeded, but save failed: {saveError}
+                    </p>
+                  ) : null}
                 </div>
               </div>
 
