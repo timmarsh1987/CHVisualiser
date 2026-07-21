@@ -18,6 +18,8 @@ export type ComplianceReport = {
   issues: ComplianceIssue[];
   passedChecks: string[];
   analyzedAt: string;
+  imageAttached?: boolean;
+  imageUploadError?: string;
 };
 
 export type AssetMetadataEntry = {

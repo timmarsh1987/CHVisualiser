@@ -100,6 +100,18 @@ Output: `dist/CHBrandCompliance.js`
 
 ## Features
 
-- Reads asset metadata and preview from the current Content Hub entity
-- Sends structured context to CodeMie for brand compliance scoring
+- Reads asset metadata and preview URL from the current Content Hub entity
+- **Downloads the preview rendition server-side**, uploads it to CodeMie (`POST /v1/files/`), and attaches it via `file_names` for visual analysis
+- Falls back to metadata-only if the preview cannot be fetched/uploaded
 - Displays compliance score, summary, passed checks, and actionable issues
+
+## Visual analysis flow
+
+```
+Content Hub preview URL
+  → Vercel downloads image bytes
+  → CodeMie POST /v1/files/  (multipart)
+  → CodeMie POST /v1/assistants/{id}/model  with file_names: [file_url]
+```
+
+Ensure the CodeMie assistant uses a vision-capable model (e.g. GPT-4o) so it can inspect the attached image.

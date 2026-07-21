@@ -121,43 +121,6 @@ function IssueCard({ issue }: { issue: ComplianceIssue }) {
   );
 }
 
-function AssetSummary({ asset }: { asset: BrandComplianceAsset }) {
-  return (
-    <div className="ch-brand-compliance__asset-card">
-      {asset.previewUrl ? (
-        <div className="ch-brand-compliance__asset-preview">
-          <img src={asset.previewUrl} alt={asset.name} />
-        </div>
-      ) : (
-        <div className="ch-brand-compliance__asset-preview ch-brand-compliance__asset-preview--empty">
-          No preview
-        </div>
-      )}
-      <div className="ch-brand-compliance__asset-meta">
-        <h3 className="ch-brand-compliance__asset-title">{asset.name}</h3>
-        <dl className="ch-brand-compliance__asset-details">
-          <div>
-            <dt>ID</dt>
-            <dd>{asset.id}</dd>
-          </div>
-          {asset.fileName ? (
-            <div>
-              <dt>File</dt>
-              <dd>{asset.fileName}</dd>
-            </div>
-          ) : null}
-          {asset.mimeType ? (
-            <div>
-              <dt>Type</dt>
-              <dd>{asset.mimeType}</dd>
-            </div>
-          ) : null}
-        </dl>
-      </div>
-    </div>
-  );
-}
-
 export default function BrandCompliancePanel({
   client,
   entity,
@@ -272,9 +235,6 @@ export default function BrandCompliancePanel({
         <div>
           <p className="ch-brand-compliance__eyebrow">{resolvedOptions.brandName} DAM</p>
           <h2 className="ch-brand-compliance__title">Brand Compliance Manager</h2>
-          <p className="ch-brand-compliance__subtitle">
-            Run AI-powered brand checks on the current asset via CodeMie.
-          </p>
         </div>
         <button
           type="button"
@@ -287,34 +247,31 @@ export default function BrandCompliancePanel({
       </header>
 
       <div className="ch-brand-compliance__body">
-        <section className="ch-brand-compliance__column">
-          {assetLoading ? <LoadingState active label="Loading asset…" /> : null}
+        <section className="ch-brand-compliance__column ch-brand-compliance__column--results">
+          {assetLoading ? <LoadingState active label="Loading…" /> : null}
+
           {!assetLoading && assetError ? (
-            <div className="ch-brand-compliance__empty">
+            <div className="ch-brand-compliance__empty ch-brand-compliance__empty--error">
               <h3>Asset unavailable</h3>
               <p>{assetError}</p>
             </div>
           ) : null}
-          {!assetLoading && asset ? <AssetSummary asset={asset} /> : null}
-        </section>
 
-        <section className="ch-brand-compliance__column ch-brand-compliance__column--results">
-          {analyzing ? <LoadingState active label="Analyzing asset…" /> : null}
+          {!assetLoading && !assetError && analyzing ? (
+            <LoadingState active label="Analyzing…" />
+          ) : null}
 
-          {!analyzing && analysisError ? (
+          {!assetLoading && !assetError && !analyzing && analysisError ? (
             <div className="ch-brand-compliance__empty ch-brand-compliance__empty--error">
               <h3>Analysis failed</h3>
               <p>{analysisError}</p>
             </div>
           ) : null}
 
-          {!analyzing && !analysisError && !report ? (
+          {!assetLoading && !assetError && !analyzing && !analysisError && !report ? (
             <div className="ch-brand-compliance__empty">
               <h3>Ready to review</h3>
-              <p>
-                Click <strong>Run compliance check</strong> to send this asset to the CodeMie brand
-                compliance assistant.
-              </p>
+              <p>Click <strong>Run compliance check</strong> to analyze this asset.</p>
             </div>
           ) : null}
 
@@ -331,6 +288,11 @@ export default function BrandCompliancePanel({
                   <p className="ch-brand-compliance__report-summary">{report.summary}</p>
                   <p className="ch-brand-compliance__report-meta">
                     Analyzed {formatDate(report.analyzedAt)}
+                    {report.imageAttached
+                      ? ' · Visual review included'
+                      : report.imageUploadError
+                        ? ' · Metadata only (image unavailable)'
+                        : ''}
                   </p>
                 </div>
               </div>
