@@ -23,7 +23,7 @@ async function main() {
   try {
     await runCommand('npm run lint');
     await runCommand('npm run build');
-    console.log('All components built (CHEntityAncestry.js, CHEntityMap.js, CHFloorplan.js, CHSalesforce.js, CHArticheck.js, CHVisualiser.js, CHIntentIntelligence.js, CHComponentLibrary.js, CHMarketingBuilder.js, CHBrandCompliance.js).');
+    console.log('All components built (CHEntityAncestry.js, CHEntityMap.js, CHFloorplan.js, CHSalesforce.js, CHArticheck.js, CHVisualiser.js, CHIntentIntelligence.js, CHComponentLibrary.js, CHMarketingBuilder.js, CHBrandCompliance.js, CHFineArtTagging.js).');
   } catch (error) {
     console.error('Error:', error);
     process.exit(1);

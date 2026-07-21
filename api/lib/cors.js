@@ -3,7 +3,10 @@
  * @param {import('http').ServerResponse} res
  */
 export function applyCors(req, res) {
-  const configured = process.env.BRAND_COMPLIANCE_CORS_ORIGIN?.trim();
+  const configured =
+    process.env.BRAND_COMPLIANCE_CORS_ORIGIN?.trim() ||
+    process.env.FINE_ART_TAGGING_CORS_ORIGIN?.trim() ||
+    process.env.EMBED_CORS_ORIGIN?.trim();
   const requestOrigin = typeof req.headers.origin === 'string' ? req.headers.origin : '';
 
   const allowedOrigins = configured

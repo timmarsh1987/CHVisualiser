@@ -1,6 +1,6 @@
 # CodeMie integration
 
-Server-side CodeMie client used by `CHBrandCompliance` embed API routes.
+Server-side CodeMie client used by `CHBrandCompliance` and `CHFineArtTagging` embed API routes.
 
 Implementation mirrors Signal-Monitor:
 

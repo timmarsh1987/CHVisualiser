@@ -14,6 +14,7 @@ export const COMPONENTS = [
   "CHComponentLibrary",
   "CHMarketingBuilder",
   "CHBrandCompliance",
+  "CHFineArtTagging",
 ] as const;
 export type ComponentName = (typeof COMPONENTS)[number];
 

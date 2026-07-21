@@ -1,0 +1,338 @@
+.ch-fine-art-tagging {
+  --ch-fat-pad: 12px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #102a43;
+  background: #f5f8fb;
+}
+
+.ch-fine-art-tagging *,
+.ch-fine-art-tagging *::before,
+.ch-fine-art-tagging *::after {
+  box-sizing: border-box;
+}
+
+.ch-fine-art-tagging__header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--ch-fat-pad);
+  border-bottom: 1px solid #d9e2ec;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.ch-fine-art-tagging__eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0b5cab;
+}
+
+.ch-fine-art-tagging__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ch-fine-art-tagging__primary-button {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #0b5cab;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ch-fine-art-tagging__primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ch-fine-art-tagging__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  gap: 0;
+}
+
+.ch-fine-art-tagging__column {
+  min-width: 0;
+  padding: var(--ch-fat-pad);
+}
+
+.ch-fine-art-tagging__column--results {
+  background: #fff;
+  padding-bottom: 24px;
+  flex: 1;
+}
+
+.ch-fine-art-tagging__empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100px;
+  padding: 14px;
+  border: 1px dashed #bcccdc;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ch-fine-art-tagging__empty h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.ch-fine-art-tagging__empty p {
+  margin: 0;
+  color: #486581;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ch-fine-art-tagging__empty--error {
+  border-color: #f9b8b8;
+  background: #fff5f5;
+}
+
+.ch-fine-art-tagging__hint {
+  margin: 8px 0 0;
+  color: #486581;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ch-fine-art-tagging__report {
+  min-width: 0;
+}
+
+.ch-fine-art-tagging__report-header {
+  margin-bottom: 16px;
+}
+
+.ch-fine-art-tagging__report-copy {
+  min-width: 0;
+  width: 100%;
+}
+
+.ch-fine-art-tagging__status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #e3f9e5;
+  color: #0f7b3a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ch-fine-art-tagging__file-name {
+  margin: 10px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-fine-art-tagging__report-meta {
+  margin: 8px 0 0;
+  color: #627d98;
+  font-size: 11px;
+}
+
+.ch-fine-art-tagging__report-meta--ok {
+  color: #0f7b3a;
+}
+
+.ch-fine-art-tagging__report-meta--error {
+  color: #ab091e;
+}
+
+.ch-fine-art-tagging__panel {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #edf2f7;
+  min-width: 0;
+}
+
+.ch-fine-art-tagging__panel-title {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.ch-fine-art-tagging__tag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ch-fine-art-tagging__tag {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #e0e7ff;
+  color: #334e68;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.ch-fine-art-tagging__tag--must {
+  background: #0b5cab;
+  color: #fff;
+}
+
+.ch-fine-art-tagging__tag--nice {
+  background: #d9e2ec;
+  color: #243b53;
+}
+
+.ch-fine-art-tagging__medium {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ch-fine-art-tagging__hypothesis-list,
+.ch-fine-art-tagging__group-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ch-fine-art-tagging__hypothesis,
+.ch-fine-art-tagging__group {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fbff;
+  min-width: 0;
+}
+
+.ch-fine-art-tagging__hypothesis-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ch-fine-art-tagging__hypothesis-label,
+.ch-fine-art-tagging__group-title {
+  margin: 0;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ch-fine-art-tagging__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #0b5cab;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.ch-fine-art-tagging__hypothesis-evidence,
+.ch-fine-art-tagging__group-rationale {
+  margin: 0;
+  color: #486581;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-fine-art-tagging__group-rationale {
+  margin-top: 8px;
+}
+
+.ch-fine-art-tagging__analysis {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.ch-fine-art-tagging__analysis-field {
+  display: grid;
+  gap: 2px;
+}
+
+.ch-fine-art-tagging__analysis-field dt {
+  margin: 0;
+  color: #627d98;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ch-fine-art-tagging__analysis-field dd {
+  margin: 0;
+  color: #243b53;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-fine-art-tagging__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  padding: 12px;
+}
+
+.ch-fine-art-tagging__loading-label {
+  margin: 0;
+  max-width: 100%;
+  text-align: center;
+  color: #486581;
+  font-size: 12px;
+}
+
+.ch-fine-art-tagging__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d9e2ec;
+  border-top-color: #0b5cab;
+  border-radius: 50%;
+  animation: ch-fine-art-tagging-spin 0.8s linear infinite;
+}
+
+@keyframes ch-fine-art-tagging-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

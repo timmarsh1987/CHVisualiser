@@ -15,7 +15,9 @@ This repo is set up so **one Vercel project** serves:
 | Path | Purpose |
 |------|---------|
 | `/CHBrandCompliance.js` | Content Hub External component bundle |
-| `/api/brand-compliance/analyze` | CodeMie proxy (reads Vercel env vars) |
+| `/CHFineArtTagging.js` | Fine Art Tagging Analyst bundle |
+| `/api/brand-compliance/analyze` | CodeMie brand compliance proxy |
+| `/api/fine-art-tagging/analyze` | CodeMie fine-art tagging proxy |
 
 ### 1. Prepare bundles locally
 
