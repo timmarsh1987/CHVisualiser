@@ -28,7 +28,7 @@ function resolveDefinitionHref(payload: EntityPayload, fallbackDefinitionName?: 
 
     const href = candidate.href;
     if (typeof href === 'string' && href.trim()) {
-      return href.trim();
+      return normalizeDefinitionHref(href.trim());
     }
   }
 
@@ -37,6 +37,19 @@ function resolveDefinitionHref(payload: EntityPayload, fallbackDefinitionName?: 
   }
 
   throw new Error('Could not resolve entity definition for Content Hub update.');
+}
+
+/** Content Hub accepts relative definition hrefs more reliably than absolute URLs. */
+function normalizeDefinitionHref(href: string): string {
+  try {
+    if (href.startsWith('/')) {
+      return href;
+    }
+    const url = new URL(href);
+    return `${url.pathname}${url.search}`;
+  } catch {
+    return href;
+  }
 }
 
 export function parseComplianceReport(raw: unknown): ComplianceReport | null {
@@ -174,23 +187,196 @@ async function getEntityPayload(client: any, entityId: string): Promise<EntityPa
   return response.content;
 }
 
+function looksMultilingual(value: unknown): boolean {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return false;
+  }
+
+  const record = value as Record<string, unknown>;
+  return (
+    'Invariant' in record ||
+    'invariant' in record ||
+    'en-US' in record ||
+    'en-us' in record
+  );
+}
+
+function findExistingProperty(
+  properties: Record<string, unknown> | undefined,
+  propertyName: string
+): unknown {
+  if (!properties) {
+    return undefined;
+  }
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (key.toLowerCase() === propertyName.toLowerCase()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+function formatStringProperty(value: string, existing: unknown): unknown {
+  if (looksMultilingual(existing)) {
+    return { Invariant: value };
+  }
+  // Non-multilingual String members expect a bare string (Invariant wrappers often 500).
+  return value;
+}
+
+function extractErrorDetail(content: unknown): string {
+  if (content == null) {
+    return '';
+  }
+
+  if (typeof content === 'string') {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return '';
+    }
+    if (trimmed.startsWith('<')) {
+      return 'HTML error page from Content Hub';
+    }
+    return trimmed.slice(0, 300);
+  }
+
+  if (typeof content === 'object') {
+    const record = content as Record<string, unknown>;
+    const candidates = [record.Message, record.message, record.title, record.detail, record.error];
+    for (const candidate of candidates) {
+      if (typeof candidate === 'string' && candidate.trim()) {
+        return candidate.trim();
+      }
+    }
+    try {
+      return JSON.stringify(content).slice(0, 300);
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+type SaveOptions = {
+  reportProperty: string;
+  reportStorage?: 'json' | 'string';
+  statusProperty?: string;
+  scoreProperty?: string;
+  analyzedAtProperty?: string;
+  definitionName?: string;
+};
+
+function buildPropertyAttempts(
+  report: ComplianceReport,
+  options: SaveOptions,
+  existingProperties: Record<string, unknown> | undefined
+): Array<{ label: string; properties: Record<string, unknown> }> {
+  const reportProperty = options.reportProperty.trim();
+  const statusProperty = options.statusProperty?.trim();
+  const scoreProperty = options.scoreProperty?.trim();
+  const analyzedAtProperty = options.analyzedAtProperty?.trim();
+  const preferString = options.reportStorage === 'string';
+
+  const existingReport = findExistingProperty(existingProperties, reportProperty);
+  const existingStatus = statusProperty
+    ? findExistingProperty(existingProperties, statusProperty)
+    : undefined;
+  const existingAnalyzedAt = analyzedAtProperty
+    ? findExistingProperty(existingProperties, analyzedAtProperty)
+    : undefined;
+
+  const withCompanions = (
+    reportValue: unknown,
+    stringMode: 'plain' | 'invariant'
+  ): Record<string, unknown> => {
+    const properties: Record<string, unknown> = {
+      [reportProperty]: reportValue,
+    };
+
+    if (statusProperty) {
+      properties[statusProperty] =
+        stringMode === 'invariant'
+          ? { Invariant: report.status }
+          : formatStringProperty(report.status, existingStatus);
+    }
+
+    if (scoreProperty) {
+      properties[scoreProperty] = report.score;
+    }
+
+    if (analyzedAtProperty) {
+      properties[analyzedAtProperty] =
+        stringMode === 'invariant'
+          ? { Invariant: report.analyzedAt }
+          : formatStringProperty(report.analyzedAt, existingAnalyzedAt);
+    }
+
+    return properties;
+  };
+
+  const attempts: Array<{ label: string; properties: Record<string, unknown> }> = [];
+
+  if (preferString) {
+    attempts.push({
+      label: 'report-string-plain',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+    attempts.push({
+      label: 'report-string-invariant',
+      properties: { [reportProperty]: { Invariant: JSON.stringify(report) } },
+    });
+  } else {
+    // JSON member: object only first (most common cause of companion-field 500s)
+    attempts.push({
+      label: 'report-json-only',
+      properties: { [reportProperty]: report },
+    });
+    attempts.push({
+      label: 'report-json-with-plain-companions',
+      properties: withCompanions(report, 'plain'),
+    });
+    attempts.push({
+      label: 'report-json-invariant-object',
+      properties: { [reportProperty]: { Invariant: report } },
+    });
+    attempts.push({
+      label: 'report-json-stringified',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+  }
+
+  attempts.push({
+    label: 'report-with-invariant-companions',
+    properties: withCompanions(
+      preferString ? { Invariant: JSON.stringify(report) } : report,
+      'invariant'
+    ),
+  });
+
+  // If an existing value shape is multilingual string JSON, try matching that early.
+  if (!preferString && typeof existingReport === 'string') {
+    attempts.unshift({
+      label: 'report-match-existing-string',
+      properties: { [reportProperty]: JSON.stringify(report) },
+    });
+  }
+
+  return attempts;
+}
+
 /**
  * Saves the full compliance report onto the asset entity.
- * Default storage is a Content Hub **JSON** member (object).
- * Set reportStorage to "string" if the member is a long-text String type instead.
+ * Tries several Content Hub property encodings because JSON/String/multilingual
+ * members reject mismatched shapes with HTTP 500.
  */
 export async function saveComplianceReportToEntity(
   client: any,
   entityId: string,
   report: ComplianceReport,
-  options: {
-    reportProperty: string;
-    reportStorage?: 'json' | 'string';
-    statusProperty?: string;
-    scoreProperty?: string;
-    analyzedAtProperty?: string;
-    definitionName?: string;
-  }
+  options: SaveOptions
 ): Promise<void> {
   if (!client?.raw?.putAsync) {
     throw new Error('Content Hub client is not available for saving compliance results.');
@@ -202,50 +388,36 @@ export async function saveComplianceReportToEntity(
   }
 
   const payload = await getEntityPayload(client, entityId);
-  const storage = options.reportStorage === 'string' ? 'string' : 'json';
+  const definitionHref = resolveDefinitionHref(payload, options.definitionName);
+  const attempts = buildPropertyAttempts(report, options, payload.properties);
 
-  const properties: Record<string, unknown> = {
-    [reportProperty]:
-      storage === 'string' ? { Invariant: JSON.stringify(report) } : report,
-  };
+  const errors: string[] = [];
 
-  if (options.statusProperty?.trim()) {
-    properties[options.statusProperty.trim()] = { Invariant: report.status };
+  for (const attempt of attempts) {
+    const body = {
+      entitydefinition: {
+        href: definitionHref,
+      },
+      properties: attempt.properties,
+    };
+
+    const response = (await client.raw.putAsync(
+      `/api/entities/${entityId}`,
+      body
+    )) as RawResponse<unknown>;
+
+    if (response.isSuccessStatusCode) {
+      return;
+    }
+
+    const statusCode = response.statusCode ?? 'unknown';
+    const detail = extractErrorDetail(response.content);
+    errors.push(
+      `${attempt.label} → HTTP ${statusCode}${detail ? ` (${detail})` : ''}`
+    );
   }
-
-  if (options.scoreProperty?.trim()) {
-    properties[options.scoreProperty.trim()] = report.score;
-  }
-
-  if (options.analyzedAtProperty?.trim()) {
-    properties[options.analyzedAtProperty.trim()] = { Invariant: report.analyzedAt };
-  }
-
-  const body = {
-    entitydefinition: {
-      href: resolveDefinitionHref(payload, options.definitionName),
-    },
-    properties,
-  };
-
-  const response = (await client.raw.putAsync(
-    `/api/entities/${entityId}`,
-    body
-  )) as RawResponse<unknown>;
-
-  if (response.isSuccessStatusCode) {
-    return;
-  }
-
-  const statusCode = response.statusCode ?? 'unknown';
-  const detail =
-    response.content != null && typeof response.content === 'object'
-      ? String((response.content as Record<string, unknown>).Message ?? '')
-      : '';
 
   throw new Error(
-    `Failed to save compliance report to Content Hub (HTTP ${statusCode})${
-      detail ? `: ${detail}` : ''
-    }`
+    `Failed to save compliance report to Content Hub after ${attempts.length} attempts: ${errors.join('; ')}`
   );
 }
