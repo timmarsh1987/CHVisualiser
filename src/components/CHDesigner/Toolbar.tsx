@@ -13,8 +13,9 @@ export default function Toolbar() {
   const dispatch = useDesignerAction();
   const selection = useSelection();
   const viewport = useViewport();
-  const { canUndo, canRedo, exportDocument, importDocumentJson } = useDesignerApi();
+  const { mode, canUndo, canRedo, exportDocument, importDocumentJson } = useDesignerApi();
   const fileRef = useRef<HTMLInputElement>(null);
+  const isAdmin = mode === 'admin';
 
   const handleExport = () => {
     const doc = exportDocument();
@@ -38,47 +39,54 @@ export default function Toolbar() {
 
   return (
     <header className="chd-toolbar">
-      <div className="chd-toolbar-brand">CHDesigner</div>
+      <div className="chd-toolbar-brand">
+        CHDesigner
+        <span className="chd-toolbar-mode">{isAdmin ? 'Admin' : 'Edit'}</span>
+      </div>
 
-      <div className="chd-toolbar-group">
-        {ADDABLE.map((item) => (
+      {isAdmin ? (
+        <div className="chd-toolbar-group">
+          {ADDABLE.map((item) => (
+            <button
+              key={item.type}
+              type="button"
+              className="chd-btn"
+              onClick={() => dispatch({ type: 'ADD_LAYER', layerType: item.type })}
+            >
+              + {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {isAdmin ? (
+        <div className="chd-toolbar-group">
           <button
-            key={item.type}
             type="button"
             className="chd-btn"
-            onClick={() => dispatch({ type: 'ADD_LAYER', layerType: item.type })}
+            disabled={selection.length === 0}
+            onClick={() => dispatch({ type: 'DELETE_LAYERS' })}
           >
-            + {item.label}
+            Delete
           </button>
-        ))}
-      </div>
-
-      <div className="chd-toolbar-group">
-        <button
-          type="button"
-          className="chd-btn"
-          disabled={selection.length === 0}
-          onClick={() => dispatch({ type: 'DELETE_LAYERS' })}
-        >
-          Delete
-        </button>
-        <button
-          type="button"
-          className="chd-btn"
-          disabled={selection.length === 0}
-          onClick={() => dispatch({ type: 'BRING_FORWARD' })}
-        >
-          Forward
-        </button>
-        <button
-          type="button"
-          className="chd-btn"
-          disabled={selection.length === 0}
-          onClick={() => dispatch({ type: 'SEND_BACKWARD' })}
-        >
-          Back
-        </button>
-      </div>
+          <button
+            type="button"
+            className="chd-btn"
+            disabled={selection.length === 0}
+            onClick={() => dispatch({ type: 'BRING_FORWARD' })}
+          >
+            Forward
+          </button>
+          <button
+            type="button"
+            className="chd-btn"
+            disabled={selection.length === 0}
+            onClick={() => dispatch({ type: 'SEND_BACKWARD' })}
+          >
+            Back
+          </button>
+        </div>
+      ) : null}
 
       <div className="chd-toolbar-group">
         <button
@@ -103,22 +111,26 @@ export default function Toolbar() {
         <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ZOOM_RESET' })}>
           {Math.round(viewport.zoom * 100)}%
         </button>
-        <button type="button" className="chd-btn" onClick={handleExport}>
-          Export
-        </button>
-        <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
-          Import
-        </button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept="application/json,.json"
-          className="chd-file-input"
-          onChange={(e) => {
-            void handleImportFile(e.target.files?.[0] ?? null);
-            e.target.value = '';
-          }}
-        />
+        {isAdmin ? (
+          <>
+            <button type="button" className="chd-btn" onClick={handleExport}>
+              Export
+            </button>
+            <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
+              Import
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="application/json,.json"
+              className="chd-file-input"
+              onChange={(e) => {
+                void handleImportFile(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
+          </>
+        ) : null}
       </div>
     </header>
   );

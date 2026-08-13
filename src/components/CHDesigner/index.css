@@ -42,6 +42,36 @@
   font-weight: 600;
   font-size: 13px;
   margin-right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chd-toolbar-mode {
+  font-weight: 500;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--chd-muted);
+  border: 0.5px solid var(--chd-border);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+
+.chd-status-bar {
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--chd-muted);
+  border-bottom: 0.5px solid var(--chd-border);
+  background: #faf9f6;
+}
+
+.chd-status-bar--error {
+  color: #a32d2d;
+}
+
+.chd-status-bar--saved {
+  color: #1d6b4f;
 }
 
 .chd-toolbar-group {

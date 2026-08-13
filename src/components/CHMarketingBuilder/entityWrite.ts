@@ -217,6 +217,7 @@ export function marketingAssetToProperties(asset: {
   rawHtmlOverrideContent?: string;
   overrideReasonMA?: string;
   zoneLayoutJson?: string;
+  designerInstanceJson?: string;
 }): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
 
@@ -231,6 +232,9 @@ export function marketingAssetToProperties(asset: {
   }
   if (asset.zoneLayoutJson !== undefined) {
     writeStringProperty(properties, 'zoneLayoutJson', asset.zoneLayoutJson);
+  }
+  if (asset.designerInstanceJson !== undefined) {
+    writeStringProperty(properties, 'designerInstanceJson', asset.designerInstanceJson);
   }
 
   return properties;
@@ -250,6 +254,9 @@ export function templateToProperties(template: Template): Record<string, unknown
 
   if (template.canvasWidth !== undefined) writeNumberProperty(properties, 'canvasWidth', template.canvasWidth);
   if (template.canvasHeight !== undefined) writeNumberProperty(properties, 'canvasHeight', template.canvasHeight);
+  if (template.designerDocumentJson !== undefined) {
+    writeStringProperty(properties, 'designerDocumentJson', template.designerDocumentJson);
+  }
 
   return properties;
 }

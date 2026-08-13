@@ -184,6 +184,13 @@ export function mapEntityToTemplate(entityId: string | number, payload: EntityPa
     brandKitId: brandKitFromProperty || (brandKitFromRelation != null ? String(brandKitFromRelation) : ''),
     zones,
     allowedAssetIds: getTemplateAllowedAssetIds(payload).map(String),
+    designerDocumentJson:
+      readStringProperty(
+        properties,
+        'EPAM.designerDocumentJson',
+        'designerDocumentJson',
+        'DesignerDocumentJson'
+      ) || undefined,
   };
 }
 
@@ -286,6 +293,13 @@ export function mapEntityToMarketingAsset(
     overrideReasonMA: readStringProperty(properties, 'EPAM.overrideReasonMA', 'overrideReasonMA') || undefined,
     zoneLayoutJson:
       readStringProperty(properties, 'EPAM.zoneLayoutJson', 'zoneLayoutJson', 'builderLayoutJson') || undefined,
+    designerInstanceJson:
+      readStringProperty(
+        properties,
+        'EPAM.designerInstanceJson',
+        'designerInstanceJson',
+        'DesignerInstanceJson'
+      ) || undefined,
     zoneValues,
     renderedOutputAssetId:
       readStringProperty(properties, 'EPAM.renderedOutputAssetId', 'renderedOutputAssetId') ||

@@ -2,11 +2,17 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
 import { cloneDocument, createSeedDocument, defaultLayerForType, parseDesignerDocument } from './document';
+import {
+  diffInstanceOverrides,
+  filterEndUserPatch,
+  layerIsSelectable,
+} from './policy';
 import {
   DEFAULT_ZOOM,
   MAX_ZOOM,
@@ -14,6 +20,8 @@ import {
   MIN_ZOOM,
   type DesignerAction,
   type DesignerDocument,
+  type DesignerInstanceDocument,
+  type DesignerMode,
   type Layer,
   type ViewportState,
 } from './types';
@@ -21,7 +29,22 @@ import { clamp } from './coords';
 
 const MAX_HISTORY = 50;
 
+export interface DesignerProviderProps {
+  children: React.ReactNode;
+  mode?: DesignerMode;
+  /** Document shown in the canvas (merged template+instance for endUser). */
+  initialDocument?: DesignerDocument;
+  /** Template-only baseline used to compute instance overrides (endUser). */
+  templateDocument?: DesignerDocument;
+  /** Template id used when emitting instance overrides in endUser mode. */
+  templateId?: string;
+  onDocumentChange?: (document: DesignerDocument) => void;
+  onInstanceChange?: (instance: DesignerInstanceDocument) => void;
+}
+
 interface DesignerStoreValue {
+  mode: DesignerMode;
+  templateId?: string;
   document: DesignerDocument;
   selection: string[];
   viewport: ViewportState;
@@ -75,11 +98,25 @@ function nudgeSelected(layers: Layer[], selectedIds: string[], direction: 'forwa
   return next;
 }
 
-export function DesignerProvider({ children }: { children: React.ReactNode }) {
+export function DesignerProvider({
+  children,
+  mode = 'admin',
+  initialDocument,
+  templateDocument,
+  templateId,
+  onDocumentChange,
+  onInstanceChange,
+}: DesignerProviderProps) {
   const seedRef = useRef<DesignerDocument | null>(null);
   if (!seedRef.current) {
-    seedRef.current = createSeedDocument();
+    seedRef.current = initialDocument ? cloneDocument(initialDocument) : createSeedDocument();
   }
+
+  const templateBaselineRef = useRef<DesignerDocument>(
+    cloneDocument(templateDocument ?? initialDocument ?? seedRef.current)
+  );
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   const [document, setDocument] = useState<DesignerDocument>(() => cloneDocument(seedRef.current!));
   const [selection, setSelection] = useState<string[]>([]);
@@ -93,8 +130,27 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
   const [historyTick, setHistoryTick] = useState(0);
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const documentRef = useRef(document);
+  documentRef.current = document;
+
+  const onDocumentChangeRef = useRef(onDocumentChange);
+  onDocumentChangeRef.current = onDocumentChange;
+  const onInstanceChangeRef = useRef(onInstanceChange);
+  onInstanceChangeRef.current = onInstanceChange;
+  const templateIdRef = useRef(templateId);
+  templateIdRef.current = templateId;
 
   const bumpHistoryUi = useCallback(() => setHistoryTick((n) => n + 1), []);
+
+  const emitChanges = useCallback((nextDoc: DesignerDocument) => {
+    onDocumentChangeRef.current?.(cloneDocument(nextDoc));
+    if (modeRef.current === 'endUser') {
+      const id = templateIdRef.current ?? '';
+      onInstanceChangeRef.current?.(
+        diffInstanceOverrides(templateBaselineRef.current, nextDoc, id)
+      );
+    }
+  }, []);
 
   const pushHistory = useCallback(
     (nextDoc: DesignerDocument) => {
@@ -113,21 +169,27 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
   const applyDocument = useCallback(
     (nextDoc: DesignerDocument, recordHistory: boolean) => {
       setDocument(nextDoc);
+      documentRef.current = nextDoc;
       if (recordHistory) {
         pushHistory(nextDoc);
       }
+      emitChanges(nextDoc);
     },
-    [pushHistory]
+    [emitChanges, pushHistory]
   );
 
   const dispatch = useCallback(
     (action: DesignerAction) => {
+      const isEndUser = modeRef.current === 'endUser';
+
       switch (action.type) {
         case 'ADD_LAYER': {
+          if (isEndUser) return;
           const layer = defaultLayerForType(action.layerType, action.at);
           setDocument((prev) => {
             const next = { ...prev, layers: [...prev.layers, layer] };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           setSelection([layer.id]);
@@ -140,7 +202,9 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
               ...prev,
               layers: prev.layers.map((layer) => {
                 if (layer.id !== action.id) return layer;
-                const patched: Layer = { ...layer, ...action.patch };
+                const patch = isEndUser ? filterEndUserPatch(layer, action.patch) : action.patch;
+                if (Object.keys(patch).length === 0) return layer;
+                const patched: Layer = { ...layer, ...patch };
                 if (typeof patched.width === 'number') {
                   patched.width = Math.max(MIN_LAYER_SIZE, patched.width);
                 }
@@ -151,11 +215,13 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
               }),
             };
             if (push) pushHistory(next);
+            emitChanges(next);
             return next;
           });
           break;
         }
         case 'DELETE_LAYERS': {
+          if (isEndUser) return;
           const ids = new Set(action.ids ?? selectionRef.current);
           if (ids.size === 0) return;
           setDocument((prev) => {
@@ -164,6 +230,7 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
               layers: prev.layers.filter((layer) => !ids.has(layer.id)),
             };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           setSelection((prev) => prev.filter((id) => !ids.has(id)));
@@ -171,15 +238,19 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
         }
         case 'SELECT': {
           setSelection((prev) => {
+            const allowed = action.ids.filter((id) => {
+              const layer = documentRef.current.layers.find((l) => l.id === id);
+              return layer ? layerIsSelectable(layer, modeRef.current) : false;
+            });
             if (action.additive) {
               const set = new Set(prev);
-              for (const id of action.ids) {
+              for (const id of allowed) {
                 if (set.has(id)) set.delete(id);
                 else set.add(id);
               }
               return Array.from(set);
             }
-            return action.ids;
+            return allowed;
           });
           break;
         }
@@ -188,17 +259,20 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
           break;
         }
         case 'REORDER': {
+          if (isEndUser) return;
           setDocument((prev) => {
             const next = {
               ...prev,
               layers: moveLayerInList(prev.layers, action.fromIndex, action.toIndex),
             };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           break;
         }
         case 'SET_VISIBILITY': {
+          if (isEndUser) return;
           setDocument((prev) => {
             const next = {
               ...prev,
@@ -207,24 +281,29 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
               ),
             };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           break;
         }
         case 'BRING_FORWARD': {
+          if (isEndUser) return;
           const ids = selectionRef.current;
           setDocument((prev) => {
             const next = { ...prev, layers: nudgeSelected(prev.layers, ids, 'forward') };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           break;
         }
         case 'SEND_BACKWARD': {
+          if (isEndUser) return;
           const ids = selectionRef.current;
           setDocument((prev) => {
             const next = { ...prev, layers: nudgeSelected(prev.layers, ids, 'backward') };
             pushHistory(next);
+            emitChanges(next);
             return next;
           });
           break;
@@ -251,17 +330,23 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
         case 'UNDO': {
           if (historyIndexRef.current <= 0) return;
           historyIndexRef.current -= 1;
-          setDocument(cloneDocument(historyRef.current[historyIndexRef.current]));
+          const prevDoc = cloneDocument(historyRef.current[historyIndexRef.current]);
+          setDocument(prevDoc);
+          documentRef.current = prevDoc;
           setSelection([]);
           bumpHistoryUi();
+          emitChanges(prevDoc);
           break;
         }
         case 'REDO': {
           if (historyIndexRef.current >= historyRef.current.length - 1) return;
           historyIndexRef.current += 1;
-          setDocument(cloneDocument(historyRef.current[historyIndexRef.current]));
+          const nextDoc = cloneDocument(historyRef.current[historyIndexRef.current]);
+          setDocument(nextDoc);
+          documentRef.current = nextDoc;
           setSelection([]);
           bumpHistoryUi();
+          emitChanges(nextDoc);
           break;
         }
         case 'LOAD_DOCUMENT': {
@@ -272,6 +357,7 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
         case 'COMMIT': {
           setDocument((prev) => {
             pushHistory(prev);
+            emitChanges(prev);
             return prev;
           });
           break;
@@ -280,16 +366,18 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
           break;
       }
     },
-    [applyDocument, bumpHistoryUi, pushHistory]
+    [applyDocument, bumpHistoryUi, emitChanges, pushHistory]
   );
 
   const exportDocument = useCallback(() => cloneDocument(document), [document]);
 
   const importDocumentJson = useCallback(
     (json: string) => {
+      if (modeRef.current === 'endUser') return false;
       try {
         const parsed = parseDesignerDocument(JSON.parse(json));
         if (!parsed) return false;
+        templateBaselineRef.current = cloneDocument(parsed);
         applyDocument(parsed, true);
         setSelection([]);
         return true;
@@ -300,8 +388,20 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
     [applyDocument]
   );
 
+  // Keep admin baseline aligned with the working template document.
+  useEffect(() => {
+    if (mode === 'admin' && initialDocument) {
+      templateBaselineRef.current = cloneDocument(initialDocument);
+    }
+    if (mode === 'endUser' && templateDocument) {
+      templateBaselineRef.current = cloneDocument(templateDocument);
+    }
+  }, [initialDocument, templateDocument, mode]);
+
   const value = useMemo<DesignerStoreValue>(
     () => ({
+      mode,
+      templateId,
       document,
       selection,
       viewport,
@@ -311,7 +411,7 @@ export function DesignerProvider({ children }: { children: React.ReactNode }) {
       exportDocument,
       importDocumentJson,
     }),
-    [document, selection, viewport, dispatch, exportDocument, importDocumentJson, historyTick]
+    [mode, templateId, document, selection, viewport, dispatch, exportDocument, importDocumentJson, historyTick]
   );
 
   return (
@@ -325,6 +425,10 @@ function useDesignerStore(): DesignerStoreValue {
     throw new Error('useDesignerStore must be used within DesignerProvider');
   }
   return ctx;
+}
+
+export function useDesignerMode(): DesignerMode {
+  return useDesignerStore().mode;
 }
 
 export function useDesignerDocument(): DesignerDocument {
@@ -350,6 +454,7 @@ export function useDesignerAction(): (action: DesignerAction) => void {
 export function useDesignerApi() {
   const store = useDesignerStore();
   return {
+    mode: store.mode,
     canUndo: store.canUndo,
     canRedo: store.canRedo,
     exportDocument: store.exportDocument,

@@ -22,6 +22,9 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         height: 240,
         visible: true,
         fill: '#ffffff',
+        locked: false,
+        allowTransform: false,
+        editableContent: false,
       };
     case 'rect':
       return {
@@ -34,6 +37,9 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         height: 100,
         visible: true,
         fill: '#3d5a80',
+        locked: false,
+        allowTransform: false,
+        editableContent: false,
       };
     case 'text':
       return {
@@ -48,6 +54,9 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         text: 'Double-click to edit',
         fontSize: 20,
         color: '#1a1a1a',
+        locked: false,
+        allowTransform: false,
+        editableContent: true,
       };
     case 'image':
       return {
@@ -61,6 +70,9 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         visible: true,
         fill: '#e8e6e1',
         src: '',
+        locked: false,
+        allowTransform: false,
+        editableContent: true,
       };
   }
 }
@@ -83,6 +95,7 @@ export function createSeedDocument(): DesignerDocument {
   text.color = '#2c2c2a';
   text.width = 280;
   text.height = 40;
+  text.editableContent = true;
 
   return {
     version: 1,
@@ -124,7 +137,8 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
     const w = Number(layer.width);
     const h = Number(layer.height);
     if (![x, y, w, h].every(Number.isFinite)) continue;
-    layers.push({
+
+    const parsed: Layer = {
       id,
       type,
       name,
@@ -135,12 +149,21 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
       rotation: typeof layer.rotation === 'number' ? layer.rotation : undefined,
       visible: layer.visible !== false,
       locked: Boolean(layer.locked),
+      allowTransform: Boolean(layer.allowTransform),
       fill: typeof layer.fill === 'string' ? layer.fill : undefined,
       text: typeof layer.text === 'string' ? layer.text : undefined,
       fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
       color: typeof layer.color === 'string' ? layer.color : undefined,
       src: typeof layer.src === 'string' ? layer.src : undefined,
-    });
+    };
+
+    if (typeof layer.editableContent === 'boolean') {
+      parsed.editableContent = layer.editableContent;
+    } else {
+      parsed.editableContent = type === 'text' || type === 'image';
+    }
+
+    layers.push(parsed);
   }
 
   return {

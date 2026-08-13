@@ -2268,6 +2268,98 @@ async function updateMarketingAsset(asset: MarketingAsset): Promise<MarketingAss
   return asset;
 }
 
+const DEFAULT_DESIGNER_DOCUMENT_PROPERTY = 'designerDocumentJson';
+const DEFAULT_DESIGNER_INSTANCE_PROPERTY = 'designerInstanceJson';
+
+function resolveDesignerDocumentProperty(override?: string): string {
+  return override?.trim() || DEFAULT_DESIGNER_DOCUMENT_PROPERTY;
+}
+
+function resolveDesignerInstanceProperty(override?: string): string {
+  return override?.trim() || DEFAULT_DESIGNER_INSTANCE_PROPERTY;
+}
+
+async function getTemplateDesignerDocument(
+  templateId: string,
+  propertyName?: string
+): Promise<string | null> {
+  const payload = await getEntityPayload(templateId);
+  const properties = payload.properties ?? {};
+  const prop = resolveDesignerDocumentProperty(propertyName);
+  const aliases = [`EPAM.${prop}`, prop, prop.replace(/^./, (c) => c.toUpperCase())];
+  for (const alias of aliases) {
+    const value = properties[alias];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (value && typeof value === 'object' && 'value' in (value as object)) {
+      const nested = (value as { value?: unknown }).value;
+      if (typeof nested === 'string' && nested.trim()) return nested;
+    }
+  }
+  // Also check mapped template field when already loaded via getTemplate
+  return null;
+}
+
+async function saveTemplateDesignerDocument(
+  templateId: string,
+  documentJson: string,
+  propertyName?: string
+): Promise<boolean> {
+  const prop = resolveDesignerDocumentProperty(propertyName);
+  const properties: Record<string, unknown> = { [prop]: documentJson };
+  const saved = await putEntityPropertiesOptional(
+    templateId,
+    properties,
+    'template designer document'
+  );
+  if (!saved) {
+    throw new Error(
+      `Could not save designer document on template ${templateId}. Ensure property "${prop}" exists on EPAM.Template and your role can Update it.`
+    );
+  }
+  logResolved('template designer document', `Saved ${prop} on template ${templateId}`);
+  return true;
+}
+
+async function getMarketingAssetDesignerInstance(
+  assetId: string,
+  propertyName?: string
+): Promise<string | null> {
+  const payload = await getEntityPayload(assetId);
+  const properties = payload.properties ?? {};
+  const prop = resolveDesignerInstanceProperty(propertyName);
+  const aliases = [`EPAM.${prop}`, prop, prop.replace(/^./, (c) => c.toUpperCase())];
+  for (const alias of aliases) {
+    const value = properties[alias];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (value && typeof value === 'object' && 'value' in (value as object)) {
+      const nested = (value as { value?: unknown }).value;
+      if (typeof nested === 'string' && nested.trim()) return nested;
+    }
+  }
+  return null;
+}
+
+async function saveMarketingAssetDesignerInstance(
+  assetId: string,
+  instanceJson: string,
+  propertyName?: string
+): Promise<boolean> {
+  const prop = resolveDesignerInstanceProperty(propertyName);
+  const properties: Record<string, unknown> = { [prop]: instanceJson };
+  const saved = await putEntityPropertiesOptional(
+    assetId,
+    properties,
+    'marketing asset designer instance'
+  );
+  if (!saved) {
+    throw new Error(
+      `Could not save designer instance on marketing asset ${assetId}. Ensure property "${prop}" exists on EPAM.MarketingAsset and your role can Update it.`
+    );
+  }
+  logResolved('marketing asset designer instance', `Saved ${prop} on asset ${assetId}`);
+  return true;
+}
+
 export const contentHubApi = {
   getTemplate,
   listTemplatesForBrandKit,
@@ -2299,6 +2391,10 @@ export const contentHubApi = {
   updateMarketingAsset,
   saveMarketingAssetZoneValues,
   updateMarketingAssetProperties,
+  getTemplateDesignerDocument,
+  saveTemplateDesignerDocument,
+  getMarketingAssetDesignerInstance,
+  saveMarketingAssetDesignerInstance,
   uploadRenderedOutput: async (assetId: string, file: Blob, fileName: string) => {
     if (!isRenderedOutputUploadEnabled()) {
       logInfo(

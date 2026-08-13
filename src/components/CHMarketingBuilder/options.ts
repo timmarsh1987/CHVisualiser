@@ -300,6 +300,8 @@ export function parseMarketingBuilderOptions(
     figmaImportApiUrl:
       readConfiguredString('figmaImportApiUrl', options, config) || '/api/figma/import',
     figmaImportApiToken: readConfiguredString('figmaImportApiToken', options, config),
+    designerDocumentProperty: readConfiguredString('designerDocumentProperty', options, config),
+    designerInstanceProperty: readConfiguredString('designerInstanceProperty', options, config),
     searchIdentifier: readConfiguredString('searchIdentifier', options, config),
     selectionPoolIdentifier: readConfiguredString('selectionPoolIdentifier', options, config),
   };

@@ -7,6 +7,9 @@ import type { ContentHubIntegrationValue } from './contentHubIntegration';
 import { resolveMarketingBuilderOptions } from './entityResolve';
 import { logError, logResolved, printLoadSummary, resetLoadReport } from './debugLog';
 import EmailNewsletterBuilder from './EmailNewsletterBuilder';
+import DesignerAssetBuilder from './DesignerAssetBuilder';
+import DesignerTemplateAdmin, { initializeDesignerTemplate } from './DesignerTemplateAdmin';
+import { hasDesignerDocument } from './designerDetect';
 import { describeMissingTemplateId, resolveBuilderMode } from './options';
 import SocialAssetBuilder from './SocialAssetBuilder';
 import TemplateEditToolbar, { type TemplateEditTab } from './TemplateEditToolbar';
@@ -14,6 +17,7 @@ import TemplateSelector from './TemplateSelector';
 import TemplateSetupPanel from './TemplateSetupPanel';
 import type { MarketingAsset, MarketingBuilderOptions, Template } from './types';
 import './index.css';
+import '../CHDesigner/index.css';
 
 interface MarketingBuilderPanelProps {
   client?: any;
@@ -45,6 +49,8 @@ export default function MarketingBuilderPanel({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TemplateEditTab>('asset');
   const [templateListRefreshKey, setTemplateListRefreshKey] = useState(0);
+  const [creatingDesigner, setCreatingDesigner] = useState(false);
+  const [createDesignerError, setCreateDesignerError] = useState<string | null>(null);
 
   const handleTabChange = (tab: TemplateEditTab) => {
     setActiveTab(tab);
@@ -223,6 +229,28 @@ export default function MarketingBuilderPanel({
     refreshTemplateCatalog();
   };
 
+  const handleCreateCanvasTemplate = async () => {
+    if (!template) return;
+    setCreatingDesigner(true);
+    setCreateDesignerError(null);
+    try {
+      const next = await initializeDesignerTemplate(
+        template,
+        resolvedOptions?.designerDocumentProperty
+      );
+      setTemplate(next);
+      refreshTemplateCatalog();
+    } catch (error) {
+      setCreateDesignerError(
+        error instanceof Error ? error.message : 'Could not create canvas template.'
+      );
+    } finally {
+      setCreatingDesigner(false);
+    }
+  };
+
+  const useDesigner = hasDesignerDocument(template);
+
   if (!resolvedOptions || loading) {
     return <div className="marketing-builder-status">Loading marketing builder...</div>;
   }
@@ -249,91 +277,76 @@ export default function MarketingBuilderPanel({
     <ContentHubIntegrationProvider value={integrationValue}>
       <BrandKitProvider brandKitId={brandKitId}>
         <div className="marketing-builder">
-      {builderMode === 'admin' && (
-        <>
-          <TemplateEditToolbar
-            activeTab="template"
-            zoneCount={template.zones.length}
-            templateName={template.templateName}
-            onTabChange={() => undefined}
-            showAssetTab={false}
-          />
-          <TemplateSetupPanel
-            template={template}
-            figmaImportApiUrl={resolvedOptions.figmaImportApiUrl}
-            figmaImportApiToken={resolvedOptions.figmaImportApiToken}
-            onTemplateSaved={(savedTemplate) => {
-              setTemplate(savedTemplate);
-              refreshTemplateCatalog();
-            }}
-            onTemplatesChanged={refreshTemplateCatalog}
-          />
-        </>
-      )}
-      {builderMode === 'social' && marketingAsset && (
-        <>
-          <TemplateEditToolbar
-            activeTab={activeTab}
-            zoneCount={template.zones.length}
-            templateName={template.templateName}
-            onTabChange={handleTabChange}
-          />
-          {activeTab === 'template' ? (
-            <TemplateSetupPanel
-              template={template}
-              figmaImportApiUrl={resolvedOptions.figmaImportApiUrl}
-              figmaImportApiToken={resolvedOptions.figmaImportApiToken}
-              onTemplateSaved={(savedTemplate) => {
-                setTemplate(savedTemplate);
-                refreshTemplateCatalog();
-              }}
-              onTemplatesChanged={refreshTemplateCatalog}
-            />
-          ) : (
+          {(builderMode === 'admin' || (builderMode !== 'admin' && activeTab === 'template')) && (
             <>
-              <TemplateSelector
-                brandKitId={brandKitId}
-                currentTemplateId={template.id}
-                marketingAssetId={marketingAsset.id}
-                refreshKey={templateListRefreshKey}
-                onTemplateChange={handleTemplateSwitch}
-              />
-              <SocialAssetBuilder
-                template={template}
-                marketingAsset={marketingAsset}
-                userHasOverridePermission={userHasOverridePermission}
-                html2canvasCdnUrl={resolvedOptions.html2canvasCdnUrl}
-              />
+              {builderMode !== 'admin' && (
+                <TemplateEditToolbar
+                  activeTab={activeTab}
+                  zoneCount={template.zones.length}
+                  templateName={template.templateName}
+                  onTabChange={handleTabChange}
+                />
+              )}
+              {builderMode === 'admin' && (
+                <TemplateEditToolbar
+                  activeTab="template"
+                  zoneCount={template.zones.length}
+                  templateName={template.templateName}
+                  onTabChange={() => undefined}
+                  showAssetTab={false}
+                />
+              )}
+              {useDesigner ? (
+                <DesignerTemplateAdmin
+                  template={template}
+                  designerDocumentProperty={resolvedOptions.designerDocumentProperty}
+                  onTemplateSaved={(savedTemplate) => {
+                    setTemplate(savedTemplate);
+                    refreshTemplateCatalog();
+                  }}
+                />
+              ) : (
+                <>
+                  <div className="designer-create-banner">
+                    <p>
+                      This template uses the zone builder. You can also create a canvas designer
+                      template (stored as JSON on the template entity).
+                    </p>
+                    <button
+                      type="button"
+                      className="chd-btn"
+                      disabled={creatingDesigner}
+                      onClick={() => void handleCreateCanvasTemplate()}
+                    >
+                      {creatingDesigner ? 'Creating…' : 'Create canvas template'}
+                    </button>
+                    {createDesignerError ? (
+                      <div className="marketing-builder-error">{createDesignerError}</div>
+                    ) : null}
+                  </div>
+                  <TemplateSetupPanel
+                    template={template}
+                    figmaImportApiUrl={resolvedOptions.figmaImportApiUrl}
+                    figmaImportApiToken={resolvedOptions.figmaImportApiToken}
+                    onTemplateSaved={(savedTemplate) => {
+                      setTemplate(savedTemplate);
+                      refreshTemplateCatalog();
+                    }}
+                    onTemplatesChanged={refreshTemplateCatalog}
+                  />
+                </>
+              )}
             </>
           )}
-        </>
-      )}
-      {builderMode === 'social' && !marketingAsset && (
-        <div className="marketing-builder-status marketing-builder-error">
-          Marketing asset could not be loaded for the social builder.
-        </div>
-      )}
-      {builderMode === 'email' && marketingAsset && (
-        <>
-          <TemplateEditToolbar
-            activeTab={activeTab}
-            zoneCount={template.zones.length}
-            templateName={template.templateName}
-            onTabChange={handleTabChange}
-          />
-          {activeTab === 'template' ? (
-            <TemplateSetupPanel
-              template={template}
-              figmaImportApiUrl={resolvedOptions.figmaImportApiUrl}
-              figmaImportApiToken={resolvedOptions.figmaImportApiToken}
-              onTemplateSaved={(savedTemplate) => {
-                setTemplate(savedTemplate);
-                refreshTemplateCatalog();
-              }}
-              onTemplatesChanged={refreshTemplateCatalog}
-            />
-          ) : template.zones.length > 0 ? (
+
+          {builderMode === 'social' && marketingAsset && activeTab === 'asset' && (
             <>
+              <TemplateEditToolbar
+                activeTab={activeTab}
+                zoneCount={template.zones.length}
+                templateName={template.templateName}
+                onTabChange={handleTabChange}
+              />
               <TemplateSelector
                 brandKitId={brandKitId}
                 currentTemplateId={template.id}
@@ -341,22 +354,81 @@ export default function MarketingBuilderPanel({
                 refreshKey={templateListRefreshKey}
                 onTemplateChange={handleTemplateSwitch}
               />
-              <EmailNewsletterBuilder
-                template={template}
-                marketingAsset={marketingAsset}
-                userHasOverridePermission={userHasOverridePermission}
-                renderEmailApiUrl={resolvedOptions.renderEmailApiUrl}
-              />
+              {useDesigner ? (
+                <DesignerAssetBuilder
+                  template={template}
+                  marketingAsset={marketingAsset}
+                  designerDocumentProperty={resolvedOptions.designerDocumentProperty}
+                  designerInstanceProperty={resolvedOptions.designerInstanceProperty}
+                  onSaved={setMarketingAsset}
+                />
+              ) : (
+                <SocialAssetBuilder
+                  template={template}
+                  marketingAsset={marketingAsset}
+                  userHasOverridePermission={userHasOverridePermission}
+                  html2canvasCdnUrl={resolvedOptions.html2canvasCdnUrl}
+                />
+              )}
             </>
-          ) : (
-            <div className="marketing-builder-status template-empty-message">
-              Template <strong>{template.templateName}</strong> has no zones yet. Open the{' '}
-              <strong>Edit template</strong> tab to add zones.
+          )}
+
+          {builderMode === 'social' && !marketingAsset && (
+            <div className="marketing-builder-status marketing-builder-error">
+              Marketing asset could not be loaded for the social builder.
             </div>
           )}
-        </>
-      )}
-      </div>
+
+          {builderMode === 'email' && marketingAsset && activeTab === 'asset' && (
+            <>
+              <TemplateEditToolbar
+                activeTab={activeTab}
+                zoneCount={template.zones.length}
+                templateName={template.templateName}
+                onTabChange={handleTabChange}
+              />
+              {useDesigner ? (
+                <>
+                  <TemplateSelector
+                    brandKitId={brandKitId}
+                    currentTemplateId={template.id}
+                    marketingAssetId={marketingAsset.id}
+                    refreshKey={templateListRefreshKey}
+                    onTemplateChange={handleTemplateSwitch}
+                  />
+                  <DesignerAssetBuilder
+                    template={template}
+                    marketingAsset={marketingAsset}
+                    designerDocumentProperty={resolvedOptions.designerDocumentProperty}
+                    designerInstanceProperty={resolvedOptions.designerInstanceProperty}
+                    onSaved={setMarketingAsset}
+                  />
+                </>
+              ) : template.zones.length > 0 ? (
+                <>
+                  <TemplateSelector
+                    brandKitId={brandKitId}
+                    currentTemplateId={template.id}
+                    marketingAssetId={marketingAsset.id}
+                    refreshKey={templateListRefreshKey}
+                    onTemplateChange={handleTemplateSwitch}
+                  />
+                  <EmailNewsletterBuilder
+                    template={template}
+                    marketingAsset={marketingAsset}
+                    userHasOverridePermission={userHasOverridePermission}
+                    renderEmailApiUrl={resolvedOptions.renderEmailApiUrl}
+                  />
+                </>
+              ) : (
+                <div className="marketing-builder-status template-empty-message">
+                  Template <strong>{template.templateName}</strong> has no zones yet. Open the{' '}
+                  <strong>Edit template</strong> tab to add zones, or create a canvas template.
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </BrandKitProvider>
     </ContentHubIntegrationProvider>
   );

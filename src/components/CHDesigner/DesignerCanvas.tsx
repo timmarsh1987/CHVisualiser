@@ -1,9 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clamp, screenDeltaToCanvas } from './coords';
 import LayerNode from './LayerNode';
+import { layerAllowsTransform, layerIsSelectable } from './policy';
 import {
   useDesignerAction,
   useDesignerDocument,
+  useDesignerMode,
   useSelection,
   useViewport,
 } from './store';
@@ -45,10 +47,13 @@ export default function DesignerCanvas() {
   const selection = useSelection();
   const viewport = useViewport();
   const dispatch = useDesignerAction();
+  const mode = useDesignerMode();
   const [interaction, setInteraction] = useState<Interaction | null>(null);
   const [spaceDown, setSpaceDown] = useState(false);
   const viewportStateRef = useRef(viewport);
   viewportStateRef.current = viewport;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -56,7 +61,11 @@ export default function DesignerCanvas() {
         e.preventDefault();
         setSpaceDown(true);
       }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selection.length > 0) {
+      if (
+        modeRef.current === 'admin' &&
+        (e.key === 'Delete' || e.key === 'Backspace') &&
+        selection.length > 0
+      ) {
         const tag = (e.target as HTMLElement).tagName;
         if (tag === 'INPUT' || tag === 'TEXTAREA') return;
         e.preventDefault();
@@ -187,6 +196,7 @@ export default function DesignerCanvas() {
   };
 
   const handleLayerSelect = (layer: Layer, e: React.PointerEvent) => {
+    if (!layerIsSelectable(layer, mode)) return;
     dispatch({
       type: 'SELECT',
       ids: [layer.id],
@@ -194,8 +204,13 @@ export default function DesignerCanvas() {
     });
   };
 
+  const canTransformLayer = (layer: Layer) => {
+    if (mode === 'admin') return !layer.locked;
+    return layerAllowsTransform(layer);
+  };
+
   const handleMoveStart = (layer: Layer, e: React.PointerEvent) => {
-    if (layer.locked || spaceDown) return;
+    if (!canTransformLayer(layer) || spaceDown) return;
     const ids = selection.includes(layer.id) ? selection : [layer.id];
     if (!selection.includes(layer.id)) {
       dispatch({ type: 'SELECT', ids: [layer.id] });
@@ -203,10 +218,11 @@ export default function DesignerCanvas() {
     const origins: Record<string, { x: number; y: number }> = {};
     for (const id of ids) {
       const found = document.layers.find((l) => l.id === id);
-      if (found && !found.locked) {
+      if (found && canTransformLayer(found)) {
         origins[id] = { x: found.x, y: found.y };
       }
     }
+    if (Object.keys(origins).length === 0) return;
     setInteraction({
       kind: 'move',
       ids: Object.keys(origins),
@@ -218,7 +234,7 @@ export default function DesignerCanvas() {
 
   const handleResizeStart = (layer: Layer, handle: ResizeHandle, e: React.PointerEvent) => {
     e.stopPropagation();
-    if (layer.locked) return;
+    if (!canTransformLayer(layer)) return;
     dispatch({ type: 'SELECT', ids: [layer.id] });
     setInteraction({
       kind: 'resize',
@@ -235,6 +251,7 @@ export default function DesignerCanvas() {
 
   const selectedLayers = document.layers.filter((l) => selection.includes(l.id) && l.visible);
   const primary = selectedLayers.length === 1 ? selectedLayers[0] : null;
+  const showHandles = primary ? canTransformLayer(primary) : false;
 
   return (
     <div
@@ -271,7 +288,7 @@ export default function DesignerCanvas() {
             />
           ))}
 
-          {primary && !primary.locked ? (
+          {showHandles && primary ? (
             <div
               className="chd-selection-box"
               style={{
@@ -289,6 +306,16 @@ export default function DesignerCanvas() {
                 />
               ))}
             </div>
+          ) : primary ? (
+            <div
+              className="chd-selection-outline"
+              style={{
+                left: primary.x,
+                top: primary.y,
+                width: primary.width,
+                height: primary.height,
+              }}
+            />
           ) : null}
 
           {selectedLayers.length > 1

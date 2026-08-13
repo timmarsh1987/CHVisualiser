@@ -79,6 +79,8 @@ export interface Template {
   zones: TemplateZone[];
   /** M.Asset IDs on the template — available to every image zone. */
   allowedAssetIds?: string[];
+  /** CHDesigner template document JSON (stringified DesignerDocument). */
+  designerDocumentJson?: string;
 }
 
 export interface AssetZoneLayout {
@@ -122,6 +124,8 @@ export interface MarketingAsset {
   overrideReasonMA?: string;
   zoneValues: ZoneValue[];
   zoneLayoutJson?: string;
+  /** CHDesigner end-user instance overrides JSON. */
+  designerInstanceJson?: string;
   renderedOutputAssetId?: string;
 }
 
@@ -139,6 +143,10 @@ export interface MarketingBuilderOptions {
   figmaImportApiUrl?: string;
   /** Bearer token matching FIGMA_IMPORT_API_SECRET / BRAND_COMPLIANCE_API_SECRET when set. */
   figmaImportApiToken?: string;
+  /** Override Content Hub property name for template designer JSON (default designerDocumentJson). */
+  designerDocumentProperty?: string;
+  /** Override Content Hub property name for asset instance JSON (default designerInstanceJson). */
+  designerInstanceProperty?: string;
   /** Identifier of the OOTB Search page component on this Content Hub page. */
   searchIdentifier?: string;
   /** Optional selection pool identifier for OOTB Selection component integration. */

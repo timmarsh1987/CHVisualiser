@@ -1,5 +1,7 @@
 export type LayerType = 'frame' | 'rect' | 'text' | 'image';
 
+export type DesignerMode = 'admin' | 'endUser';
+
 export interface Layer {
   id: string;
   type: LayerType;
@@ -10,7 +12,12 @@ export interface Layer {
   height: number;
   rotation?: number;
   visible: boolean;
+  /** Admin/end-user: fully locked — no select/move/edit in end-user mode. */
   locked?: boolean;
+  /** End user may move/resize (default false). */
+  allowTransform?: boolean;
+  /** End user may edit text/fill/src (default true for text/image). */
+  editableContent?: boolean;
   fill?: string;
   text?: string;
   fontSize?: number;
@@ -30,29 +37,28 @@ export interface DesignerDocument {
   layers: Layer[];
 }
 
+export type LayerOverride = {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
+  text?: string;
+  fill?: string;
+  color?: string;
+  src?: string;
+};
+
+export interface DesignerInstanceDocument {
+  version: 1;
+  templateId: string;
+  overrides: Record<string, LayerOverride>;
+}
+
 export interface ViewportState {
   zoom: number;
   panX: number;
   panY: number;
 }
-
-export type DesignerActionType =
-  | 'ADD_LAYER'
-  | 'UPDATE_LAYER'
-  | 'DELETE_LAYERS'
-  | 'SELECT'
-  | 'UNSELECT_ALL'
-  | 'REORDER'
-  | 'SET_VISIBILITY'
-  | 'BRING_FORWARD'
-  | 'SEND_BACKWARD'
-  | 'ZOOM_SET'
-  | 'ZOOM_RESET'
-  | 'PAN_SET'
-  | 'UNDO'
-  | 'REDO'
-  | 'LOAD_DOCUMENT'
-  | 'COMMIT';
 
 export type DesignerAction =
   | { type: 'ADD_LAYER'; layerType: LayerType; at?: { x: number; y: number } }
@@ -76,3 +82,6 @@ export const MIN_LAYER_SIZE = 24;
 export const DEFAULT_ZOOM = 1;
 export const MIN_ZOOM = 0.25;
 export const MAX_ZOOM = 3;
+
+export const CONTENT_OVERRIDE_KEYS = ['text', 'fill', 'color', 'src'] as const;
+export const TRANSFORM_OVERRIDE_KEYS = ['x', 'y', 'width', 'height'] as const;
