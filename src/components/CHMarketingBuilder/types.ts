@@ -79,7 +79,7 @@ export interface Template {
   zones: TemplateZone[];
   /** M.Asset IDs on the template — available to every image zone. */
   allowedAssetIds?: string[];
-  /** CHDesigner template document JSON (stringified DesignerDocument). */
+  /** CHDesigner template document JSON on EPAM.BuilderTemplate (property designerDocumentJson). */
   designerDocumentJson?: string;
 }
 
@@ -124,7 +124,7 @@ export interface MarketingAsset {
   overrideReasonMA?: string;
   zoneValues: ZoneValue[];
   zoneLayoutJson?: string;
-  /** CHDesigner end-user instance overrides JSON. */
+  /** CHDesigner end-user instance JSON on EPAM.BuilderMarketingAsset (property designerInstanceJson). */
   designerInstanceJson?: string;
   renderedOutputAssetId?: string;
 }
@@ -143,9 +143,9 @@ export interface MarketingBuilderOptions {
   figmaImportApiUrl?: string;
   /** Bearer token matching FIGMA_IMPORT_API_SECRET / BRAND_COMPLIANCE_API_SECRET when set. */
   figmaImportApiToken?: string;
-  /** Override Content Hub property name for template designer JSON (default designerDocumentJson). */
+  /** Override Content Hub property name for EPAM.BuilderTemplate designer JSON (default designerDocumentJson). */
   designerDocumentProperty?: string;
-  /** Override Content Hub property name for asset instance JSON (default designerInstanceJson). */
+  /** Override Content Hub property name for EPAM.BuilderMarketingAsset instance JSON (default designerInstanceJson). */
   designerInstanceProperty?: string;
   /** Identifier of the OOTB Search page component on this Content Hub page. */
   searchIdentifier?: string;

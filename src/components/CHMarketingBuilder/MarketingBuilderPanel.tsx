@@ -310,7 +310,7 @@ export default function MarketingBuilderPanel({
                   <div className="designer-create-banner">
                     <p>
                       This template uses the zone builder. You can also create a canvas designer
-                      template (stored as JSON on the template entity).
+                      template (stored as designerDocumentJson on EPAM.BuilderTemplate).
                     </p>
                     <button
                       type="button"
