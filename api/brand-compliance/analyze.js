@@ -1,5 +1,5 @@
 import { callCodeMieAssistant, uploadCodeMieFile } from '../lib/codemie/client.js';
-import { downloadPreviewImage } from '../lib/codemie/downloadPreview.js';
+import { downloadAssetFile } from '../lib/codemie/downloadPreview.js';
 import { parseJsonFromGenerated } from '../lib/codemie/parseJson.js';
 import { applyCors } from '../lib/cors.js';
 import { verifyEmbedAuth } from '../lib/embedAuth.js';
@@ -20,10 +20,29 @@ function asString(value) {
 
 /**
  * @param {Record<string, unknown>} asset
- * @param {Record<string, unknown>} [options]
- * @param {{ imageAttached: boolean, imageUploadError?: string }} [imageContext]
  */
-function buildCompliancePrompt(asset, options = {}, imageContext = { imageAttached: false }) {
+function isPdfAsset(asset) {
+  const mime = asString(asset.mimeType).toLowerCase();
+  const name = asString(asset.fileName).toLowerCase();
+  return mime.includes('pdf') || name.endsWith('.pdf');
+}
+
+/**
+ * @param {Record<string, unknown>} asset
+ */
+function isDocumentAsset(asset) {
+  if (isPdfAsset(asset)) return true;
+  const mime = asString(asset.mimeType).toLowerCase();
+  const name = asString(asset.fileName).toLowerCase();
+  return mime.startsWith('application/') || /\.(docx?|pptx?|xlsx?)$/i.test(name);
+}
+
+/**
+ * @param {Record<string, unknown>} asset
+ * @param {Record<string, unknown>} [options]
+ * @param {{ fileAttached: boolean, attachedKind?: string, imageUploadError?: string }} [fileContext]
+ */
+function buildCompliancePrompt(asset, options = {}, fileContext = { fileAttached: false }) {
   const brandName = asString(options.brandName) || 'Cytiva';
   const brandGuidelines =
     asString(options.brandGuidelines) ||
@@ -49,15 +68,20 @@ function buildCompliancePrompt(asset, options = {}, imageContext = { imageAttach
     }
   }
 
-  const visionInstructions = imageContext.imageAttached
-    ? `An image file of this asset is attached to this message. Visually inspect it for brand compliance (logo usage, colors, typography, composition, disclaimers, crop/quality issues). Do not say you cannot see the image.`
-    : imageContext.imageUploadError
-      ? `No image file could be attached (${imageContext.imageUploadError}). Base your assessment on metadata only and note that visual review was unavailable.`
-      : `No preview image was available. Base your assessment on metadata, file name, and MIME type, and note that visual review was unavailable.`;
+  let fileInstructions;
+  if (fileContext.fileAttached && fileContext.attachedKind === 'document') {
+    fileInstructions = `A document file (PDF or similar) is attached to this message. Review its pages for brand compliance: logo usage, colors, typography, layout, imagery, copy/messaging, and regulatory disclaimers. Cover multiple pages when present. Do not say you cannot open the file.`;
+  } else if (fileContext.fileAttached) {
+    fileInstructions = `An image file of this asset is attached to this message. Visually inspect it for brand compliance (logo usage, colors, typography, composition, disclaimers, crop/quality issues). Do not say you cannot see the image.`;
+  } else if (fileContext.imageUploadError) {
+    fileInstructions = `No asset file could be attached (${fileContext.imageUploadError}). Base your assessment on metadata only and note that file review was unavailable.`;
+  } else {
+    fileInstructions = `No asset file was available. Base your assessment on metadata, file name, and MIME type, and note that file review was unavailable.`;
+  }
 
   return `You are a DAM brand compliance analyst for ${brandName}.
 
-${visionInstructions}
+${fileInstructions}
 
 Review the digital asset against the brand guidelines and return ONLY valid JSON (no markdown fences) matching this schema:
 {
@@ -83,7 +107,7 @@ ${brandGuidelines}
 Asset to review:
 ${assetLines.join('\n')}
 
-Be specific and actionable. Prefer visual evidence from the attached image when available.`;
+Be specific and actionable. Prefer evidence from the attached file when available.`;
 }
 
 /**
@@ -154,39 +178,75 @@ async function readJsonBody(req) {
 }
 
 /**
- * Download preview from Content Hub and upload to CodeMie.
+ * Prefer original download for PDFs/documents; preview for images.
  * @param {Record<string, unknown>} asset
- * @returns {Promise<{ fileNames: string[], imageAttached: boolean, imageUploadError?: string }>}
  */
-async function prepareAssetImage(asset) {
+function pickDownloadUrl(asset) {
+  const fileUrl = asString(asset.fileUrl);
+  const downloadUrl = asString(asset.downloadUrl);
   const previewUrl = asString(asset.previewUrl);
-  if (!previewUrl) {
-    return { fileNames: [], imageAttached: false };
+
+  if (isDocumentAsset(asset)) {
+    return fileUrl || downloadUrl || previewUrl;
+  }
+
+  return fileUrl || previewUrl || downloadUrl;
+}
+
+/**
+ * Download asset bytes from Content Hub and upload to CodeMie.
+ * @param {Record<string, unknown>} asset
+ */
+async function prepareAssetFile(asset) {
+  const sourceUrl = pickDownloadUrl(asset);
+  if (!sourceUrl) {
+    return { fileNames: [], fileAttached: false, imageAttached: false };
   }
 
   try {
-    const downloaded = await downloadPreviewImage(previewUrl);
+    const downloaded = await downloadAssetFile(sourceUrl, {
+      expectedMimeType: asString(asset.mimeType) || undefined,
+      fileName: asString(asset.fileName) || undefined,
+    });
+
     if (!downloaded) {
       return {
         fileNames: [],
+        fileAttached: false,
         imageAttached: false,
-        imageUploadError: 'preview URL was invalid',
+        imageUploadError: 'asset URL was invalid',
       };
     }
 
     const preferredName = asString(asset.fileName) || downloaded.fileName;
     const safeName = preferredName.replace(/[^\w.\-]+/g, '_') || downloaded.fileName;
-    const fileUrl = await uploadCodeMieFile(downloaded.bytes, safeName, downloaded.mimeType);
+    const uploadedUrl = await uploadCodeMieFile(
+      downloaded.bytes,
+      safeName,
+      downloaded.mimeType
+    );
+
+    const attachedKind =
+      downloaded.mimeType === 'application/pdf' || isPdfAsset(asset)
+        ? 'document'
+        : downloaded.mimeType.startsWith('image/')
+          ? 'image'
+          : isDocumentAsset(asset)
+            ? 'document'
+            : 'file';
 
     return {
-      fileNames: [fileUrl],
+      fileNames: [uploadedUrl],
+      fileAttached: true,
       imageAttached: true,
+      attachedKind,
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'image prepare failed';
-    console.error('[brand-compliance] image prepare failed:', message);
+    const message = error instanceof Error ? error.message : 'file prepare failed';
+    console.error('[brand-compliance] file prepare failed:', message);
     return {
       fileNames: [],
+      fileAttached: false,
       imageAttached: false,
       imageUploadError: message,
     };
@@ -226,20 +286,23 @@ export default async function handler(req, res) {
     const asset = body.asset && typeof body.asset === 'object' ? body.asset : {};
     const options = body.options && typeof body.options === 'object' ? body.options : {};
 
-    const imagePrep = await prepareAssetImage(asset);
+    const filePrep = await prepareAssetFile(asset);
     const prompt = buildCompliancePrompt(asset, options, {
-      imageAttached: imagePrep.imageAttached,
-      imageUploadError: imagePrep.imageUploadError,
+      fileAttached: filePrep.fileAttached,
+      attachedKind: filePrep.attachedKind,
+      imageUploadError: filePrep.imageUploadError,
     });
 
     const generated = await callCodeMieAssistant(prompt, {
-      fileNames: imagePrep.fileNames,
+      fileNames: filePrep.fileNames,
     });
     const parsed = parseJsonFromGenerated(generated);
     const report = {
       ...normalizeReport(parsed),
-      imageAttached: imagePrep.imageAttached,
-      ...(imagePrep.imageUploadError ? { imageUploadError: imagePrep.imageUploadError } : {}),
+      imageAttached: filePrep.fileAttached,
+      fileAttached: filePrep.fileAttached,
+      attachedKind: filePrep.attachedKind,
+      ...(filePrep.imageUploadError ? { imageUploadError: filePrep.imageUploadError } : {}),
     };
 
     res.statusCode = 200;

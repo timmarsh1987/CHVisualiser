@@ -354,10 +354,12 @@ export default function BrandCompliancePanel({
                   <p className="ch-brand-compliance__report-meta">
                     {reportSource === 'saved' ? 'Saved result · ' : ''}
                     Analyzed {formatDate(report.analyzedAt)}
-                    {report.imageAttached
-                      ? ' · Visual review included'
+                    {report.fileAttached || report.imageAttached
+                      ? report.attachedKind === 'document'
+                        ? ' · Document review included'
+                        : ' · Visual review included'
                       : report.imageUploadError
-                        ? ' · Metadata only (image unavailable)'
+                        ? ' · Metadata only (file unavailable)'
                         : ''}
                   </p>
                   {saveState === 'saving' ? (

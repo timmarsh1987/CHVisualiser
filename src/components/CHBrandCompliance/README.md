@@ -132,13 +132,18 @@ Output: `dist/CHBrandCompliance.js`
 - Falls back to metadata-only if the preview cannot be fetched/uploaded
 - Displays compliance score, summary, passed checks, and actionable issues
 
-## Visual analysis flow
+## Visual / document analysis flow
 
 ```
-Content Hub preview URL
-  → Vercel downloads image bytes
+Content Hub asset
+  → resolve preview (images) or downloadOriginal (PDFs)
+  → Vercel downloads file bytes
   → CodeMie POST /v1/files/  (multipart)
   → CodeMie POST /v1/assistants/{id}/model  with file_names: [file_url]
 ```
 
-Ensure the CodeMie assistant uses a vision-capable model (e.g. GPT-4o) so it can inspect the attached image.
+- **Images** — uses preview/thumbnail renditions  
+- **PDFs** — prefers `downloadOriginal` / original file (not just a page thumbnail)  
+- Max download size defaults to **25 MB** (`BRAND_COMPLIANCE_MAX_FILE_BYTES`)
+
+Ensure the CodeMie assistant uses a model that can read images **and** PDFs (e.g. GPT-4o).

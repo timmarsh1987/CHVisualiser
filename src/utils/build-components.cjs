@@ -12,8 +12,10 @@ const COMPONENTS = [
   "CHIntentIntelligence",
   "CHComponentLibrary",
   "CHMarketingBuilder",
+  "CHDesigner",
   "CHBrandCompliance",
   "CHFineArtTagging",
+  "AIGovernancePanel",
 ];
 const distDir = path.join(__dirname, "../../dist");
 

@@ -18,7 +18,10 @@ export type ComplianceReport = {
   issues: ComplianceIssue[];
   passedChecks: string[];
   analyzedAt: string;
+  /** True when an image or document file was attached for review */
   imageAttached?: boolean;
+  fileAttached?: boolean;
+  attachedKind?: 'image' | 'document' | 'file';
   imageUploadError?: string;
 };
 
@@ -33,7 +36,12 @@ export type BrandComplianceAsset = {
   fileName?: string;
   mimeType?: string;
   description?: string;
+  /** Image preview/thumbnail rendition URL */
   previewUrl?: string;
+  /** Original/download rendition URL (preferred for PDFs) */
+  downloadUrl?: string;
+  /** Best URL to send to CodeMie (document original or image preview) */
+  fileUrl?: string;
   definition?: string;
   metadata?: AssetMetadataEntry[];
 };

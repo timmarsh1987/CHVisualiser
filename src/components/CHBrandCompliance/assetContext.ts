@@ -2,12 +2,23 @@
 import type { AssetMetadataEntry, BrandComplianceAsset, BrandComplianceOptions } from './types';
 import { parseMetadataPropertyList } from './options';
 
-const RENDITION_PRIORITY = [
+/** Image-style renditions (usable for visual review). */
+const PREVIEW_RENDITION_PRIORITY = [
   'preview',
   'thumbnail',
   'bigthumbnail',
   'thumbnail_cropped',
   'downloadPreview',
+  'medium',
+] as const;
+
+/** Original/document downloads (PDF and other non-image assets). */
+const DOWNLOAD_RENDITION_PRIORITY = [
+  'downloadOriginal',
+  'original',
+  'download',
+  'pdf',
+  'high',
 ] as const;
 
 const DEFAULT_NAME_PROPERTIES = ['FileName', 'fileName', 'Title', 'title', 'Name', 'name'];
@@ -100,13 +111,16 @@ function readStringProperty(
   return '';
 }
 
-function getPreviewFromRenditions(renditions: unknown): string | undefined {
+function getUrlFromRenditions(
+  renditions: unknown,
+  priority: readonly string[]
+): string | undefined {
   if (renditions == null || typeof renditions !== 'object') {
     return undefined;
   }
 
   const record = renditions as Record<string, unknown>;
-  for (const name of RENDITION_PRIORITY) {
+  for (const name of priority) {
     const items = record[name];
     if (!Array.isArray(items) || items.length === 0) {
       continue;
@@ -118,11 +132,29 @@ function getPreviewFromRenditions(renditions: unknown): string | undefined {
     }
   }
 
+  // Fallback: scan any rendition whose name looks like an original/download
+  for (const [name, items] of Object.entries(record)) {
+    if (!/original|download|pdf/i.test(name)) {
+      continue;
+    }
+    if (!Array.isArray(items) || items.length === 0) {
+      continue;
+    }
+    const url = hrefToString(items[0]?.href ?? items[0]);
+    if (url) {
+      return url;
+    }
+  }
+
   return undefined;
 }
 
-function getPreviewFromEntity(entity: any): string | undefined {
-  for (const name of RENDITION_PRIORITY) {
+function getUrlFromEntity(
+  entity: any,
+  priority: readonly string[],
+  publicLinkNames: string[]
+): string | undefined {
+  for (const name of priority) {
     try {
       const rendition = entity?.getRendition?.(name);
       const url = hrefToString(rendition?.items?.[0]?.href);
@@ -135,7 +167,7 @@ function getPreviewFromEntity(entity: any): string | undefined {
   }
 
   if (Array.isArray(entity?.renditions)) {
-    for (const name of RENDITION_PRIORITY) {
+    for (const name of priority) {
       const rendition = entity.renditions.find((entry: any) => entry?.name === name);
       const url = hrefToString(rendition?.items?.[0]?.href);
       if (url) {
@@ -144,40 +176,62 @@ function getPreviewFromEntity(entity: any): string | undefined {
     }
   }
 
-  const fromRaw = getPreviewFromRenditions(entity?.renditions);
+  const fromRaw = getUrlFromRenditions(entity?.renditions, priority);
   if (fromRaw) {
     return fromRaw;
   }
 
-  try {
-    const link = entity?.getPublicLink?.('preview') ?? entity?.getPublicLink?.('thumbnail');
-    return typeof link === 'string' ? link : undefined;
-  } catch {
-    return undefined;
+  for (const name of publicLinkNames) {
+    try {
+      const link = entity?.getPublicLink?.(name);
+      if (typeof link === 'string' && link.trim()) {
+        return link.trim();
+      }
+    } catch {
+      // ignore
+    }
   }
+
+  return undefined;
 }
 
-async function resolvePreviewUrl(client: any, entity: any, entityId: string): Promise<string | undefined> {
-  const direct = getPreviewFromEntity(entity);
-  if (direct) {
-    return direct;
-  }
-
+async function fetchEntityPayload(
+  client: any,
+  entityId: string
+): Promise<Record<string, unknown> | null> {
   if (!client?.raw?.getAsync) {
-    return undefined;
+    return null;
   }
 
   try {
     const response = await client.raw.getAsync(`/api/entities/${entityId}`);
-
     if (response.isSuccessStatusCode && response.content) {
-      return getPreviewFromRenditions(response.content.renditions);
+      return response.content as Record<string, unknown>;
     }
   } catch {
-    // ignore fetch errors
+    // ignore
   }
 
-  return undefined;
+  return null;
+}
+
+function isPdfAsset(fileName?: string, mimeType?: string): boolean {
+  const mime = (mimeType || '').toLowerCase();
+  const name = (fileName || '').toLowerCase();
+  return mime.includes('pdf') || name.endsWith('.pdf');
+}
+
+function isDocumentAsset(fileName?: string, mimeType?: string): boolean {
+  if (isPdfAsset(fileName, mimeType)) {
+    return true;
+  }
+
+  const mime = (mimeType || '').toLowerCase();
+  const name = (fileName || '').toLowerCase();
+  return (
+    mime.startsWith('application/') ||
+    /\.(docx?|pptx?|xlsx?)$/i.test(name)
+  );
 }
 
 function coerceDisplayString(value: unknown): string {
@@ -263,21 +317,53 @@ export async function resolveAssetContext(
     : DEFAULT_DESCRIPTION_PROPERTIES;
   const metadataKeys = parseMetadataPropertyList(options.metadataProperties);
 
-  const previewUrl = await resolvePreviewUrl(client, entity, entityId);
+  const fileName = readStringProperty(properties, fileNameKeys) || undefined;
+  const mimeType =
+    readStringProperty(properties, ['MimeType', 'mimeType', 'ContentType', 'contentType']) ||
+    undefined;
+
+  let previewUrl = getUrlFromEntity(entity, PREVIEW_RENDITION_PRIORITY, [
+    'preview',
+    'thumbnail',
+  ]);
+  let downloadUrl = getUrlFromEntity(entity, DOWNLOAD_RENDITION_PRIORITY, [
+    'downloadOriginal',
+    'original',
+    'download',
+  ]);
+
+  if (!previewUrl || !downloadUrl) {
+    const payload = await fetchEntityPayload(client, entityId);
+    if (payload) {
+      if (!previewUrl) {
+        previewUrl = getUrlFromRenditions(payload.renditions, PREVIEW_RENDITION_PRIORITY);
+      }
+      if (!downloadUrl) {
+        downloadUrl = getUrlFromRenditions(payload.renditions, DOWNLOAD_RENDITION_PRIORITY);
+      }
+    }
+  }
+
+  // For PDFs/documents prefer the original file for CodeMie analysis.
+  const preferDownload = isDocumentAsset(fileName, mimeType);
+  const fileUrl = preferDownload
+    ? downloadUrl || previewUrl
+    : previewUrl || downloadUrl;
+
   const name =
     readStringProperty(properties, nameKeys) ||
-    readStringProperty(properties, fileNameKeys) ||
+    fileName ||
     `Asset ${entityId}`;
 
   return {
     id: entityId,
     name,
-    fileName: readStringProperty(properties, fileNameKeys) || undefined,
-    mimeType:
-      readStringProperty(properties, ['MimeType', 'mimeType', 'ContentType', 'contentType']) ||
-      undefined,
+    fileName,
+    mimeType,
     description: readStringProperty(properties, descriptionKeys) || undefined,
     previewUrl,
+    downloadUrl,
+    fileUrl,
     definition:
       readStringProperty(properties, ['Definition', 'definition']) ||
       resolveDefinitionName(entity) ||
