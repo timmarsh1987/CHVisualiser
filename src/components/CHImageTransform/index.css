@@ -39,21 +39,6 @@
   font-size: 17px;
 }
 
-.ch-image-transform__header > p:last-child {
-  margin-top: 4px;
-  color: #627d98;
-  font-size: 12px;
-}
-
-.ch-image-transform__eyebrow {
-  margin-bottom: 3px !important;
-  color: #0b5cab;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-}
-
 .ch-image-transform__images {
   display: grid;
   grid-template-columns: minmax(0, 1fr);

@@ -135,9 +135,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
   return (
     <section className="ch-image-transform">
       <header className="ch-image-transform__header">
-        <p className="ch-image-transform__eyebrow">fal.ai · Seedream 5.0 Pro</p>
         <h2>Transform image</h2>
-        <p>{asset.name}</p>
       </header>
 
       <div className={`ch-image-transform__images${generated ? ' ch-image-transform__images--split' : ''}`}>

@@ -1,5 +1,6 @@
 const SEEDREAM_ENDPOINT = 'https://fal.run/bytedance/seedream/v5/pro/edit';
 const DEFAULT_TIMEOUT_MS = 150_000;
+const DEFAULT_MAX_SOURCE_BYTES = 10 * 1024 * 1024;
 const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 
 export class FalError extends Error {
@@ -48,6 +49,36 @@ function validateSourceUrl(value) {
   return url.toString();
 }
 
+async function downloadSourceAsDataUri(imageUrl) {
+  const response = await fetch(validateSourceUrl(imageUrl), {
+    headers: { Accept: 'image/jpeg,image/png,image/webp' },
+    redirect: 'error',
+  });
+  if (!response.ok) {
+    throw new FalError('source_image_unreachable', 502, {
+      status: response.status,
+    });
+  }
+
+  const mimeType = (response.headers.get('content-type') || '')
+    .split(';')[0]
+    .trim()
+    .toLowerCase();
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(mimeType)) {
+    throw new FalError('unsupported_source_image', 415, { mimeType });
+  }
+
+  const maxBytes =
+    Number(process.env.IMAGE_TRANSFORM_MAX_SOURCE_BYTES) || DEFAULT_MAX_SOURCE_BYTES;
+  const declaredSize = Number(response.headers.get('content-length'));
+  if (declaredSize > maxBytes) throw new FalError('source_image_too_large', 413);
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes.length) throw new FalError('source_image_unreachable', 502);
+  if (bytes.length > maxBytes) throw new FalError('source_image_too_large', 413);
+  return `data:${mimeType};base64,${bytes.toString('base64')}`;
+}
+
 async function readJson(response) {
   const text = await response.text();
   if (!text) return {};
@@ -78,7 +109,7 @@ function falErrorCode(status, payload) {
   return 'seedream_generate_failed';
 }
 
-async function runSeedream(imageUrl, prompt) {
+async function runSeedream(imageDataUri, prompt) {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
@@ -94,7 +125,7 @@ async function runSeedream(imageUrl, prompt) {
       },
       body: JSON.stringify({
         prompt,
-        image_urls: [validateSourceUrl(imageUrl)],
+        image_urls: [imageDataUri],
         image_size: process.env.SEEDREAM_IMAGE_SIZE?.trim() || 'auto_2K',
         num_images: 1,
         output_format: 'jpeg',
@@ -154,6 +185,7 @@ async function downloadResult(resultUrl) {
 }
 
 export async function transformWithSeedream({ imageUrl, prompt }) {
-  const resultUrl = await runSeedream(imageUrl, prompt);
+  const imageDataUri = await downloadSourceAsDataUri(imageUrl);
+  const resultUrl = await runSeedream(imageDataUri, prompt);
   return downloadResult(resultUrl);
 }
