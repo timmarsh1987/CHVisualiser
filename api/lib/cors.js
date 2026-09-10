@@ -3,7 +3,12 @@
  * @param {import('http').ServerResponse} res
  */
 export function applyCors(req, res) {
+  const isImageTransformRoute =
+    typeof req.url === 'string' && req.url.includes('/seedream/');
   const configured =
+    (isImageTransformRoute
+      ? process.env.IMAGE_TRANSFORM_CORS_ORIGIN?.trim()
+      : undefined) ||
     process.env.BRAND_COMPLIANCE_CORS_ORIGIN?.trim() ||
     process.env.FINE_ART_TAGGING_CORS_ORIGIN?.trim() ||
     process.env.EMBED_CORS_ORIGIN?.trim();
