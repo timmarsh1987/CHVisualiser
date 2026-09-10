@@ -8665,7 +8665,7 @@ function qg({ client: e, entity: t, options: n }) {
       apiBaseUrl: S,
       apiToken: (D = n.apiToken) == null ? void 0 : D.trim(),
       uploadConfiguration: ((R = n.uploadConfiguration) == null ? void 0 : R.trim()) || "AssetUploadConfiguration",
-      requestTimeoutMs: Math.max(45e3, n.requestTimeoutMs ?? 6e4)
+      requestTimeoutMs: Math.max(165e3, n.requestTimeoutMs ?? 165e3)
     } : null;
   }, [n]);
   N.useEffect(() => {
@@ -8743,7 +8743,7 @@ function qg({ client: e, entity: t, options: n }) {
       ),
       m ? /* @__PURE__ */ Qe("div", { className: "ch-image-transform__working", role: "status", children: [
         /* @__PURE__ */ $("span", { className: "ch-image-transform__spinner", "aria-hidden": "true" }),
-        /* @__PURE__ */ $("span", { children: "Generating with Seedream. This can take up to 30 seconds." })
+        /* @__PURE__ */ $("span", { children: "Generating with Seedream. Complex edits can take up to two minutes." })
       ] }) : null,
       y ? /* @__PURE__ */ $("div", { className: "ch-image-transform__notice ch-image-transform__notice--error", children: y }) : null,
       f ? /* @__PURE__ */ $("div", { className: "ch-image-transform__notice ch-image-transform__notice--success", children: f }) : null,
