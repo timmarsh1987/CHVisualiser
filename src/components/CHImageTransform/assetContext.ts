@@ -65,6 +65,13 @@ function fromPayload(payload: any, names: string[]): string {
   return '';
 }
 
+function imageMimeTypeFromFileName(fileName: string): string {
+  if (/\.png$/i.test(fileName)) return 'image/png';
+  if (/\.webp$/i.test(fileName)) return 'image/webp';
+  if (/\.jpe?g$/i.test(fileName)) return 'image/jpeg';
+  return '';
+}
+
 export async function resolveImageAsset(client: any, entity: any): Promise<ImageAssetContext | null> {
   const id = text(entity?.systemProperties?.id ?? entity?.id);
   if (!id) return null;
@@ -85,7 +92,9 @@ export async function resolveImageAsset(client: any, entity: any): Promise<Image
   const fileName =
     property(entity, ['FileName', 'fileName']) || `asset-${id}.jpg`;
   const mimeType =
-    property(entity, ['MimeType', 'mimeType', 'ContentType']) || 'image/jpeg';
+    imageMimeTypeFromFileName(fileName) ||
+    property(entity, ['MimeType', 'mimeType', 'ContentType']) ||
+    'image/jpeg';
   const name =
     property(entity, ['Title', 'title', 'Name', 'name']) || fileName;
 

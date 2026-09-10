@@ -16,6 +16,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 export async function generateImage(
   imageUrl: string,
   prompt: string,
+  originalMimeType: string,
   options: ImageTransformOptions
 ): Promise<GeneratedImage> {
   const controller = new AbortController();
@@ -38,6 +39,8 @@ export async function generateImage(
         body: JSON.stringify({
           imageUrl,
           prompt,
+          outputFormat:
+            originalMimeType.toLowerCase() === 'image/jpeg' ? 'jpeg' : 'png',
         }),
         signal: controller.signal,
       }
@@ -54,12 +57,19 @@ export async function generateImage(
       throw new Error('The proxy returned an invalid image response.');
     }
 
-    const blob = await response.blob();
+    let blob = await response.blob();
     if (!blob.size) throw new Error('The proxy returned an empty image.');
+    const targetMimeType = originalMimeType.toLowerCase();
+    if (
+      ['image/jpeg', 'image/png', 'image/webp'].includes(targetMimeType) &&
+      blob.type !== targetMimeType
+    ) {
+      blob = await convertImageFormat(blob, targetMimeType);
+    }
     return {
       blob,
       objectUrl: URL.createObjectURL(blob),
-      mimeType,
+      mimeType: blob.type || mimeType,
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -68,5 +78,35 @@ export async function generateImage(
     throw error;
   } finally {
     window.clearTimeout(timeout);
+  }
+}
+
+async function convertImageFormat(source: Blob, targetMimeType: string): Promise<Blob> {
+  const bitmap = await createImageBitmap(source);
+  try {
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('The browser could not prepare the generated image.');
+
+    if (targetMimeType === 'image/jpeg') {
+      context.fillStyle = '#fff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    context.drawImage(bitmap, 0, 0);
+
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob(
+        (result) =>
+          result
+            ? resolve(result)
+            : reject(new Error(`The browser could not create a ${targetMimeType} image.`)),
+        targetMimeType,
+        0.92
+      );
+    });
+  } finally {
+    bitmap.close();
   }
 }

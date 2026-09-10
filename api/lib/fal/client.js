@@ -109,7 +109,7 @@ function falErrorCode(status, payload) {
   return 'seedream_generate_failed';
 }
 
-async function runSeedream(imageDataUri, prompt) {
+async function runSeedream(imageDataUri, prompt, outputFormat) {
   const controller = new AbortController();
   const timer = setTimeout(
     () => controller.abort(),
@@ -128,7 +128,7 @@ async function runSeedream(imageDataUri, prompt) {
         image_urls: [imageDataUri],
         image_size: process.env.SEEDREAM_IMAGE_SIZE?.trim() || 'auto_2K',
         num_images: 1,
-        output_format: 'jpeg',
+        output_format: outputFormat,
         enable_safety_checker: true,
       }),
       signal: controller.signal,
@@ -184,8 +184,8 @@ async function downloadResult(resultUrl) {
   return { bytes, mimeType };
 }
 
-export async function transformWithSeedream({ imageUrl, prompt }) {
+export async function transformWithSeedream({ imageUrl, prompt, outputFormat = 'jpeg' }) {
   const imageDataUri = await downloadSourceAsDataUri(imageUrl);
-  const resultUrl = await runSeedream(imageDataUri, prompt);
+  const resultUrl = await runSeedream(imageDataUri, prompt, outputFormat);
   return downloadResult(resultUrl);
 }

@@ -50,6 +50,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req);
     const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
+    const outputFormat = body?.outputFormat === 'png' ? 'png' : 'jpeg';
 
     if (!imageUrl || !prompt) {
       res.statusCode = 400;
@@ -62,7 +63,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await transformWithSeedream({ imageUrl, prompt });
+    const result = await transformWithSeedream({ imageUrl, prompt, outputFormat });
     res.statusCode = 200;
     res.setHeader('Content-Type', result.mimeType);
     res.setHeader('Content-Length', String(result.bytes.length));

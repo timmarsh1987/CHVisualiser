@@ -3,7 +3,10 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { generateImage } from './api';
 import { resolveImageAsset } from './assetContext';
-import { applyImageAsNewVersion } from './contentHubUpload';
+import {
+  uploadGeneratedImage,
+  type ImageUploadMode,
+} from './contentHubUpload';
 import type {
   GeneratedImage,
   ImageAssetContext,
@@ -27,9 +30,9 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
   const [prompt, setPrompt] = useState('');
   const [generated, setGenerated] = useState<GeneratedImage | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [applying, setApplying] = useState(false);
+  const [applyingMode, setApplyingMode] = useState<ImageUploadMode | null>(null);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const applying = applyingMode != null;
 
   const resolvedOptions = useMemo<ImageTransformOptions | null>(() => {
     const apiBaseUrl = options.apiBaseUrl?.trim();
@@ -68,19 +71,24 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
     if (generated) URL.revokeObjectURL(generated.objectUrl);
     setGenerated(null);
     setError('');
-    setSuccess('');
   }, [generated]);
 
   const generate = useCallback(async () => {
     if (!asset || !resolvedOptions || !prompt.trim()) return;
     setGenerating(true);
     setError('');
-    setSuccess('');
     if (generated) URL.revokeObjectURL(generated.objectUrl);
     setGenerated(null);
 
     try {
-      setGenerated(await generateImage(asset.sourceUrl, prompt.trim(), resolvedOptions));
+      setGenerated(
+        await generateImage(
+          asset.sourceUrl,
+          prompt.trim(),
+          asset.mimeType,
+          resolvedOptions
+        )
+      );
     } catch (generationError) {
       setError(message(generationError));
     } finally {
@@ -88,18 +96,27 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
     }
   }, [asset, generated, prompt, resolvedOptions]);
 
-  const apply = useCallback(async () => {
+  const upload = useCallback(async (mode: ImageUploadMode) => {
     if (!asset || !generated || !resolvedOptions) return;
-    setApplying(true);
+    setApplyingMode(mode);
     setError('');
-    setSuccess('');
     try {
-      await applyImageAsNewVersion(client, asset, generated.blob, resolvedOptions);
-      setSuccess('New asset version uploaded successfully.');
+      const uploadedAssetId = await uploadGeneratedImage(
+        client,
+        asset,
+        generated.blob,
+        resolvedOptions,
+        mode
+      );
+      if (mode === 'version') {
+        window.location.reload();
+      } else {
+        window.location.assign(`/en-us/asset/${uploadedAssetId}`);
+      }
     } catch (uploadError) {
       setError(message(uploadError));
     } finally {
-      setApplying(false);
+      setApplyingMode(null);
     }
   }, [asset, client, generated, resolvedOptions]);
 
@@ -170,13 +187,14 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
           </div>
         ) : null}
         {error ? <div className="ch-image-transform__notice ch-image-transform__notice--error">{error}</div> : null}
-        {success ? <div className="ch-image-transform__notice ch-image-transform__notice--success">{success}</div> : null}
-
         <div className="ch-image-transform__actions">
           {generated ? (
             <>
-              <button type="button" className="ch-image-transform__button" disabled={applying || Boolean(success)} onClick={apply}>
-                {applying ? 'Uploading…' : success ? 'Version applied' : 'Apply as new version'}
+              <button type="button" className="ch-image-transform__button" disabled={applying} onClick={() => upload('version')}>
+                {applyingMode === 'version' ? 'Creating version…' : 'Create version'}
+              </button>
+              <button type="button" className="ch-image-transform__button ch-image-transform__button--secondary" disabled={applying} onClick={() => upload('new-asset')}>
+                {applyingMode === 'new-asset' ? 'Creating asset…' : 'Create as new asset'}
               </button>
               <button type="button" className="ch-image-transform__button ch-image-transform__button--secondary" disabled={applying} onClick={discard}>
                 Discard and try again
