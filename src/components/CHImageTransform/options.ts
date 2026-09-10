@@ -42,8 +42,6 @@ function parseSource(value: unknown): Partial<ImageTransformOptions> {
     apiBaseUrl: asString(pick(record, 'apiBaseUrl')),
     apiToken: asString(pick(record, 'apiToken')),
     uploadConfiguration: asString(pick(record, 'uploadConfiguration')),
-    createUploadUrl: asString(pick(record, 'createUploadUrl')),
-    createUploadComponentId: asNumber(pick(record, 'createUploadComponentId')),
     requestTimeoutMs: asNumber(pick(record, 'requestTimeoutMs')),
   };
 

@@ -38,8 +38,6 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
       apiBaseUrl,
       apiToken: options.apiToken?.trim(),
       uploadConfiguration: options.uploadConfiguration?.trim() || 'AssetUploadConfiguration',
-      createUploadUrl: options.createUploadUrl?.trim(),
-      createUploadComponentId: options.createUploadComponentId,
       requestTimeoutMs: Math.max(165_000, options.requestTimeoutMs ?? 165_000),
     };
   }, [options]);
@@ -96,14 +94,14 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
     setError('');
     setSuccess('');
     try {
-      await applyImageAsNewVersion(asset, generated.blob, resolvedOptions);
+      await applyImageAsNewVersion(client, asset, generated.blob, resolvedOptions);
       setSuccess('New asset version uploaded successfully.');
     } catch (uploadError) {
       setError(message(uploadError));
     } finally {
       setApplying(false);
     }
-  }, [asset, generated, resolvedOptions]);
+  }, [asset, client, generated, resolvedOptions]);
 
   if (!resolvedOptions) {
     return (
