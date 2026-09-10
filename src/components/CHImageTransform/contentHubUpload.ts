@@ -32,6 +32,11 @@ type ContentHubClient = {
       statusCode?: number;
       content?: T;
     }>;
+    putAsync?: <T>(url: string, body: unknown) => Promise<{
+      isSuccessStatusCode?: boolean;
+      statusCode?: number;
+      content?: T;
+    }>;
   };
 };
 
@@ -90,6 +95,15 @@ function shouldPreserveTargetProperty(name: string): boolean {
   );
 }
 
+function containsNumericValue(value: unknown): boolean {
+  if (typeof value === 'number') return true;
+  if (Array.isArray(value)) return value.some(containsNumericValue);
+  if (value && typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some(containsNumericValue);
+  }
+  return false;
+}
+
 function shouldPreserveTargetRelation(name: string): boolean {
   return /assetmedia|mediamatrix|rendition|repository|lifecycle|publiclink|version|masterasset/i.test(
     name
@@ -106,6 +120,7 @@ async function copyAssetMetadata(
   }
 
   const sourceResponse = await client.raw.getAsync<{
+    entitydefinition?: { href?: string };
     properties?: Record<string, unknown>;
     relations?: Record<string, unknown>;
   }>(`/api/entities/${sourceAssetId}`);
@@ -113,11 +128,20 @@ async function copyAssetMetadata(
     throw new Error('Content Hub could not load the original asset metadata.');
   }
 
-  const propertyCopyOptions = Object.keys(sourceResponse.content.properties ?? {}).map(
-    (property) => ({
+  const sourceProperties = sourceResponse.content.properties ?? {};
+  const numericProperties: Record<string, unknown> = {};
+  const propertyCopyOptions = Object.entries(sourceProperties).map(
+    ([property, value]) => {
+      const numeric = containsNumericValue(value);
+      if (numeric && !shouldPreserveTargetProperty(property)) {
+        numericProperties[property] = value;
+      }
+      return {
       property,
-      method: shouldPreserveTargetProperty(property) ? 'Ignore' : 'Keep',
-    })
+        method:
+          shouldPreserveTargetProperty(property) || numeric ? 'Ignore' : 'Keep',
+      };
+    }
   );
   const relationCopyOptions = Object.keys(sourceResponse.content.relations ?? {}).map(
     (relation) => ({
@@ -133,20 +157,61 @@ async function copyAssetMetadata(
 
   const delays = [0, 750, 2000];
   let lastStatus: number | undefined;
+  let lastMessage = '';
   for (const delay of delays) {
     if (delay) await new Promise((resolve) => window.setTimeout(resolve, delay));
     const response = await client.raw.postAsync(
       `/api/entities/${sourceAssetId}/copy`,
       payload
     );
-    if (response.isSuccessStatusCode) return;
+    const content =
+      response.content && typeof response.content === 'object'
+        ? (response.content as Record<string, unknown>)
+        : undefined;
+    if (response.isSuccessStatusCode && content?.success !== false) {
+      await copyNumericProperties(
+        client,
+        destinationAssetId,
+        numericProperties,
+        sourceResponse.content.entitydefinition
+      );
+      return;
+    }
     lastStatus = response.statusCode;
+    lastMessage = typeof content?.message === 'string' ? content.message : '';
   }
 
   throw new Error(
     `The new asset was created as ${destinationAssetId}, but its metadata could not be copied ` +
-    `(HTTP ${lastStatus ?? 'unknown'}).`
+    `(HTTP ${lastStatus ?? 'unknown'}${lastMessage ? `: ${lastMessage}` : ''}).`
   );
+}
+
+async function copyNumericProperties(
+  client: ContentHubClient,
+  destinationAssetId: number,
+  properties: Record<string, unknown>,
+  entitydefinition: { href?: string } | undefined
+): Promise<void> {
+  if (!client.raw?.putAsync || Object.keys(properties).length === 0) return;
+
+  // The entity-copy endpoint has a Decimal-to-Double bug. Updating each numeric
+  // member separately avoids one incompatible member blocking the others.
+  for (const [property, value] of Object.entries(properties)) {
+    try {
+      const response = await client.raw.putAsync(`/api/entities/${destinationAssetId}`, {
+        entitydefinition: {
+          href: entitydefinition?.href || '/api/entitydefinitions/M.Asset',
+        },
+        properties: { [property]: value },
+      });
+      if (!response.isSuccessStatusCode) {
+        console.warn(`[CHImageTransform] Could not copy numeric property "${property}".`);
+      }
+    } catch {
+      console.warn(`[CHImageTransform] Could not copy numeric property "${property}".`);
+    }
+  }
 }
 
 export async function uploadGeneratedImage(
