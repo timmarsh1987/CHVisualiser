@@ -2,6 +2,8 @@ export type ImageTransformOptions = {
   apiBaseUrl: string;
   apiToken?: string;
   uploadConfiguration?: string;
+  createUploadUrl?: string;
+  createUploadComponentId?: number;
   requestTimeoutMs?: number;
 };
 

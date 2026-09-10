@@ -38,6 +38,8 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
       apiBaseUrl,
       apiToken: options.apiToken?.trim(),
       uploadConfiguration: options.uploadConfiguration?.trim() || 'AssetUploadConfiguration',
+      createUploadUrl: options.createUploadUrl?.trim(),
+      createUploadComponentId: options.createUploadComponentId,
       requestTimeoutMs: Math.max(165_000, options.requestTimeoutMs ?? 165_000),
     };
   }, [options]);
