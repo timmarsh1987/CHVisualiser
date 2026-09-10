@@ -1,5 +1,5 @@
 const SEEDREAM_ENDPOINT = 'https://fal.run/bytedance/seedream/v5/pro/edit';
-const DEFAULT_TIMEOUT_MS = 50_000;
+const DEFAULT_TIMEOUT_MS = 150_000;
 const DEFAULT_MAX_OUTPUT_BYTES = 10 * 1024 * 1024;
 
 export class FalError extends Error {

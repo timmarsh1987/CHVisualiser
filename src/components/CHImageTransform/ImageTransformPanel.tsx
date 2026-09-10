@@ -38,7 +38,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
       apiBaseUrl,
       apiToken: options.apiToken?.trim(),
       uploadConfiguration: options.uploadConfiguration?.trim() || 'AssetUploadConfiguration',
-      requestTimeoutMs: Math.max(45_000, options.requestTimeoutMs ?? 60_000),
+      requestTimeoutMs: Math.max(165_000, options.requestTimeoutMs ?? 165_000),
     };
   }, [options]);
 
@@ -168,7 +168,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
         {generating ? (
           <div className="ch-image-transform__working" role="status">
             <span className="ch-image-transform__spinner" aria-hidden="true" />
-            <span>Generating with Seedream. This can take up to 30 seconds.</span>
+            <span>Generating with Seedream. Complex edits can take up to two minutes.</span>
           </div>
         ) : null}
         {error ? <div className="ch-image-transform__notice ch-image-transform__notice--error">{error}</div> : null}

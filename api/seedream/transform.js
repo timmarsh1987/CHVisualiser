@@ -2,7 +2,7 @@ import { applyCors } from '../lib/cors.js';
 import { FalError, transformWithSeedream } from '../lib/fal/client.js';
 
 export const config = {
-  maxDuration: 60,
+  maxDuration: 180,
 };
 
 async function readJsonBody(req) {
