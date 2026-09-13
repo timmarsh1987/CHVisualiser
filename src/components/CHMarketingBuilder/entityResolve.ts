@@ -9,7 +9,7 @@ export async function resolveMarketingBuilderOptions(
   entity: unknown,
   config: unknown
 ): Promise<MarketingBuilderOptions> {
-  let parsed = parseMarketingBuilderOptions(options, entity, config);
+  const parsed = parseMarketingBuilderOptions(options, entity, config);
 
   if (parsed.templateId) {
     logResolved('templateId', `Resolved ${parsed.templateId} from config or entity relations`);

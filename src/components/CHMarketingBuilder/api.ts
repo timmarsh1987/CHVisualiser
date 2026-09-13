@@ -24,6 +24,7 @@ import {
   DUMMY_TEMPLATE_ID,
   logFallback,
 } from './fallbackData';
+import { withResolvedBrandKit } from './brandAssets';
 import { logInfo, logMissing, logResolved } from './debugLog';
 import {
   isPersistedEntityId,
@@ -108,7 +109,7 @@ type ChClient = {
 const DEFAULT_PROXY_BASE = '/api/content-hub';
 export const DEFAULT_RENDER_EMAIL_API_URL = '/api/render-email-html';
 
-let chClient: ChClient | null = null;
+let chClient: ChClient = {};
 let proxyBase = DEFAULT_PROXY_BASE;
 
 export function isRenderedOutputUploadEnabled(): boolean {
@@ -122,7 +123,7 @@ export function isDefaultRenderEmailApiUrl(url: string): boolean {
 }
 
 export function setContentHubClient(client: unknown) {
-  chClient = client as ChClient;
+  chClient = (client ?? {}) as ChClient;
 }
 
 export function setContentHubProxyBase(base: string) {
@@ -1226,6 +1227,11 @@ async function updateTemplateZoneEntity(zoneId: string, zone: TemplateZone): Pro
 }
 
 async function createTemplateZoneEntity(zone: TemplateZone): Promise<string> {
+  const raw = chClient.raw;
+  if (!raw?.postAsync) {
+    throw new Error('Content Hub client does not support creating template zones.');
+  }
+
   const createAttempts: Record<string, unknown>[] = [
     templateZoneToCreateProperties(zone),
     {
@@ -1239,7 +1245,7 @@ async function createTemplateZoneEntity(zone: TemplateZone): Promise<string> {
   let lastStatus = 'unknown';
 
   for (const properties of createAttempts) {
-    const response = await chClient!.raw!.postAsync<{ id?: number }>('/api/entities', {
+    const response = await raw.postAsync<{ id?: number }>('/api/entities', {
       entitydefinition: {
         href: '/api/entitydefinitions/EPAM.TemplateZone',
       },

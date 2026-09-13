@@ -192,7 +192,7 @@ export default function ImagePicker({
               key={asset.id || asset.thumbnailUrl}
               type="button"
               role="radio"
-              aria-checked={isSelected}
+              aria-checked={Boolean(isSelected)}
               className={`image-picker-option${isSelected ? ' image-picker-option-selected' : ''}`}
               onClick={() =>
                 onChange(zoneKey, {

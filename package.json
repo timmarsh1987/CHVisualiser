@@ -2,6 +2,9 @@
   "name": "chcomponents",
   "private": true,
   "version": "1.0.0",
+  "engines": {
+    "node": "22.x"
+  },
   "type": "module",
   "scripts": {
     "watch": "vite build --watch --mode production",
@@ -18,6 +21,7 @@
   "dependencies": {
     "@mui/material": "^5.11.13",
     "@sitecore/sc-contenthub-webclient-sdk": "^1.2.8",
+    "c2pa-node": "0.5.26",
     "dompurify": "^3.4.11",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.383.0",
@@ -37,5 +41,8 @@
     "typescript": "^4.9.3",
     "vite": "^4.2.1",
     "vite-plugin-css-injected-by-js": "^3.1.0"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
   }
 }

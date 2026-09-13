@@ -23,5 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 package-lock.json
+!services/c2pa-provenance/package-lock.json
 
 dist/

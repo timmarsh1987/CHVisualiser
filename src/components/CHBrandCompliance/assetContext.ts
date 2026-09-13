@@ -69,10 +69,10 @@ function readPropertyValue(value: unknown): unknown {
   for (const key of preferredKeys) {
     if (key in record) {
       const nested = readPropertyValue(record[key]);
-      if (nested != null && typeof nested !== 'object') {
+      if (typeof nested === 'string' && nested.trim()) {
         return nested;
       }
-      if (typeof nested === 'string' && nested.trim()) {
+      if (nested != null && typeof nested !== 'object') {
         return nested;
       }
     }

@@ -31,6 +31,7 @@ import {
 type EntityPayload = {
   properties?: Record<string, unknown>;
   relations?: Record<string, unknown>;
+  renditions?: unknown;
   systemProperties?: { id?: number };
 };
 

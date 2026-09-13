@@ -1,0 +1,29 @@
+{
+  "name": "@epam/c2pa-provenance",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "22.x"
+  },
+  "main": "dist/src/provenance.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "inspect": "npm run build --silent && node dist/src/cli.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "c2pa-node": "0.5.26"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.14",
+    "typescript": "^5.9.2",
+    "vitest": "^3.2.4"
+  },
+  "overrides": {
+    "sharp": "0.35.4"
+  }
+}

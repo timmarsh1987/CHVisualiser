@@ -201,6 +201,9 @@ async function loadTaxonomyItemsForDefinition(
   getEntityPayload: GetEntityPayload,
   definitionName: string
 ): Promise<number> {
+  const raw = client.raw;
+  if (!raw?.getAsync) return 0;
+
   const query = encodeURIComponent(`Definition.Name=='${definitionName}'`);
   const queryUrls = [
     `/api/entities/query?query=${query}&take=100`,
@@ -209,7 +212,7 @@ async function loadTaxonomyItemsForDefinition(
 
   for (const url of queryUrls) {
     try {
-      const response = await client.raw.getAsync<unknown>(url);
+      const response = await raw.getAsync<unknown>(url);
       if (!response.isSuccessStatusCode || response.content == null) continue;
 
       const ids = parseEntityIdsFromQuery(response.content);
@@ -392,27 +395,29 @@ async function linkZoneToTaxonomy(
   relationName: string,
   payload: EntityPayload
 ): Promise<boolean> {
+  if (!client) return false;
+  const relationClient = client;
   const attempts: Array<{ label: string; run: () => Promise<boolean> }> = relationUsesParentWrite(
     relationName
   )
     ? [
         {
           label: 'parent',
-          run: () => setParentRelation(client, zoneId, taxonomyId, relationName, payload.relations),
+          run: () => setParentRelation(relationClient, zoneId, taxonomyId, relationName, payload.relations),
         },
         {
           label: 'child',
-          run: () => appendChildRelation(client, zoneId, taxonomyId, relationName, payload.relations),
+          run: () => appendChildRelation(relationClient, zoneId, taxonomyId, relationName, payload.relations),
         },
       ]
     : [
         {
           label: 'child',
-          run: () => appendChildRelation(client, zoneId, taxonomyId, relationName, payload.relations),
+          run: () => appendChildRelation(relationClient, zoneId, taxonomyId, relationName, payload.relations),
         },
         {
           label: 'parent',
-          run: () => setParentRelation(client, zoneId, taxonomyId, relationName, payload.relations),
+          run: () => setParentRelation(relationClient, zoneId, taxonomyId, relationName, payload.relations),
         },
       ];
 

@@ -1,3 +1,4 @@
+import React from 'react';
 import type { ChannelType, Template } from './types';
 import {
   applyDimensionPreset,

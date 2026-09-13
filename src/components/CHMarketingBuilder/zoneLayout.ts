@@ -46,8 +46,8 @@ export function mergeZoneLayoutStyle(
       Right: 'marginRight',
       Bottom: 'marginBottom',
       Left: 'marginLeft',
-    }[direction] as keyof CSSProperties;
-    style[marginKey] = offset;
+    }[direction];
+    Object.assign(style, { [marginKey]: offset });
   }
 
   return style;

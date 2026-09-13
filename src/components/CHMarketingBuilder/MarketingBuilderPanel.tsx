@@ -105,6 +105,7 @@ export default function MarketingBuilderPanel({
 
   useEffect(() => {
     if (!resolvedOptions) return;
+    const currentOptions = resolvedOptions;
 
     let cancelled = false;
 
@@ -113,7 +114,7 @@ export default function MarketingBuilderPanel({
       setError(null);
       resetLoadReport();
 
-      if (!resolvedOptions.templateId) {
+      if (!currentOptions.templateId) {
         const message = describeMissingTemplateId(entity, config);
         logError('templateId', message);
         setError(message);
@@ -121,7 +122,7 @@ export default function MarketingBuilderPanel({
         return;
       }
 
-      if (!resolvedOptions.marketingAssetId) {
+      if (!currentOptions.marketingAssetId) {
         const message = 'marketingAssetId could not be resolved from context.entity.systemProperties.id.';
         logError('marketingAssetId', message);
         setError(message);
@@ -129,35 +130,35 @@ export default function MarketingBuilderPanel({
         return;
       }
 
-      logResolved('templateId', `Using template ${resolvedOptions.templateId}`);
-      logResolved('marketingAssetId', `Using marketing asset ${resolvedOptions.marketingAssetId}`);
+      logResolved('templateId', `Using template ${currentOptions.templateId}`);
+      logResolved('marketingAssetId', `Using marketing asset ${currentOptions.marketingAssetId}`);
 
       try {
-        const loadedTemplate = await contentHubApi.getTemplate(resolvedOptions.templateId);
+        const loadedTemplate = await contentHubApi.getTemplate(currentOptions.templateId);
         if (cancelled) return;
 
         setTemplate(loadedTemplate);
 
-        const mode = resolveBuilderMode(resolvedOptions, loadedTemplate.channelType);
+        const mode = resolveBuilderMode(currentOptions, loadedTemplate.channelType);
         if (mode === 'admin') {
           setMarketingAsset(null);
           printLoadSummary({
             builderMode: mode,
             templateId: loadedTemplate.id,
             templateName: loadedTemplate.templateName,
-            marketingAssetId: resolvedOptions.marketingAssetId,
-            brandKitId: resolvedOptions.brandKitId ?? loadedTemplate.brandKitId,
+            marketingAssetId: currentOptions.marketingAssetId,
+            brandKitId: currentOptions.brandKitId ?? loadedTemplate.brandKitId,
             channelType: loadedTemplate.channelType,
             zoneCount: loadedTemplate.zones.length,
           });
           return;
         }
 
-        const loadedAsset = await contentHubApi.getMarketingAsset(resolvedOptions.marketingAssetId);
+        const loadedAsset = await contentHubApi.getMarketingAsset(currentOptions.marketingAssetId);
         if (cancelled) return;
         setMarketingAsset(loadedAsset);
 
-        const brandKitId = resolvedOptions.brandKitId ?? loadedTemplate.brandKitId;
+        const brandKitId = currentOptions.brandKitId ?? loadedTemplate.brandKitId;
         printLoadSummary({
           builderMode: mode,
           templateId: loadedTemplate.id,
@@ -277,7 +278,7 @@ export default function MarketingBuilderPanel({
     <ContentHubIntegrationProvider value={integrationValue}>
       <BrandKitProvider brandKitId={brandKitId}>
         <div className="marketing-builder">
-          {(builderMode === 'admin' || (builderMode !== 'admin' && activeTab === 'template')) && (
+          {(builderMode === 'admin' || activeTab === 'template') && (
             <>
               {builderMode !== 'admin' && (
                 <TemplateEditToolbar

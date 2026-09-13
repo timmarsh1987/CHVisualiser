@@ -9,7 +9,6 @@ const STRING_OPTION_KEYS = [
   'fileNameProperty',
   'descriptionProperty',
   'complianceReportProperty',
-  'complianceReportStorage',
   'complianceStatusProperty',
   'complianceScoreProperty',
   'complianceAnalyzedAtProperty',
@@ -139,6 +138,12 @@ function normalizeOptionsRecord(
     if (value) {
       normalized[key] = value;
     }
+  }
+
+  const reportStorage = pickOption(record, 'complianceReportStorage');
+  if (reportStorage) {
+    normalized.complianceReportStorage =
+      reportStorage.trim().toLowerCase() === 'string' ? 'string' : 'json';
   }
 
   const metadataProperties = pickMetadataProperties(record);
