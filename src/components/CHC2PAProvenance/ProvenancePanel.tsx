@@ -32,6 +32,62 @@ function provenanceFound(summary: Record<string, unknown> | null): boolean {
   );
 }
 
+function manifestFromSummary(
+  summary: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  const latest = summary?.latest;
+  if (!latest || typeof latest !== 'object' || Array.isArray(latest)) return null;
+  const manifest = (latest as Record<string, unknown>).manifest;
+  return manifest && typeof manifest === 'object' && !Array.isArray(manifest)
+    ? (manifest as Record<string, unknown>)
+    : null;
+}
+
+function signerFromManifest(
+  manifest: Record<string, unknown> | null
+): string {
+  const signature = manifest?.signatureInfo;
+  if (signature && typeof signature === 'object' && !Array.isArray(signature)) {
+    const issuer = (signature as Record<string, unknown>).issuer;
+    if (typeof issuer === 'string' && issuer.trim()) return issuer.trim();
+  }
+  return 'Not declared';
+}
+
+function actionLabel(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const finalPart = value.trim().split(/[./]/).pop() ?? value;
+  const words = finalPart
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : null;
+}
+
+function actionsFromManifest(manifest: Record<string, unknown> | null): string[] {
+  const rawAssertions = manifest?.assertions;
+  const assertions = Array.isArray(rawAssertions) ? rawAssertions : [];
+  const actions = new Set<string>();
+  for (const value of assertions) {
+    if (!value || typeof value !== 'object') continue;
+    const assertion = value as Record<string, unknown>;
+    if (typeof assertion.label !== 'string' || !assertion.label.startsWith('c2pa.actions')) {
+      continue;
+    }
+    const data =
+      assertion.data && typeof assertion.data === 'object'
+        ? (assertion.data as Record<string, unknown>)
+        : null;
+    const rawActions = data?.actions;
+    for (const item of Array.isArray(rawActions) ? rawActions : []) {
+      if (!item || typeof item !== 'object') continue;
+      const label = actionLabel((item as Record<string, unknown>).action);
+      if (label) actions.add(label);
+    }
+  }
+  return [...actions];
+}
+
 export default function ProvenancePanel({ client, entity, options }: Props) {
   const id = useMemo(() => assetId(entity), [entity]);
   const configured = useMemo<C2PAProvenanceOptions | null>(() => {
@@ -49,6 +105,9 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const hasManifest = provenanceFound(view.summary);
+  const manifest = manifestFromSummary(view.summary);
+  const signer = signerFromManifest(manifest);
+  const actions = actionsFromManifest(manifest);
 
   const refresh = useCallback(async () => {
     if (!id) return;
@@ -163,6 +222,40 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
         <span>Last checked: {timestamp(view.checkedAt)}</span>
         <span>Stored checks: {historyCount(view.summary)}</span>
       </div>
+
+      {(hasManifest || view.provenanceVerified) && (
+        <section className="ch-c2pa__credentials">
+          <header className="ch-c2pa__credentials-header">
+            <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
+            <strong>Content credentials</strong>
+          </header>
+
+          <div
+            className={`ch-c2pa__trust ${
+              view.provenanceVerified ? 'ch-c2pa__trust--verified' : 'ch-c2pa__trust--invalid'
+            }`}
+          >
+            <span aria-hidden="true">{view.provenanceVerified ? '✓' : '!'}</span>
+            {view.provenanceVerified ? 'Verified credentials' : 'Validation failed'}
+          </div>
+
+          <div className="ch-c2pa__signed-by">
+            <span>Signed by</span>
+            <strong>{signer}</strong>
+          </div>
+
+          <details className="ch-c2pa__history" open>
+            <summary>History</summary>
+            {actions.length > 0 ? (
+              <ol>
+                {actions.map((action) => <li key={action}>{action}</li>)}
+              </ol>
+            ) : (
+              <p>No actions were declared in the manifest.</p>
+            )}
+          </details>
+        </section>
+      )}
 
       {view.summary && (
         <details className="ch-c2pa__details">
