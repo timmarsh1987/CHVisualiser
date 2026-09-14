@@ -7,6 +7,7 @@ import {
   wasRecentlyChecked,
 } from './contentHub.js';
 import { extractProvenance } from './provenance.js';
+import type { ProvenanceResult } from './types.js';
 
 interface LoggerContext {
   error(...values: unknown[]): unknown;
@@ -86,7 +87,16 @@ export async function processWebhook(
 
     const downloaded = await downloadOriginalWithRetry(config, assetId);
     temporaryPath = downloaded.path;
-    const result = await extractProvenance(downloaded.path, downloaded.mimeType);
+    let result: ProvenanceResult;
+    try {
+      result = await extractProvenance(downloaded.path, downloaded.mimeType);
+    } catch (error) {
+      throw new Error(
+        `C2PA could not read asset ${assetId} as ${
+          downloaded.mimeType ?? 'an unknown image type'
+        }: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
 
     await updateAssetProvenance(
       config.contentHub,

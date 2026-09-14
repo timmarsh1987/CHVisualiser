@@ -66,18 +66,67 @@ function renditionHref(renditions: unknown, names: string[]): string | null {
   return null;
 }
 
-function mimeTypeFromAsset(asset: ContentHubAsset): string | undefined {
-  const properties = asset.properties ?? {};
-  for (const name of ['MimeType', 'mimeType', 'ContentType', 'contentType']) {
-    const value = properties[name];
-    if (typeof value === 'string' && value.trim()) return value.trim();
+function propertyText(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  for (const key of ['Invariant', 'invariant', '_value', 'value']) {
+    const nested = propertyText(record[key]);
+    if (nested) return nested;
   }
   return undefined;
 }
 
-function fileSuffix(url: string, mimeType?: string): string {
+function fileNameFromAsset(asset: ContentHubAsset): string | undefined {
+  const properties = asset.properties ?? {};
+  for (const name of ['FileName', 'fileName', 'Filename', 'filename']) {
+    const value = propertyText(properties[name]);
+    if (value) return value;
+  }
+  return undefined;
+}
+
+function mimeTypeFromFileName(fileName?: string): string | undefined {
+  if (/\.jpe?g$/i.test(fileName ?? '')) return 'image/jpeg';
+  if (/\.png$/i.test(fileName ?? '')) return 'image/png';
+  if (/\.webp$/i.test(fileName ?? '')) return 'image/webp';
+  if (/\.gif$/i.test(fileName ?? '')) return 'image/gif';
+  if (/\.tiff?$/i.test(fileName ?? '')) return 'image/tiff';
+  if (/\.avif$/i.test(fileName ?? '')) return 'image/avif';
+  return undefined;
+}
+
+function normalizeMimeType(value?: string | null): string | undefined {
+  const normalized = value?.split(';', 1)[0].trim().toLowerCase();
+  if (!normalized) return undefined;
+  return normalized === 'image/jpg' ? 'image/jpeg' : normalized;
+}
+
+function mimeTypeFromAsset(asset: ContentHubAsset): string | undefined {
+  const properties = asset.properties ?? {};
+  for (const name of ['MimeType', 'mimeType', 'ContentType', 'contentType']) {
+    const value = propertyText(properties[name]);
+    if (value) return normalizeMimeType(value);
+  }
+  return mimeTypeFromFileName(fileNameFromAsset(asset));
+}
+
+function fileNameFromDisposition(value: string | null): string | undefined {
+  if (!value) return undefined;
+  const encoded = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  if (encoded) {
+    try {
+      return decodeURIComponent(encoded.replace(/^"|"$/g, ''));
+    } catch {
+      return encoded;
+    }
+  }
+  return value.match(/filename="?([^";]+)"?/i)?.[1]?.trim();
+}
+
+function fileSuffix(url: string, mimeType?: string, fileName?: string): string {
   const pathname = new URL(url).pathname;
-  const extension = extname(pathname);
+  const extension = extname(pathname) || extname(fileName ?? '');
   if (extension && extension.length <= 10) return extension;
   const byMime: Record<string, string> = {
     'image/jpeg': '.jpg',
@@ -129,7 +178,7 @@ export async function downloadOriginalWithRetry(
       const href = renditionHref(asset.renditions, config.contentHub.originalRenditionNames);
       if (!href) throw new Error(`Original rendition is not available for asset ${assetId}.`);
 
-      const mimeType = mimeTypeFromAsset(asset);
+      let mimeType = mimeTypeFromAsset(asset);
       if (mimeType && !mimeType.toLowerCase().startsWith('image/')) {
         throw new Error(`Unsupported asset type ${mimeType}; only images are supported.`);
       }
@@ -142,7 +191,17 @@ export async function downloadOriginalWithRetry(
         throw await responseError(`Could not download original for asset ${assetId}`, response);
       }
 
-      temporaryPath = join(tmpdir(), `c2pa-${randomUUID()}${fileSuffix(url, mimeType)}`);
+      const responseMimeType = normalizeMimeType(response.headers.get('content-type'));
+      if (!mimeType && responseMimeType?.startsWith('image/')) {
+        mimeType = responseMimeType;
+      }
+      const fileName =
+        fileNameFromAsset(asset) ??
+        fileNameFromDisposition(response.headers.get('content-disposition'));
+      temporaryPath = join(
+        tmpdir(),
+        `c2pa-${randomUUID()}${fileSuffix(url, mimeType, fileName)}`
+      );
       await pipeline(
         Readable.fromWeb(response.body as import('node:stream/web').ReadableStream),
         new ByteLimit(config.maxFileBytes),
