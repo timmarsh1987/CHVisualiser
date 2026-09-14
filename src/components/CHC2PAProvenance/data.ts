@@ -45,6 +45,35 @@ function json(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+function href(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (value && typeof value === 'object') {
+    const nested = (value as Record<string, unknown>).href;
+    if (typeof nested === 'string' && nested.trim()) return nested.trim();
+  }
+  return null;
+}
+
+function previewUrl(entity: any): string | null {
+  const renditions = entity?.renditions;
+  if (!renditions || typeof renditions !== 'object') return null;
+  for (const name of ['preview', 'thumbnail', 'bigthumbnail', 'downloadPreview']) {
+    const rendition = Array.isArray(renditions)
+      ? renditions.find((item: any) => item?.name === name)
+      : (renditions as Record<string, unknown>)[name];
+    const items =
+      Array.isArray(rendition)
+        ? rendition
+        : rendition && typeof rendition === 'object'
+          ? (rendition as Record<string, unknown>).items
+          : null;
+    if (!Array.isArray(items) || items.length === 0) continue;
+    const value = href(items[0]);
+    if (value) return value;
+  }
+  return null;
+}
+
 export function assetId(entity: any): string | null {
   const value = entity?.systemProperties?.id ?? entity?.id;
   return value == null || !String(value).trim() ? null : String(value).trim();
@@ -57,6 +86,7 @@ export function mapProvenanceView(entity: any): ProvenanceView {
     sourceTool: string(property(entity, 'EPAM.aiSourceTool')),
     provenanceVerified: bool(property(entity, 'EPAM.provenanceVerified')),
     checkedAt: string(property(entity, 'EPAM.provenanceCheckedAt')),
+    previewUrl: previewUrl(entity),
     summary: json(property(entity, 'SC.Asset.C2PA.Summary')),
   };
 }

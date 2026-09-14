@@ -10,5 +10,6 @@ export interface ProvenanceView {
   sourceTool: string | null;
   provenanceVerified: boolean;
   checkedAt: string | null;
+  previewUrl: string | null;
   summary: Record<string, unknown> | null;
 }
