@@ -69,6 +69,11 @@ Add the values listed in `.env.example` to the Vercel project's encrypted
 environment variables. Do not expose them through Content Hub component
 options or browser code.
 
+Authentication uses only the Content Hub OAuth Client Credentials grant at
+`<CH_BASE_URL>/oauth/token`. The service caches short-lived access tokens and
+automatically reacquires one before expiry or after the first API 401. No
+username, password, manually supplied access token, or refresh token is used.
+
 `CH_TOKEN_URL`, the asset definition, and original-rendition names are
 instance-specific. `FILE_FETCH_*` implements exponential backoff for the
 upload/rendition race. `WEBHOOK_DEDUP_WINDOW_SECONDS` prevents the provenance
@@ -79,6 +84,10 @@ is unavailable.
 ## HTTP API
 
 - `POST /api/c2pa/webhook` processes an asset event.
+- `GET /api/c2pa/webhook?assetId=<id>` authenticates and reads one asset as a
+  harmless connectivity diagnostic.
+
+Both operations require `Authorization: Bearer <C2PA_WEBHOOK_SECRET>`.
 
 ## Deployment
 

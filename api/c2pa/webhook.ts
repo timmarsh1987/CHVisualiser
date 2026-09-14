@@ -1,4 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
+import { getConfig } from '../../services/c2pa-provenance/src/config.js';
+import { getAsset } from '../../services/c2pa-provenance/src/contentHub.js';
 import { processWebhook } from '../../services/c2pa-provenance/src/webhook.js';
 
 export const config = {
@@ -9,6 +11,7 @@ interface VercelRequest {
   method?: string;
   body?: unknown;
   headers: Record<string, string | string[] | undefined>;
+  query?: Record<string, string | string[] | undefined>;
 }
 
 interface VercelResponse {
@@ -36,12 +39,6 @@ export default async function handler(
   response: VercelResponse
 ): Promise<void> {
   response.setHeader('Cache-Control', 'no-store');
-  if (request.method !== 'POST') {
-    response.setHeader('Allow', 'POST');
-    response.status(405).json({ message: 'Method not allowed.' });
-    return;
-  }
-
   const secret = process.env.C2PA_WEBHOOK_SECRET?.trim();
   if (!secret) {
     response.status(503).json({ message: 'C2PA_WEBHOOK_SECRET is not configured.' });
@@ -53,6 +50,29 @@ export default async function handler(
   }
 
   try {
+    if (request.method === 'GET') {
+      const rawAssetId = request.query?.assetId;
+      const assetId = (Array.isArray(rawAssetId) ? rawAssetId[0] : rawAssetId)?.trim();
+      if (!assetId) {
+        response.status(400).json({
+          message: 'Provide assetId to run the read-only Content Hub diagnostic.',
+        });
+        return;
+      }
+      const asset = await getAsset(getConfig().contentHub, assetId);
+      response.status(200).json({
+        status: 'connected',
+        assetId: asset.id,
+      });
+      return;
+    }
+
+    if (request.method !== 'POST') {
+      response.setHeader('Allow', 'GET, POST');
+      response.status(405).json({ message: 'Method not allowed.' });
+      return;
+    }
+
     const payload =
       typeof request.body === 'string' ? JSON.parse(request.body) : request.body;
     const result = await processWebhook(payload, {

@@ -1,11 +1,8 @@
 export interface AppConfig {
   contentHub: {
     baseUrl: string;
-    tokenUrl: string;
     clientId: string;
     clientSecret: string;
-    scope?: string;
-    audience?: string;
     originalRenditionNames: string[];
     updateMethod: 'PATCH' | 'PUT';
   };
@@ -35,8 +32,6 @@ function positiveInteger(name: string, fallback: number): number {
 }
 
 export function getConfig(): AppConfig {
-  const scope = process.env.CH_OAUTH_SCOPE?.trim();
-  const audience = process.env.CH_OAUTH_AUDIENCE?.trim();
   const updateMethod = (process.env.CH_ENTITY_UPDATE_METHOD ?? 'PUT').toUpperCase();
   if (updateMethod !== 'PATCH' && updateMethod !== 'PUT') {
     throw new Error('CH_ENTITY_UPDATE_METHOD must be PATCH or PUT.');
@@ -45,11 +40,8 @@ export function getConfig(): AppConfig {
   return {
     contentHub: {
       baseUrl: required('CH_BASE_URL').replace(/\/+$/, ''),
-      tokenUrl: required('CH_TOKEN_URL'),
       clientId: required('CH_CLIENT_ID'),
       clientSecret: required('CH_CLIENT_SECRET'),
-      scope: scope || undefined,
-      audience: audience || undefined,
       originalRenditionNames: (process.env.CH_ORIGINAL_RENDITIONS ?? 'downloadOriginal,original,download')
         .split(',')
         .map((value) => value.trim())

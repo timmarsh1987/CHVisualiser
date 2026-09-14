@@ -6,19 +6,13 @@ import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import type { AppConfig } from './config.js';
+import { contentHubFetch } from './contentHubAuth.js';
 import type {
   ContentHubAsset,
   ProvenanceCheckSummary,
   ProvenanceResult,
   ProvenanceSummary,
 } from './types.js';
-
-interface TokenResponse {
-  access_token: string;
-  expires_in?: number;
-}
-
-let tokenCache: { value: string; expiresAt: number } | null = null;
 
 function absoluteUrl(baseUrl: string, href: string): string {
   return new URL(href, `${baseUrl}/`).toString();
@@ -32,55 +26,11 @@ async function responseError(prefix: string, response: Response): Promise<Error>
   return new Error(`${prefix}: HTTP ${response.status} ${errorBody(await response.text())}`);
 }
 
-export async function getContentHubToken(config: AppConfig['contentHub']): Promise<string> {
-  if (tokenCache && tokenCache.expiresAt > Date.now() + 30_000) return tokenCache.value;
-
-  const body = new URLSearchParams({
-    grant_type: 'client_credentials',
-    client_id: config.clientId,
-    client_secret: config.clientSecret,
-  });
-  if (config.scope) body.set('scope', config.scope);
-  if (config.audience) body.set('audience', config.audience);
-
-  const response = await fetch(config.tokenUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
-  if (!response.ok) throw await responseError('Content Hub authentication failed', response);
-
-  const token = (await response.json()) as Partial<TokenResponse>;
-  if (!token.access_token) throw new Error('Content Hub token response did not include access_token.');
-
-  tokenCache = {
-    value: token.access_token,
-    expiresAt: Date.now() + Math.max(60, token.expires_in ?? 300) * 1000,
-  };
-  return token.access_token;
-}
-
-async function authorizedFetch(
-  config: AppConfig['contentHub'],
-  href: string,
-  init: RequestInit = {}
-): Promise<Response> {
-  const token = await getContentHubToken(config);
-  return fetch(absoluteUrl(config.baseUrl, href), {
-    ...init,
-    headers: {
-      Accept: 'application/json',
-      ...init.headers,
-      Authorization: `Bearer ${token}`,
-    },
-  });
-}
-
 export async function getAsset(
   config: AppConfig['contentHub'],
   assetId: string
 ): Promise<ContentHubAsset> {
-  const response = await authorizedFetch(config, `/api/entities/${encodeURIComponent(assetId)}`);
+  const response = await contentHubFetch(config, `/api/entities/${encodeURIComponent(assetId)}`);
   if (!response.ok) throw await responseError(`Could not load asset ${assetId}`, response);
   const asset = (await response.json()) as ContentHubAsset;
   asset.id = String(asset.id ?? assetId);
@@ -185,7 +135,7 @@ export async function downloadOriginalWithRetry(
       }
 
       const url = absoluteUrl(config.contentHub.baseUrl, href);
-      const response = await authorizedFetch(config.contentHub, url, {
+      const response = await contentHubFetch(config.contentHub, url, {
         headers: { Accept: 'application/octet-stream' },
       });
       if (!response.ok || !response.body) {
@@ -248,7 +198,7 @@ export async function updateAssetProvenance(
   const definition = definitionHref(asset);
   if (definition) payload.entitydefinition = { href: definition };
 
-  const response = await authorizedFetch(
+  const response = await contentHubFetch(
     config,
     `/api/entities/${encodeURIComponent(asset.id)}`,
     {
