@@ -8,8 +8,8 @@
  *   $env:CODEMIE_BRAND_COMPLIANCE_ASSISTANT_ID="your-assistant-uuid"
  *   npm run codemie:smoke
  */
-import { getCodeMieAccessToken, getCodeMieApiBase } from '../lib/codemie/auth.js';
-import { callCodeMieAssistant } from '../lib/codemie/client.js';
+import { getCodeMieAccessToken, getCodeMieApiBase } from '../api/lib/codemie/auth.js';
+import { callCodeMieAssistant } from '../api/lib/codemie/client.js';
 
 function getAssistantId() {
   return (
