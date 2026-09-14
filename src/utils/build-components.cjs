@@ -17,6 +17,7 @@ const COMPONENTS = [
   "CHFineArtTagging",
   "AIGovernancePanel",
   "CHImageTransform",
+  "CHC2PAProvenance",
 ];
 const distDir = path.join(__dirname, "../../dist");
 

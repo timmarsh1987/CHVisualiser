@@ -87,7 +87,26 @@ is unavailable.
 - `GET /api/c2pa/webhook?assetId=<id>` authenticates and reads one asset as a
   harmless connectivity diagnostic.
 
-Both operations require `Authorization: Bearer <C2PA_WEBHOOK_SECRET>`.
+Both operations require a bearer token matching `C2PA_WEBHOOK_SECRET` or the
+separate UI trigger token described below.
+
+## Asset-page component
+
+Use `https://<vercel-project>/CHC2PAProvenance.js` as the external component
+bundle and configure:
+
+```json
+{
+  "apiBaseUrl": "https://<vercel-project>",
+  "apiToken": "<C2PA_UI_API_SECRET>",
+  "requestTimeoutMs": 300000
+}
+```
+
+`C2PA_UI_API_SECRET` is a separate, low-privilege trigger token. It is visible
+to authenticated browser users and must never equal `CH_CLIENT_SECRET` or
+`C2PA_WEBHOOK_SECRET`. The API accepts it only to run the fixed provenance
+operation; Content Hub credentials remain server-side.
 
 ## Deployment
 

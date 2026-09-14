@@ -1,0 +1,130 @@
+.ch-c2pa {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 20px;
+  color: #1f2937;
+  background: #fff;
+  border: 1px solid #d9dee7;
+  border-radius: 8px;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.ch-c2pa__header {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.ch-c2pa__header h2 {
+  margin: 2px 0 0;
+  font-size: 20px;
+}
+
+.ch-c2pa__eyebrow {
+  margin: 0;
+  color: #667085;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.ch-c2pa__button {
+  min-width: 150px;
+  padding: 10px 16px;
+  color: #fff;
+  background: #0b5cab;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.ch-c2pa__button:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+}
+
+.ch-c2pa__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  gap: 10px;
+}
+
+.ch-c2pa__grid article {
+  padding: 12px;
+  background: #f6f8fb;
+  border-radius: 6px;
+}
+
+.ch-c2pa__grid span,
+.ch-c2pa__grid strong {
+  display: block;
+}
+
+.ch-c2pa__grid span {
+  margin-bottom: 5px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.ch-c2pa__grid strong {
+  overflow-wrap: anywhere;
+  font-size: 15px;
+}
+
+.ch-c2pa__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 14px;
+  color: #667085;
+  font-size: 12px;
+}
+
+.ch-c2pa__message {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 5px;
+}
+
+.ch-c2pa__message--error,
+.ch-c2pa--error {
+  color: #9b1c1c;
+  background: #fff1f1;
+}
+
+.ch-c2pa__message--success {
+  color: #176b3a;
+  background: #edf9f1;
+}
+
+.ch-c2pa__details {
+  margin-top: 16px;
+}
+
+.ch-c2pa__details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ch-c2pa__details pre {
+  max-height: 360px;
+  margin: 10px 0 0;
+  padding: 12px;
+  overflow: auto;
+  background: #111827;
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 11px;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 520px) {
+  .ch-c2pa__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

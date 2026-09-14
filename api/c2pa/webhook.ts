@@ -18,6 +18,7 @@ interface VercelResponse {
   status(code: number): VercelResponse;
   json(body: unknown): void;
   setHeader(name: string, value: string): void;
+  end(): void;
 }
 
 function bearerToken(request: VercelRequest): string | null {
@@ -34,17 +35,29 @@ function equalSecret(provided: string | null, expected: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function isAuthorized(request: VercelRequest): boolean {
+  const provided = bearerToken(request);
+  return [
+    process.env.C2PA_WEBHOOK_SECRET?.trim(),
+    process.env.C2PA_UI_API_SECRET?.trim(),
+  ].some((secret) => Boolean(secret && equalSecret(provided, secret)));
+}
+
 export default async function handler(
   request: VercelRequest,
   response: VercelResponse
 ): Promise<void> {
   response.setHeader('Cache-Control', 'no-store');
-  const secret = process.env.C2PA_WEBHOOK_SECRET?.trim();
-  if (!secret) {
-    response.status(503).json({ message: 'C2PA_WEBHOOK_SECRET is not configured.' });
+  if (request.method === 'OPTIONS') {
+    response.status(204).end();
     return;
   }
-  if (!equalSecret(bearerToken(request), secret)) {
+
+  if (!process.env.C2PA_WEBHOOK_SECRET?.trim() && !process.env.C2PA_UI_API_SECRET?.trim()) {
+    response.status(503).json({ message: 'C2PA API authentication is not configured.' });
+    return;
+  }
+  if (!isAuthorized(request)) {
     response.status(401).json({ message: 'Unauthorized.' });
     return;
   }
