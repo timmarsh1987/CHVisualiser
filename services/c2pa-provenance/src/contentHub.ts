@@ -307,6 +307,7 @@ function readableManifest(rawManifest: unknown): unknown | null {
     title: active.title,
     format: active.format,
     claimGenerator: active.claim_generator,
+    claimGeneratorInfo: active.claim_generator_info,
     signatureInfo: active.signature_info,
     assertions,
     ingredients,

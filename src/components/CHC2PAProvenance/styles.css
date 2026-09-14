@@ -49,30 +49,58 @@
 
 .ch-c2pa__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
-.ch-c2pa__grid article {
+.ch-c2pa__card {
   padding: 12px;
-  background: #f6f8fb;
+  border: 1px solid transparent;
   border-radius: 6px;
 }
 
-.ch-c2pa__grid span,
-.ch-c2pa__grid strong {
+.ch-c2pa__card--neutral {
+  background: #f6f8fb;
+  border-color: #e4e7ec;
+}
+
+.ch-c2pa__card--positive {
+  background: #edf9f1;
+  border-color: #a8ddb8;
+}
+
+.ch-c2pa__card--negative {
+  background: #fff1f1;
+  border-color: #f0b4b4;
+}
+
+.ch-c2pa__card--ai {
+  background: #f4f0ff;
+  border-color: #cbbcf6;
+}
+
+.ch-c2pa__card span,
+.ch-c2pa__card strong,
+.ch-c2pa__card small {
   display: block;
 }
 
-.ch-c2pa__grid span {
+.ch-c2pa__card span {
   margin-bottom: 5px;
   color: #667085;
   font-size: 12px;
 }
 
-.ch-c2pa__grid strong {
+.ch-c2pa__card strong {
   overflow-wrap: anywhere;
   font-size: 15px;
+}
+
+.ch-c2pa__card small {
+  margin-top: 6px;
+  color: #596273;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .ch-c2pa__meta {
@@ -126,5 +154,9 @@
   .ch-c2pa__header {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ch-c2pa__grid {
+    grid-template-columns: 1fr;
   }
 }

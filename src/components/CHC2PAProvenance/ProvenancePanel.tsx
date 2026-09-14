@@ -22,6 +22,16 @@ function historyCount(summary: Record<string, unknown> | null): number {
   return Array.isArray(history) ? history.length : 0;
 }
 
+function provenanceFound(summary: Record<string, unknown> | null): boolean {
+  const latest = summary?.latest;
+  return Boolean(
+    latest &&
+      typeof latest === 'object' &&
+      !Array.isArray(latest) &&
+      (latest as Record<string, unknown>).provenanceFound === true
+  );
+}
+
 export default function ProvenancePanel({ client, entity, options }: Props) {
   const id = useMemo(() => assetId(entity), [entity]);
   const configured = useMemo<C2PAProvenanceOptions | null>(() => {
@@ -38,6 +48,7 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const hasManifest = provenanceFound(view.summary);
 
   const refresh = useCallback(async () => {
     if (!id) return;
@@ -100,21 +111,51 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
       {notice && <p className="ch-c2pa__message ch-c2pa__message--success">{notice}</p>}
 
       <div className="ch-c2pa__grid">
-        <article>
+        <article
+          className={
+            view.provenanceVerified
+              ? 'ch-c2pa__card ch-c2pa__card--positive'
+              : hasManifest
+                ? 'ch-c2pa__card ch-c2pa__card--negative'
+                : 'ch-c2pa__card ch-c2pa__card--neutral'
+          }
+        >
           <span>Verified manifest</span>
           <strong>{view.provenanceVerified ? 'Yes' : 'No'}</strong>
+          <small>
+            {view.provenanceVerified
+              ? 'C2PA credentials were found and passed validation.'
+              : hasManifest
+                ? 'C2PA credentials were found but did not pass validation.'
+                : 'No valid C2PA credentials were detected.'}
+          </small>
         </article>
-        <article>
+        <article className={`ch-c2pa__card ${view.aiGenerated ? 'ch-c2pa__card--ai' : 'ch-c2pa__card--neutral'}`}>
           <span>AI generated</span>
           <strong>{view.aiGenerated ? 'Yes' : 'No'}</strong>
+          <small>
+            {view.aiGenerated
+              ? 'The manifest declares fully synthetic media.'
+              : 'The manifest does not declare fully synthetic media.'}
+          </small>
         </article>
-        <article>
+        <article className={`ch-c2pa__card ${view.aiEdited ? 'ch-c2pa__card--ai' : 'ch-c2pa__card--neutral'}`}>
           <span>AI edited</span>
           <strong>{view.aiEdited ? 'Yes' : 'No'}</strong>
+          <small>
+            {view.aiEdited
+              ? 'The manifest declares AI-assisted editing.'
+              : 'The manifest does not declare AI-assisted editing.'}
+          </small>
         </article>
-        <article>
+        <article className={`ch-c2pa__card ${view.sourceTool ? 'ch-c2pa__card--positive' : 'ch-c2pa__card--neutral'}`}>
           <span>Source tool</span>
           <strong>{view.sourceTool ?? 'Not declared'}</strong>
+          <small>
+            {view.sourceTool
+              ? 'Claim generator recorded in the C2PA manifest.'
+              : 'No source application was declared by a valid manifest.'}
+          </small>
         </article>
       </div>
 

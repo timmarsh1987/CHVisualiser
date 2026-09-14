@@ -66,4 +66,15 @@ describe('mapManifestStore', () => {
     expect(result.provenanceVerified).toBe(false);
     expect(result.aiGenerated).toBe(true);
   });
+
+  it('reads source tool from C2PA claim generator info', () => {
+    const manifestStore = store([]);
+    if (manifestStore.active_manifest) {
+      manifestStore.active_manifest.claim_generator = undefined;
+      manifestStore.active_manifest.claim_generator_info = [
+        { name: 'Adobe Firefly', version: '2.1' },
+      ];
+    }
+    expect(mapManifestStore(manifestStore).sourceTool).toBe('Adobe Firefly/2.1');
+  });
 });

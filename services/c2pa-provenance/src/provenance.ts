@@ -43,6 +43,22 @@ function sourceTypesFromManifest(manifest: Record<string, unknown>): string[] {
   return [...sourceTypes];
 }
 
+function sourceToolFromManifest(manifest: Record<string, unknown>): string | null {
+  const direct = manifest.claim_generator ?? manifest.claimGenerator;
+  if (typeof direct === 'string' && direct.trim()) return direct.trim();
+
+  const rawInfo = manifest.claim_generator_info ?? manifest.claimGeneratorInfo;
+  const entries = Array.isArray(rawInfo) ? rawInfo : rawInfo ? [rawInfo] : [];
+  for (const value of entries) {
+    if (!value || typeof value !== 'object') continue;
+    const info = value as Record<string, unknown>;
+    const name = typeof info.name === 'string' ? info.name.trim() : '';
+    const version = typeof info.version === 'string' ? info.version.trim() : '';
+    if (name) return version ? `${name}/${version}` : name;
+  }
+  return null;
+}
+
 export function mapManifestStore(store: ResolvedManifestStore | null): ProvenanceResult {
   const manifest = store?.active_manifest;
   if (!manifest) {
@@ -57,7 +73,8 @@ export function mapManifestStore(store: ResolvedManifestStore | null): Provenanc
     };
   }
 
-  const sourceTypes = sourceTypesFromManifest(manifest as Record<string, unknown>);
+  const manifestRecord = manifest as Record<string, unknown>;
+  const sourceTypes = sourceTypesFromManifest(manifestRecord);
   const validationErrors = [
     ...(store.validation_status ?? []),
     ...(manifest.validation_status ?? []),
@@ -67,10 +84,7 @@ export function mapManifestStore(store: ResolvedManifestStore | null): Provenanc
     provenanceVerified: validationErrors.length === 0,
     aiGenerated: sourceTypes.some((value) => AI_GENERATED_TYPES.has(value)),
     aiEdited: sourceTypes.some((value) => AI_EDITED_TYPES.has(value)),
-    sourceTool:
-      typeof manifest.claim_generator === 'string' && manifest.claim_generator.trim()
-        ? manifest.claim_generator.trim()
-        : null,
+    sourceTool: sourceToolFromManifest(manifestRecord),
     digitalSourceTypes: sourceTypes,
     rawManifest: store,
     validationErrors,
