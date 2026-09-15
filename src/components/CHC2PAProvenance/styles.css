@@ -176,6 +176,11 @@
   background: rgb(127 29 29 / 40%);
 }
 
+.ch-c2pa__trust--none {
+  color: #d0d5dd;
+  background: rgb(152 162 179 / 16%);
+}
+
 .ch-c2pa__credential-facts {
   margin: 0;
 }

@@ -238,11 +238,21 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
         <article className={`ch-c2pa__credentials ${ingredients.length > 0 ? 'ch-c2pa__node--connected-above' : ''}`}>
           <div
             className={`ch-c2pa__trust ${
-              view.provenanceVerified ? 'ch-c2pa__trust--verified' : 'ch-c2pa__trust--invalid'
+              view.provenanceVerified
+                ? 'ch-c2pa__trust--verified'
+                : hasManifest
+                  ? 'ch-c2pa__trust--invalid'
+                  : 'ch-c2pa__trust--none'
             }`}
           >
-            <span aria-hidden="true">{view.provenanceVerified ? '✓' : '!'}</span>
-            {view.provenanceVerified ? 'Verified credentials' : 'Validation failed'}
+            <span aria-hidden="true">
+              {view.provenanceVerified ? '✓' : hasManifest ? '!' : '–'}
+            </span>
+            {view.provenanceVerified
+              ? 'Verified credentials'
+              : hasManifest
+                ? 'Credentials found, validation failed'
+                : 'No credentials found'}
           </div>
 
           <dl className="ch-c2pa__credential-facts">
