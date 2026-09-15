@@ -43,9 +43,7 @@ function manifestFromSummary(
     : null;
 }
 
-function signerFromManifest(
-  manifest: Record<string, unknown> | null
-): string {
+function signerFromManifest(manifest: Record<string, unknown> | null): string {
   const signature = manifest?.signatureInfo;
   if (signature && typeof signature === 'object' && !Array.isArray(signature)) {
     const issuer = (signature as Record<string, unknown>).issuer;
@@ -129,6 +127,12 @@ function manifestDate(
   return timestamp(typeof raw === 'string' ? raw : fallback);
 }
 
+function verifiedCopy(verified: boolean, hasManifest: boolean): string {
+  if (verified) return 'Yes — credentials were found and passed validation.';
+  if (hasManifest) return 'No — credentials were found but did not pass validation.';
+  return 'No — no valid C2PA credentials were detected.';
+}
+
 export default function ProvenancePanel({ client, entity, options }: Props) {
   const id = useMemo(() => assetId(entity), [entity]);
   const configured = useMemo<C2PAProvenanceOptions | null>(() => {
@@ -150,6 +154,7 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
   const signer = signerFromManifest(manifest);
   const actions = actionsFromManifest(manifest);
   const ingredients = ingredientsFromManifest(manifest);
+  const assetTitle = typeof manifest?.title === 'string' ? manifest.title : `Asset ${id ?? ''}`;
 
   const refresh = useCallback(async () => {
     if (!id) return;
@@ -189,9 +194,12 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
   return (
     <section className="ch-c2pa">
       <header className="ch-c2pa__header">
-        <div>
-          <p className="ch-c2pa__eyebrow">Content authenticity</p>
-          <h2>C2PA provenance</h2>
+        <div className="ch-c2pa__brand">
+          <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
+          <div>
+            <h2>Content Credentials</h2>
+            <p className="ch-c2pa__eyebrow">{assetTitle}</p>
+          </div>
         </div>
         <button
           type="button"
@@ -211,122 +219,91 @@ export default function ProvenancePanel({ client, entity, options }: Props) {
       {error && <p className="ch-c2pa__message ch-c2pa__message--error">{error}</p>}
       {notice && <p className="ch-c2pa__message ch-c2pa__message--success">{notice}</p>}
 
-      <div className="ch-c2pa__grid">
-        <article
-          className={
-            view.provenanceVerified
-              ? 'ch-c2pa__card ch-c2pa__card--positive'
-              : hasManifest
-                ? 'ch-c2pa__card ch-c2pa__card--negative'
-                : 'ch-c2pa__card ch-c2pa__card--neutral'
-          }
-        >
-          <span>Verified manifest</span>
-          <strong>{view.provenanceVerified ? 'Yes' : 'No'}</strong>
-          <small>
-            {view.provenanceVerified
-              ? 'C2PA credentials were found and passed validation.'
-              : hasManifest
-                ? 'C2PA credentials were found but did not pass validation.'
-                : 'No valid C2PA credentials were detected.'}
-          </small>
+      <section className="ch-c2pa__provenance-graph" aria-label="Content provenance">
+        {ingredients.length > 0 && (
+          <div className="ch-c2pa__ingredients">
+            {ingredients.map((ingredient, index) => (
+              <article
+                className="ch-c2pa__ingredient"
+                key={`${ingredient.title}-${ingredient.relationship}-${index}`}
+              >
+                <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
+                <strong>{ingredient.title}</strong>
+                <small>{ingredient.relationship}{ingredient.format ? ` · ${ingredient.format}` : ''}</small>
+              </article>
+            ))}
+          </div>
+        )}
+
+        <article className={`ch-c2pa__credentials ${ingredients.length > 0 ? 'ch-c2pa__node--connected-above' : ''}`}>
+          <div
+            className={`ch-c2pa__trust ${
+              view.provenanceVerified ? 'ch-c2pa__trust--verified' : 'ch-c2pa__trust--invalid'
+            }`}
+          >
+            <span aria-hidden="true">{view.provenanceVerified ? '✓' : '!'}</span>
+            {view.provenanceVerified ? 'Verified credentials' : 'Validation failed'}
+          </div>
+
+          <dl className="ch-c2pa__credential-facts">
+            <div>
+              <dt>Verified manifest</dt>
+              <dd>{verifiedCopy(view.provenanceVerified, hasManifest)}</dd>
+            </div>
+            <div>
+              <dt>AI generated</dt>
+              <dd>
+                {view.aiGenerated
+                  ? 'Yes — the manifest declares fully synthetic media.'
+                  : 'No — the manifest does not declare fully synthetic media.'}
+              </dd>
+            </div>
+            <div>
+              <dt>AI edited</dt>
+              <dd>
+                {view.aiEdited
+                  ? 'Yes — the manifest declares AI-assisted editing.'
+                  : 'No — the manifest does not declare AI-assisted editing.'}
+              </dd>
+            </div>
+            <div>
+              <dt>Source tool</dt>
+              <dd>
+                {view.sourceTool
+                  ? view.sourceTool
+                  : 'Not declared by a valid manifest.'}
+              </dd>
+            </div>
+            <div>
+              <dt>Date</dt>
+              <dd>{manifestDate(manifest, view.checkedAt)}</dd>
+            </div>
+            <div>
+              <dt>Edits and activity</dt>
+              <dd>{actions.length > 0 ? actions.join(', ') : 'No actions declared'}</dd>
+            </div>
+            <div>
+              <dt>Signed by</dt>
+              <dd>{signer}</dd>
+            </div>
+          </dl>
         </article>
-        <article className={`ch-c2pa__card ${view.aiGenerated ? 'ch-c2pa__card--ai' : 'ch-c2pa__card--neutral'}`}>
-          <span>AI generated</span>
-          <strong>{view.aiGenerated ? 'Yes' : 'No'}</strong>
-          <small>
-            {view.aiGenerated
-              ? 'The manifest declares fully synthetic media.'
-              : 'The manifest does not declare fully synthetic media.'}
-          </small>
+
+        <article className="ch-c2pa__current-asset ch-c2pa__node--connected-above">
+          {view.previewUrl ? (
+            <img src={view.previewUrl} alt="" />
+          ) : (
+            <div className="ch-c2pa__asset-placeholder">Current asset</div>
+          )}
+          <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
+          <strong>{assetTitle}</strong>
         </article>
-        <article className={`ch-c2pa__card ${view.aiEdited ? 'ch-c2pa__card--ai' : 'ch-c2pa__card--neutral'}`}>
-          <span>AI edited</span>
-          <strong>{view.aiEdited ? 'Yes' : 'No'}</strong>
-          <small>
-            {view.aiEdited
-              ? 'The manifest declares AI-assisted editing.'
-              : 'The manifest does not declare AI-assisted editing.'}
-          </small>
-        </article>
-        <article className={`ch-c2pa__card ${view.sourceTool ? 'ch-c2pa__card--positive' : 'ch-c2pa__card--neutral'}`}>
-          <span>Source tool</span>
-          <strong>{view.sourceTool ?? 'Not declared'}</strong>
-          <small>
-            {view.sourceTool
-              ? 'Claim generator recorded in the C2PA manifest.'
-              : 'No source application was declared by a valid manifest.'}
-          </small>
-        </article>
-      </div>
+      </section>
 
       <div className="ch-c2pa__meta">
         <span>Last checked: {timestamp(view.checkedAt)}</span>
         <span>Stored checks: {historyCount(view.summary)}</span>
       </div>
-
-      {(hasManifest || view.provenanceVerified) && (
-        <section className="ch-c2pa__provenance-graph" aria-label="Content provenance">
-          {ingredients.length > 0 && (
-            <div className="ch-c2pa__ingredients">
-              {ingredients.map((ingredient, index) => (
-                <article
-                  className="ch-c2pa__ingredient"
-                  key={`${ingredient.title}-${ingredient.relationship}-${index}`}
-                >
-                  <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
-                  <strong>{ingredient.title}</strong>
-                  <small>{ingredient.relationship}{ingredient.format ? ` · ${ingredient.format}` : ''}</small>
-                </article>
-              ))}
-            </div>
-          )}
-
-          <article className={`ch-c2pa__credentials ${ingredients.length > 0 ? 'ch-c2pa__node--connected-above' : ''}`}>
-            <header className="ch-c2pa__credentials-header">
-              <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
-              <div>
-                <strong>Content Credentials</strong>
-                <small>{typeof manifest?.title === 'string' ? manifest.title : `Asset ${id}`}</small>
-              </div>
-            </header>
-
-            <div
-              className={`ch-c2pa__trust ${
-                view.provenanceVerified ? 'ch-c2pa__trust--verified' : 'ch-c2pa__trust--invalid'
-              }`}
-            >
-              <span aria-hidden="true">{view.provenanceVerified ? '✓' : '!'}</span>
-              {view.provenanceVerified ? 'Verified credentials' : 'Validation failed'}
-            </div>
-
-            <dl className="ch-c2pa__credential-facts">
-              <div>
-                <dt>Date</dt>
-                <dd>{manifestDate(manifest, view.checkedAt)}</dd>
-              </div>
-              <div>
-                <dt>Edits and activity</dt>
-                <dd>{actions.length > 0 ? actions.join(', ') : 'No actions declared'}</dd>
-              </div>
-              <div>
-                <dt>Signed by</dt>
-                <dd>{signer}</dd>
-              </div>
-            </dl>
-          </article>
-
-          <article className="ch-c2pa__current-asset ch-c2pa__node--connected-above">
-            {view.previewUrl ? (
-              <img src={view.previewUrl} alt="" />
-            ) : (
-              <div className="ch-c2pa__asset-placeholder">Current asset</div>
-            )}
-            <span className="ch-c2pa__credentials-mark" aria-hidden="true">cr</span>
-            <strong>{typeof manifest?.title === 'string' ? manifest.title : `Asset ${id}`}</strong>
-          </article>
-        </section>
-      )}
 
       {view.summary && (
         <details className="ch-c2pa__details">
