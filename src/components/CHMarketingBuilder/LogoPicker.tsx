@@ -1,5 +1,5 @@
 import React from 'react';
-import { CYTIVA_LOGO_OPTIONS, resolveLogoAssetUrl } from './brandAssets';
+import { BRAND_LOGO_OPTIONS, resolveLogoAssetUrl } from './brandAssets';
 
 interface LogoPickerProps {
   zoneKey: string;
@@ -13,7 +13,7 @@ export default function LogoPicker({ zoneKey, selectedUrl, onChange, compact = f
 
   return (
     <div className={`logo-picker${compact ? ' logo-picker-compact' : ''}`} role="radiogroup" aria-label="Choose logo">
-      {CYTIVA_LOGO_OPTIONS.map((option) => {
+      {BRAND_LOGO_OPTIONS.map((option) => {
         const isSelected = activeUrl === option.url;
 
         return (

@@ -15,7 +15,7 @@ export const SAVE_ACTIVE_MESSAGES = [
   'Adding just enough whitespace to look intentional…',
   'Making sure the CTA button feels confident…',
   'Aligning everything left (unless you said otherwise)…',
-  'Checking brand guidelines — Cytiva green: approved…',
+  'Checking brand guidelines — SOK green: approved…',
   'Saving your masterpiece one property at a time…',
   'Linking relations without tangling the graph…',
   'Duplicating templates across dimensions (the fun kind)…',

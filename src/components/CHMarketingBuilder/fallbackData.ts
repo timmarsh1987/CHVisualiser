@@ -1,4 +1,4 @@
-import { createCytivaBrandKit } from './brandAssets';
+import { createSokBrandKit } from './brandAssets';
 import { logFallback as emitFallback } from './debugLog';
 import { renderEmailHtml } from './renderEmailHtml';
 import type { BrandKit, ChannelType, MarketingAsset, Template, ZoneValue } from './types';
@@ -13,7 +13,7 @@ export function isDummyId(id?: string | null): boolean {
 }
 
 export function createDummyBrandKit(brandKitId = DUMMY_BRAND_KIT_ID): BrandKit {
-  return createCytivaBrandKit(brandKitId);
+  return createSokBrandKit(brandKitId);
 }
 
 export function createDummyTemplate(templateId: string, channelType: ChannelType = 'Social'): Template {

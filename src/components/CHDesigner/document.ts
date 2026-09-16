@@ -1,3 +1,4 @@
+import { SOK_LOGO_URL, SOK_THEME } from './brand';
 import type { DesignerDocument, Layer, LayerType } from './types';
 
 let layerSeq = 1;
@@ -36,7 +37,7 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         width: 160,
         height: 100,
         visible: true,
-        fill: '#3d5a80',
+        fill: SOK_THEME.primary,
         locked: false,
         allowTransform: false,
         editableContent: false,
@@ -82,19 +83,22 @@ export function createSeedDocument(): DesignerDocument {
   frame.name = 'Artboard';
   frame.width = 480;
   frame.height = 360;
-  frame.fill = '#f7f6f3';
+  frame.fill = SOK_THEME.secondary;
 
-  const rect = defaultLayerForType('rect', { x: 100, y: 120 });
-  rect.fill = '#2c2c2a';
-  rect.width = 140;
-  rect.height = 90;
+  const logo = defaultLayerForType('image', { x: 120, y: 130 });
+  logo.name = 'SOK logo';
+  logo.width = 240;
+  logo.height = 80;
+  logo.src = SOK_LOGO_URL;
+  logo.fill = SOK_THEME.secondary;
+  logo.locked = true;
 
-  const text = defaultLayerForType('text', { x: 100, y: 240 });
-  text.text = 'CHDesigner';
-  text.fontSize = 28;
-  text.color = '#2c2c2a';
-  text.width = 280;
-  text.height = 40;
+  const text = defaultLayerForType('text', { x: 120, y: 230 });
+  text.text = 'S Group';
+  text.fontSize = 22;
+  text.color = SOK_THEME.primary;
+  text.width = 240;
+  text.height = 36;
   text.editableContent = true;
 
   return {
@@ -102,9 +106,9 @@ export function createSeedDocument(): DesignerDocument {
     canvas: {
       width: 960,
       height: 640,
-      background: '#eceae4',
+      background: SOK_THEME.background,
     },
-    layers: [frame, rect, text],
+    layers: [frame, logo, text],
   };
 }
 

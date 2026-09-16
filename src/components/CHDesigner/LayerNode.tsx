@@ -53,7 +53,12 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
       break;
     case 'image':
       body = layer.src ? (
-        <img className="chd-layer-image" src={layer.src} alt={layer.name} draggable={false} />
+        <img
+          className={`chd-layer-image${/logo/i.test(layer.name) ? ' chd-layer-image--contain' : ''}`}
+          src={layer.src}
+          alt={layer.name}
+          draggable={false}
+        />
       ) : (
         <div className="chd-layer-image-placeholder" style={{ background: layer.fill || '#e8e6e1' }}>
           Image

@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import { SOK_LOGO_URL } from './brand';
 import { useDesignerAction, useDesignerApi, useSelection, useViewport } from './store';
 import type { LayerType } from './types';
 
@@ -40,7 +41,9 @@ export default function Toolbar() {
   return (
     <header className="chd-toolbar">
       <div className="chd-toolbar-brand">
-        CHDesigner
+        <span className="chd-toolbar-logo-wrap">
+          <img src={SOK_LOGO_URL} alt="SOK" className="chd-toolbar-logo" />
+        </span>
         <span className="chd-toolbar-mode">{isAdmin ? 'Admin' : 'Edit'}</span>
       </div>
 

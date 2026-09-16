@@ -1,5 +1,5 @@
 import { zoneValueKeyForZone } from './assetLayout';
-import { DEFAULT_CYTIVA_LOGO_URL } from './brandAssets';
+import { DEFAULT_SOK_LOGO_URL } from './brandAssets';
 import { isLogoZone } from './zoneHelpers';
 import type { Template, ZoneValue } from './types';
 
@@ -12,7 +12,7 @@ export function buildPreviewZoneValues(template: Template): Record<string, ZoneV
     const entry: ZoneValue = { zoneKey };
 
     if (isLogoZone(zone)) {
-      entry.imageAssetUrl = DEFAULT_CYTIVA_LOGO_URL;
+      entry.imageAssetUrl = DEFAULT_SOK_LOGO_URL;
       values[zone.id] = entry;
       continue;
     }

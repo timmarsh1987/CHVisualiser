@@ -1,11 +1,11 @@
 .chd-root {
-  --chd-bg: #f8f7f4;
+  --chd-bg: #f4f7f5;
   --chd-panel: #ffffff;
-  --chd-border: #d3d1c7;
-  --chd-text: #2c2c2a;
-  --chd-muted: #888780;
-  --chd-accent: #1d4e89;
-  --chd-selected: #3b82f6;
+  --chd-border: #e2e8e4;
+  --chd-text: #000000;
+  --chd-muted: #6b716e;
+  --chd-accent: #00a651;
+  --chd-selected: #00a651;
 
   display: flex;
   flex-direction: column;
@@ -45,6 +45,23 @@
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.chd-toolbar-logo-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.chd-toolbar-logo {
+  display: block;
+  height: 18px;
+  width: auto;
+  max-width: 88px;
+  object-fit: contain;
 }
 
 .chd-toolbar-mode {
@@ -335,6 +352,10 @@
   object-fit: cover;
   display: block;
   pointer-events: none;
+}
+
+.chd-layer-image--contain {
+  object-fit: contain;
 }
 
 .chd-layer-image-placeholder {

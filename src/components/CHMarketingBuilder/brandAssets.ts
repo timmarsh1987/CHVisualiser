@@ -1,82 +1,95 @@
 import type { BrandColor, BrandFont, BrandKit } from './types';
-import cytivaLogoDarkBgUrl from './CytivaLogoDarkBg.svg';
 
 /**
- * Demo Cytiva brand defaults until brand kit assets are configured in Content Hub.
- * Colors and typography sourced from cytivalifesciences.com shared styles.
- * @see https://www.cytivalifesciences.com/en/us/legal/trademarks
+ * Demo SOK / S Group brand defaults until brand kit assets are configured in Content Hub.
+ * @see https://s-ryhma.fi/en
  */
-export interface CytivaLogoOption {
+export interface BrandLogoOption {
   id: string;
   label: string;
   url: string;
   previewBackground: string;
 }
 
-/** Legacy CDN URL — standard logo (dark wordmark), not a white-on-dark variant. */
+export const SOK_LOGO_URL = 'https://ws.overcasthq.com/wp-content/uploads/2025/05/sok_logo.png';
+
+/** Legacy Cytiva URLs — mapped to the SOK logo so older zone values still render. */
 export const LEGACY_CYTIVA_DARK_LOGO_URL =
   'https://cdn.cytivalifesciences.com/api/public/content/7059157tab6843?v=9bba7f58';
+export const LEGACY_CYTIVA_COLOR_LOGO_URL =
+  'https://upload.wikimedia.org/wikipedia/commons/3/35/Cytiva_Logo.png';
 
-export const CYTIVA_LOGO_OPTIONS: CytivaLogoOption[] = [
+export const BRAND_LOGO_OPTIONS: BrandLogoOption[] = [
   {
     id: 'color',
     label: 'Full color',
-    url: 'https://upload.wikimedia.org/wikipedia/commons/3/35/Cytiva_Logo.png',
+    url: SOK_LOGO_URL,
     previewBackground: '#f7f7f7',
   },
   {
     id: 'dark',
     label: 'Dark background',
-    url: cytivaLogoDarkBgUrl,
-    previewBackground: '#18181b',
+    url: `${SOK_LOGO_URL}#dark`,
+    previewBackground: '#000000',
   },
 ];
 
-export const DEFAULT_CYTIVA_LOGO_URL = CYTIVA_LOGO_OPTIONS[0].url;
+export const DEFAULT_SOK_LOGO_URL = SOK_LOGO_URL;
 
-/** @deprecated Use DEFAULT_CYTIVA_LOGO_URL */
-export const CYTIVA_LOGO_URL = DEFAULT_CYTIVA_LOGO_URL;
+/** @deprecated Use DEFAULT_SOK_LOGO_URL */
+export const DEFAULT_CYTIVA_LOGO_URL = DEFAULT_SOK_LOGO_URL;
+/** @deprecated Use BRAND_LOGO_OPTIONS */
+export const CYTIVA_LOGO_OPTIONS = BRAND_LOGO_OPTIONS;
+/** @deprecated Use DEFAULT_SOK_LOGO_URL */
+export const CYTIVA_LOGO_URL = DEFAULT_SOK_LOGO_URL;
 
-export const CYTIVA_FONT_STACK = "'Cytiva Aktiv', Arial, Helvetica, sans-serif";
+export const SOK_FONT_STACK = 'Arial, Helvetica, sans-serif';
+/** @deprecated Use SOK_FONT_STACK */
+export const CYTIVA_FONT_STACK = SOK_FONT_STACK;
 
-export const CYTIVA_THEME = {
-  primary: '#00755f',
-  primaryHover: '#33a08c',
-  primaryActive: '#00614f',
-  secondary: '#18181b',
-  accent: '#ff5900',
-  background: '#f2f9f8',
+export const SOK_THEME = {
+  primary: '#00a651',
+  primaryHover: '#1db86a',
+  primaryActive: '#008a44',
+  secondary: '#000000',
+  accent: '#00a651',
+  background: '#f4f7f5',
   surface: '#ffffff',
-  border: '#e8e8e8',
-  muted: '#717171',
-  primarySoft: '#e4f7f4',
-  primaryBorder: '#99cfc5',
+  border: '#e2e8e4',
+  muted: '#6b716e',
+  primarySoft: '#e6f7ed',
+  primaryBorder: '#8fd4a8',
 } as const;
 
-export const CYTIVA_COLORS: BrandColor[] = [
-  { colorName: 'Primary', hexValue: CYTIVA_THEME.primary, colorUsageType: 'Primary' },
-  { colorName: 'Secondary', hexValue: CYTIVA_THEME.secondary, colorUsageType: 'Secondary' },
-  { colorName: 'Accent', hexValue: CYTIVA_THEME.accent, colorUsageType: 'Accent' },
-  { colorName: 'Background', hexValue: CYTIVA_THEME.background, colorUsageType: 'Background' },
+/** @deprecated Use SOK_THEME */
+export const CYTIVA_THEME = SOK_THEME;
+
+export const SOK_COLORS: BrandColor[] = [
+  { colorName: 'Primary', hexValue: SOK_THEME.primary, colorUsageType: 'Primary' },
+  { colorName: 'Secondary', hexValue: SOK_THEME.secondary, colorUsageType: 'Secondary' },
+  { colorName: 'Accent', hexValue: SOK_THEME.accent, colorUsageType: 'Accent' },
+  { colorName: 'Background', hexValue: SOK_THEME.background, colorUsageType: 'Background' },
 ];
 
-export const CYTIVA_FONTS: BrandFont[] = [
-  { fontFamily: CYTIVA_FONT_STACK, fontWeight: 'Bold', fontUsageType: 'Heading' },
-  { fontFamily: CYTIVA_FONT_STACK, fontWeight: 'Regular', fontUsageType: 'Body' },
-  { fontFamily: CYTIVA_FONT_STACK, fontWeight: 'Medium', fontUsageType: 'CTA' },
+export const SOK_FONTS: BrandFont[] = [
+  { fontFamily: SOK_FONT_STACK, fontWeight: 'Bold', fontUsageType: 'Heading' },
+  { fontFamily: SOK_FONT_STACK, fontWeight: 'Regular', fontUsageType: 'Body' },
+  { fontFamily: SOK_FONT_STACK, fontWeight: 'Medium', fontUsageType: 'CTA' },
 ];
 
 export function resolveLogoAssetUrl(logoAssetUrl?: string): string {
   const trimmed = logoAssetUrl?.trim();
-  if (!trimmed) return DEFAULT_CYTIVA_LOGO_URL;
+  if (!trimmed) return DEFAULT_SOK_LOGO_URL;
 
-  if (trimmed === LEGACY_CYTIVA_DARK_LOGO_URL) {
-    return CYTIVA_LOGO_OPTIONS.find((option) => option.id === 'dark')?.url ?? trimmed;
+  if (
+    trimmed === LEGACY_CYTIVA_DARK_LOGO_URL ||
+    trimmed === LEGACY_CYTIVA_COLOR_LOGO_URL ||
+    /cytiva/i.test(trimmed)
+  ) {
+    return DEFAULT_SOK_LOGO_URL;
   }
 
-  const known = CYTIVA_LOGO_OPTIONS.find(
-    (option) => option.url === trimmed || option.id === trimmed
-  );
+  const known = BRAND_LOGO_OPTIONS.find((option) => option.url === trimmed || option.id === trimmed);
   if (known) return known.url;
 
   return trimmed;
@@ -84,28 +97,31 @@ export function resolveLogoAssetUrl(logoAssetUrl?: string): string {
 
 export function getLogoPreviewBackground(logoAssetUrl?: string): string | undefined {
   const resolved = resolveLogoAssetUrl(logoAssetUrl);
-  return CYTIVA_LOGO_OPTIONS.find((option) => option.url === resolved)?.previewBackground;
+  return BRAND_LOGO_OPTIONS.find((option) => option.url === resolved)?.previewBackground;
 }
 
 export function withResolvedBrandKit(brandKit: BrandKit): BrandKit {
   return {
     ...brandKit,
-    brandKitName: brandKit.brandKitName?.trim() || 'Cytiva',
+    brandKitName: brandKit.brandKitName?.trim() || 'SOK',
     logoAssetUrl: resolveLogoAssetUrl(brandKit.logoAssetUrl),
-    colors: CYTIVA_COLORS,
-    fonts: CYTIVA_FONTS,
+    colors: SOK_COLORS,
+    fonts: SOK_FONTS,
   };
 }
 
 /** @deprecated Use withResolvedBrandKit */
 export const withResolvedLogo = withResolvedBrandKit;
 
-export function createCytivaBrandKit(brandKitId: string): BrandKit {
+export function createSokBrandKit(brandKitId: string): BrandKit {
   return withResolvedBrandKit({
     id: brandKitId,
-    brandKitName: 'Cytiva',
-    logoAssetUrl: DEFAULT_CYTIVA_LOGO_URL,
-    colors: CYTIVA_COLORS,
-    fonts: CYTIVA_FONTS,
+    brandKitName: 'SOK',
+    logoAssetUrl: DEFAULT_SOK_LOGO_URL,
+    colors: SOK_COLORS,
+    fonts: SOK_FONTS,
   });
 }
+
+/** @deprecated Use createSokBrandKit */
+export const createCytivaBrandKit = createSokBrandKit;

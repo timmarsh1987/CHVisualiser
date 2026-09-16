@@ -1,4 +1,4 @@
-import { CYTIVA_FONT_STACK, CYTIVA_THEME, getLogoPreviewBackground, resolveLogoAssetUrl } from './brandAssets';
+import { SOK_FONT_STACK, SOK_THEME, getLogoPreviewBackground, resolveLogoAssetUrl } from './brandAssets';
 import { resolveTemplateCanvasWidth } from './templateDimensions';
 import { sanitizeZoneHtml } from './sanitizeHtml';
 import { DEFAULT_HEADING_LEVEL, EMAIL_HEADING_FONT_SIZES } from './headingLevel';
@@ -55,10 +55,10 @@ function renderZoneRow(zone: TemplateZone, value: ZoneValue | undefined, brandKi
       const text = value?.textValue?.trim();
       if (!text) return '';
       const headline = isHeadlineZone(zone);
-      const fontFamily = fontFor(brandKit, headline ? 'Heading' : 'Body', CYTIVA_FONT_STACK);
+      const fontFamily = fontFor(brandKit, headline ? 'Heading' : 'Body', SOK_FONT_STACK);
       const fontSize = headline ? '28px' : '16px';
       const fontWeight = headline ? 'bold' : 'normal';
-      const color = colorFor(brandKit, 'Secondary', CYTIVA_THEME.secondary);
+      const color = colorFor(brandKit, 'Secondary', SOK_THEME.secondary);
       return `<tr>
         <td align="${cellAlign}" style="${cellStyle}font-family:${fontFamily};font-size:${fontSize};font-weight:${fontWeight};color:${color};line-height:1.5;">
           ${escapeHtml(text)}
@@ -70,9 +70,9 @@ function renderZoneRow(zone: TemplateZone, value: ZoneValue | undefined, brandKi
       const text = value?.textValue?.trim();
       if (!text) return '';
       const level = zone.headingLevel ?? DEFAULT_HEADING_LEVEL;
-      const fontFamily = fontFor(brandKit, 'Heading', CYTIVA_FONT_STACK);
+      const fontFamily = fontFor(brandKit, 'Heading', SOK_FONT_STACK);
       const fontSize = EMAIL_HEADING_FONT_SIZES[level];
-      const color = colorFor(brandKit, 'Secondary', CYTIVA_THEME.secondary);
+      const color = colorFor(brandKit, 'Secondary', SOK_THEME.secondary);
       const tag = level.toLowerCase();
       return `<tr>
         <td align="${cellAlign}" style="${cellStyle}">
@@ -98,8 +98,8 @@ function renderZoneRow(zone: TemplateZone, value: ZoneValue | undefined, brandKi
       const text = value?.textValue?.trim();
       if (!text) return '';
       const href = value?.linkUrl?.trim() || '#';
-      const background = colorFor(brandKit, 'Accent', CYTIVA_THEME.accent);
-      const fontFamily = fontFor(brandKit, 'CTA', CYTIVA_FONT_STACK);
+      const background = colorFor(brandKit, 'Accent', SOK_THEME.accent);
+      const fontFamily = fontFor(brandKit, 'CTA', SOK_FONT_STACK);
       return `<tr>
         <td align="${cellAlign}" style="${getEmailZoneCellStyle(zone, 'padding-bottom:32px;')}">
           <a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer" style="${getEmailButtonWrapperStyle()}background-color:${background};color:#ffffff;font-family:${fontFamily};font-size:16px;font-weight:600;text-decoration:none;padding:12px 28px;border-radius:4px;">
@@ -134,7 +134,7 @@ export function renderEmailHtml(
   zoneValues: Record<string, ZoneValue>,
   brandKit: BrandKit
 ): string {
-  const outerBackground = colorFor(brandKit, 'Background', CYTIVA_THEME.background);
+  const outerBackground = colorFor(brandKit, 'Background', SOK_THEME.background);
   const cardBackground = '#ffffff';
   const contentWidth = resolveTemplateCanvasWidth(template);
   const rows = template.zones

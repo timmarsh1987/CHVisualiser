@@ -1,52 +1,16 @@
-@font-face {
-  font-display: swap;
-  font-family: 'Cytiva Aktiv';
-  font-style: normal;
-  font-weight: 400;
-  src:
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_rg.woff2')
-      format('woff2'),
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_rg.woff')
-      format('woff');
-}
-
-@font-face {
-  font-display: swap;
-  font-family: 'Cytiva Aktiv';
-  font-style: normal;
-  font-weight: 500;
-  src:
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_md.woff2')
-      format('woff2'),
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_md.woff')
-      format('woff');
-}
-
-@font-face {
-  font-display: swap;
-  font-family: 'Cytiva Aktiv';
-  font-style: normal;
-  font-weight: 700;
-  src:
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_bd.woff2')
-      format('woff2'),
-    url('https://www.cytivalifesciences.com/shared/fonts/cytiva-aktiv/cytiva-aktiv_int_bd.woff')
-      format('woff');
-}
-
 .marketing-builder {
-  --mb-primary: #00755f;
-  --mb-primary-hover: #33a08c;
-  --mb-primary-active: #00614f;
-  --mb-primary-soft: #e4f7f4;
-  --mb-primary-border: #99cfc5;
-  --mb-accent: #ff5900;
-  --mb-text: #18181b;
-  --mb-muted: #717171;
-  --mb-background: #f2f9f8;
+  --mb-primary: #00a651;
+  --mb-primary-hover: #1db86a;
+  --mb-primary-active: #008a44;
+  --mb-primary-soft: #e6f7ed;
+  --mb-primary-border: #8fd4a8;
+  --mb-accent: #00a651;
+  --mb-text: #000000;
+  --mb-muted: #6b716e;
+  --mb-background: #f4f7f5;
   --mb-surface: #ffffff;
-  --mb-border: #e8e8e8;
-  --mb-font: 'Cytiva Aktiv', Arial, Helvetica, sans-serif;
+  --mb-border: #e2e8e4;
+  --mb-font: Arial, Helvetica, sans-serif;
   font-family: var(--mb-font);
   color: var(--mb-text);
 }
