@@ -9587,18 +9587,22 @@ function Dg(e) {
     relations: e.relations
   };
 }
-function Fg({
+function Fg(e) {
+  const t = (e == null ? void 0 : e.currentUser) ?? (e == null ? void 0 : e.username);
+  return typeof t == "string" && t.trim() ? t.trim() : "system";
+}
+function jg({
   client: e,
   entity: t,
-  currentUser: n
+  options: n
 }) {
-  const r = x.useMemo(() => Dg(t), [t]), i = x.useMemo(() => Mg(t), [t]);
+  const r = x.useMemo(() => Dg(t), [t]), i = x.useMemo(() => Mg(t), [t]), o = Fg(n);
   return r ? e != null && e.raw ? /* @__PURE__ */ S(
     zg,
     {
       entity: r,
       client: e,
-      currentUser: n,
+      currentUser: o,
       assetSource: i
     }
   ) : /* @__PURE__ */ S("div", { className: "ch-ai-gov", children: /* @__PURE__ */ S("div", { className: "ch-ai-gov__body", children: /* @__PURE__ */ R("p", { className: "ch-ai-gov__error", children: [
@@ -9606,22 +9610,6 @@ function Fg({
     /* @__PURE__ */ S("code", { children: "context.client" }),
     "."
   ] }) }) }) : /* @__PURE__ */ S("div", { className: "ch-ai-gov", children: /* @__PURE__ */ S("div", { className: "ch-ai-gov__body", children: /* @__PURE__ */ S("p", { className: "ch-ai-gov__error", children: "No asset entity is available in the component context. Open this panel on an M.Asset detail page." }) }) });
-}
-function jg(e) {
-  var n, r, i, o, l, u, s;
-  const t = [
-    (n = e == null ? void 0 : e.user) == null ? void 0 : n.username,
-    (r = e == null ? void 0 : e.user) == null ? void 0 : r.userName,
-    (i = e == null ? void 0 : e.user) == null ? void 0 : i.email,
-    (o = e == null ? void 0 : e.currentUser) == null ? void 0 : o.username,
-    (l = e == null ? void 0 : e.currentUser) == null ? void 0 : l.userName,
-    (u = e == null ? void 0 : e.options) == null ? void 0 : u.currentUser,
-    (s = e == null ? void 0 : e.options) == null ? void 0 : s.username
-  ];
-  for (const a of t)
-    if (typeof a == "string" && a.trim())
-      return a.trim();
-  return "system";
 }
 function Ug(e) {
   const t = kd(e);
@@ -9632,13 +9620,12 @@ function Ug(e) {
         "color: #0B5CAB; font-weight: bold",
         Object.keys(n ?? {})
       ), t.render(
-        /* @__PURE__ */ S(ig, { theme: n == null ? void 0 : n.theme, children: /* @__PURE__ */ S(
-          Fg,
+        /* @__PURE__ */ S(ig, { theme: n.theme, children: /* @__PURE__ */ S(
+          jg,
           {
-            client: (n == null ? void 0 : n.client) ?? null,
-            entity: n == null ? void 0 : n.entity,
-            culture: n == null ? void 0 : n.culture,
-            currentUser: jg(n)
+            client: n.client,
+            entity: n.entity,
+            options: n.options
           }
         ) })
       );

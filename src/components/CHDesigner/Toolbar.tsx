@@ -20,21 +20,21 @@ export default function Toolbar() {
   const dispatch = useDesignerAction();
   const selection = useSelection();
   const viewport = useViewport();
-  const document = useDesignerDocument();
+  const canvasDocument = useDesignerDocument();
   const { mode, canUndo, canRedo, exportDocument, importDocumentJson } = useDesignerApi();
   const fileRef = useRef<HTMLInputElement>(null);
   const isAdmin = mode === 'admin';
   const presetId = resolveCanvasPresetId(
-    document.canvas.width,
-    document.canvas.height,
-    document.canvas.presetId
+    canvasDocument.canvas.width,
+    canvasDocument.canvas.height,
+    canvasDocument.canvas.presetId
   );
 
   const handleExport = () => {
     const doc = exportDocument();
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = window.document.createElement('a');
     a.href = url;
     a.download = 'chdesigner-document.json';
     a.click();
@@ -62,7 +62,7 @@ export default function Toolbar() {
   };
 
   const handlePinInPlace = () => {
-    const selected = document.layers.filter((layer) => selection.includes(layer.id));
+    const selected = canvasDocument.layers.filter((layer) => selection.includes(layer.id));
     for (const layer of selected) {
       dispatch({
         type: 'UPDATE_LAYER',
@@ -73,12 +73,12 @@ export default function Toolbar() {
   };
 
   const handleFillPage = () => {
-    const selected = document.layers.filter((layer) => selection.includes(layer.id));
+    const selected = canvasDocument.layers.filter((layer) => selection.includes(layer.id));
     for (const layer of selected) {
       dispatch({
         type: 'UPDATE_LAYER',
         id: layer.id,
-        patch: fillLayerToCanvas(layer, document.canvas.width, document.canvas.height),
+        patch: fillLayerToCanvas(layer, canvasDocument.canvas.width, canvasDocument.canvas.height),
       });
     }
   };
@@ -127,7 +127,7 @@ export default function Toolbar() {
             </select>
           </label>
           <span className="chd-toolbar-size">
-            {Math.round(document.canvas.width)} × {Math.round(document.canvas.height)}
+            {Math.round(canvasDocument.canvas.width)} × {Math.round(canvasDocument.canvas.height)}
           </span>
           <button
             type="button"
