@@ -85,7 +85,6 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
         await generateImage(
           asset.sourceUrl,
           prompt.trim(),
-          asset.mimeType,
           resolvedOptions
         )
       );
@@ -161,7 +160,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
           <img src={asset.previewUrl} alt={`Current version of ${asset.name}`} />
         </figure>
         {generated ? (
-          <figure>
+          <figure className="ch-image-transform__images-after">
             <span>After</span>
             <img src={generated.objectUrl} alt={generated.altText || `Generated version of ${asset.name}`} />
           </figure>
@@ -176,7 +175,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
           maxLength={1024}
           rows={4}
           disabled={generating || applying}
-          placeholder="For example: Reimagine this scene at sunset with warm cinematic lighting"
+          placeholder="For example: Remove the background, or reimagine this scene at sunset with warm cinematic lighting"
           onChange={(event) => setPrompt(event.target.value)}
         />
 

@@ -16,7 +16,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 export async function generateImage(
   imageUrl: string,
   prompt: string,
-  originalMimeType: string,
   options: ImageTransformOptions
 ): Promise<GeneratedImage> {
   const controller = new AbortController();
@@ -38,9 +37,8 @@ export async function generateImage(
         },
         body: JSON.stringify({
           imageUrl,
-          prompt,
-          outputFormat:
-            originalMimeType.toLowerCase() === 'image/jpeg' ? 'jpeg' : 'png',
+          prompt: withTransparencyInstruction(prompt),
+          outputFormat: 'png',
         }),
         signal: controller.signal,
       }
@@ -59,17 +57,13 @@ export async function generateImage(
 
     let blob = await response.blob();
     if (!blob.size) throw new Error('The proxy returned an empty image.');
-    const targetMimeType = originalMimeType.toLowerCase();
-    if (
-      ['image/jpeg', 'image/png', 'image/webp'].includes(targetMimeType) &&
-      blob.type !== targetMimeType
-    ) {
-      blob = await convertImageFormat(blob, targetMimeType);
+    if ((blob.type || mimeType) !== 'image/png') {
+      blob = await convertImageToPng(blob);
     }
     return {
       blob,
       objectUrl: URL.createObjectURL(blob),
-      mimeType: blob.type || mimeType,
+      mimeType: blob.type || 'image/png',
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -81,7 +75,14 @@ export async function generateImage(
   }
 }
 
-async function convertImageFormat(source: Blob, targetMimeType: string): Promise<Blob> {
+const TRANSPARENCY_INSTRUCTION =
+  'If any part of the image is removed, erased, or cut out, leave those pixels fully transparent. Do not fill removed areas with white, black, or a background color.';
+
+function withTransparencyInstruction(prompt: string): string {
+  return `${prompt.trim()}\n\n${TRANSPARENCY_INSTRUCTION}`;
+}
+
+async function convertImageToPng(source: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(source);
   try {
     const canvas = document.createElement('canvas');
@@ -89,11 +90,6 @@ async function convertImageFormat(source: Blob, targetMimeType: string): Promise
     canvas.height = bitmap.height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('The browser could not prepare the generated image.');
-
-    if (targetMimeType === 'image/jpeg') {
-      context.fillStyle = '#fff';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-    }
     context.drawImage(bitmap, 0, 0);
 
     return await new Promise<Blob>((resolve, reject) => {
@@ -101,9 +97,8 @@ async function convertImageFormat(source: Blob, targetMimeType: string): Promise
         (result) =>
           result
             ? resolve(result)
-            : reject(new Error(`The browser could not create a ${targetMimeType} image.`)),
-        targetMimeType,
-        0.92
+            : reject(new Error('The browser could not create a PNG image.')),
+        'image/png'
       );
     });
   } finally {

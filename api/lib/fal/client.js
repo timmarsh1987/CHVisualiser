@@ -165,7 +165,7 @@ async function downloadResult(resultUrl) {
   const response = await fetch(url);
   if (!response.ok) throw new FalError('seedream_result_download_failed', 502);
 
-  const mimeType = (response.headers.get('content-type') || 'image/jpeg')
+  const mimeType = (response.headers.get('content-type') || 'image/png')
     .split(';')[0]
     .trim()
     .toLowerCase();
@@ -184,7 +184,7 @@ async function downloadResult(resultUrl) {
   return { bytes, mimeType };
 }
 
-export async function transformWithSeedream({ imageUrl, prompt, outputFormat = 'jpeg' }) {
+export async function transformWithSeedream({ imageUrl, prompt, outputFormat = 'png' }) {
   const imageDataUri = await downloadSourceAsDataUri(imageUrl);
   const resultUrl = await runSeedream(imageDataUri, prompt, outputFormat);
   return downloadResult(resultUrl);

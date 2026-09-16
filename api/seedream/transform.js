@@ -50,7 +50,7 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req);
     const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
-    const outputFormat = body?.outputFormat === 'png' ? 'png' : 'jpeg';
+    const outputFormat = body?.outputFormat === 'jpeg' ? 'jpeg' : 'png';
 
     if (!imageUrl || !prompt) {
       res.statusCode = 400;
