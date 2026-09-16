@@ -1,4 +1,4 @@
-import { SOK_LOGO_URL, SOK_THEME } from './brand';
+import { SOK_THEME } from './brand';
 import type { DesignerDocument, Layer, LayerType } from './types';
 
 let layerSeq = 1;
@@ -85,21 +85,13 @@ export function createSeedDocument(): DesignerDocument {
   frame.height = 360;
   frame.fill = SOK_THEME.secondary;
 
-  const logo = defaultLayerForType('image', { x: 120, y: 130 });
-  logo.name = 'SOK logo';
+  const logo = defaultLayerForType('image', { x: 120, y: 140 });
+  logo.name = 'Logo';
   logo.width = 240;
   logo.height = 80;
-  logo.src = SOK_LOGO_URL;
-  logo.fill = SOK_THEME.secondary;
+  logo.src = '';
+  logo.fill = '#ffffff';
   logo.locked = true;
-
-  const text = defaultLayerForType('text', { x: 120, y: 230 });
-  text.text = 'S Group';
-  text.fontSize = 22;
-  text.color = SOK_THEME.primary;
-  text.width = 240;
-  text.height = 36;
-  text.editableContent = true;
 
   return {
     version: 1,
@@ -108,7 +100,7 @@ export function createSeedDocument(): DesignerDocument {
       height: 640,
       background: SOK_THEME.background,
     },
-    layers: [frame, logo, text],
+    layers: [frame, logo],
   };
 }
 

@@ -61,7 +61,7 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
         />
       ) : (
         <div className="chd-layer-image-placeholder" style={{ background: layer.fill || '#e8e6e1' }}>
-          Image
+          {layer.name || 'Image'}
         </div>
       );
       break;

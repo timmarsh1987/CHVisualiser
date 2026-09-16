@@ -1,6 +1,4 @@
 import React from 'react';
-import { getLogoPreviewBackground, resolveLogoAssetUrl } from './brandAssets';
-import LogoPicker from './LogoPicker';
 import ImagePicker from './ImagePicker';
 import { useBrandColor, useBrandFont, useBrandKit } from './BrandKitContext';
 import { DEFAULT_HEADING_LEVEL, PREVIEW_HEADING_FONT_SIZES } from './headingLevel';
@@ -61,17 +59,12 @@ export function TemplateZoneRenderer({
 
   if (isLogoZone(zone)) {
     return (
-      <LogoZoneDisplay
+      <LogoZone
         style={style}
         layoutClass={layoutClass}
         stackedClass={stackedClass}
         zone={zone}
         brandKit={brandKit}
-        layoutMode={layoutMode}
-        value={value}
-        onChange={onChange}
-        adminMode={adminMode}
-        hideLogoPicker={hideLogoPicker}
       />
     );
   }
@@ -165,57 +158,24 @@ export function TemplateZoneRenderer({
   }
 }
 
-function LogoZoneDisplay({
+function LogoZone({
   style,
   layoutClass,
   stackedClass,
   zone,
   brandKit,
-  layoutMode,
-  value,
-  onChange,
-  adminMode,
-  hideLogoPicker = false,
 }: {
   style: React.CSSProperties;
   layoutClass: string;
   stackedClass: string;
   zone: TemplateZone;
   brandKit: ReturnType<typeof useBrandKit>;
-  layoutMode: 'canvas' | 'stacked';
-  value?: ZoneValue;
-  onChange: TemplateZoneRendererProps['onChange'];
-  adminMode: boolean;
-  hideLogoPicker?: boolean;
 }) {
-  const selectedUrl = resolveLogoAssetUrl(value?.imageAssetUrl ?? brandKit.logoAssetUrl);
-  const previewBackground = getLogoPreviewBackground(value?.imageAssetUrl ?? brandKit.logoAssetUrl);
-  const showPicker = !adminMode && !hideLogoPicker;
-
   return (
     <div style={style} className={`zone zone-logo${stackedClass} ${layoutClass}`} data-zone-key={zone.zoneKey}>
-      {showPicker ? (
-        <LogoPicker
-          zoneKey={zone.zoneKey}
-          selectedUrl={value?.imageAssetUrl}
-          compact={layoutMode === 'stacked'}
-          onChange={(zoneKey, imageAssetUrl) =>
-            onChange(zoneKey, { zoneKey, imageAssetUrl })
-          }
-        />
-      ) : (
-        <span
-          className="zone-logo-preview-frame"
-          style={previewBackground ? { background: previewBackground } : undefined}
-        >
-          <img
-            src={selectedUrl}
-            alt={`${brandKit.brandKitName} logo`}
-            className="zone-logo-image"
-            style={{ maxWidth: '100%', height: layoutMode === 'stacked' ? 64 : '100%', objectFit: 'contain' }}
-          />
-        </span>
-      )}
+      <span className="zone-logo-placeholder" aria-label={`${brandKit.brandKitName} logo`}>
+        Logo
+      </span>
     </div>
   );
 }

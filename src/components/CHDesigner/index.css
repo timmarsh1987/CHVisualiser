@@ -51,17 +51,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: 56px;
   background: #000000;
+  color: #ffffff;
   border-radius: 4px;
-  padding: 4px 8px;
-}
-
-.chd-toolbar-logo {
-  display: block;
-  height: 18px;
-  width: auto;
-  max-width: 88px;
-  object-fit: contain;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .chd-toolbar-mode {

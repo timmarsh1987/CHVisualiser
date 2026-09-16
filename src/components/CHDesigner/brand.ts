@@ -1,6 +1,4 @@
 /** Demo SOK / S Group brand for the designer chrome and seed canvas. */
-export const SOK_LOGO_URL = 'https://ws.overcasthq.com/wp-content/uploads/2025/05/sok_logo.png';
-
 export const SOK_THEME = {
   primary: '#00a651',
   secondary: '#000000',

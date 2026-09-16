@@ -1,4 +1,4 @@
-import { SOK_FONT_STACK, SOK_THEME, getLogoPreviewBackground, resolveLogoAssetUrl } from './brandAssets';
+import { SOK_FONT_STACK, SOK_THEME } from './brandAssets';
 import { resolveTemplateCanvasWidth } from './templateDimensions';
 import { sanitizeZoneHtml } from './sanitizeHtml';
 import { DEFAULT_HEADING_LEVEL, EMAIL_HEADING_FONT_SIZES } from './headingLevel';
@@ -39,13 +39,9 @@ function renderZoneRow(zone: TemplateZone, value: ZoneValue | undefined, brandKi
 
   if (isLogoZone(zone)) {
     const logoStyle = getEmailZoneCellStyle(zone, 'padding-top:24px;padding-bottom:16px;');
-    const logoSource = value?.imageAssetUrl ?? brandKit.logoAssetUrl;
-    const logoUrl = resolveLogoAssetUrl(logoSource);
-    const previewBackground = getLogoPreviewBackground(logoSource);
-    const cellBackground = previewBackground ? `background-color:${previewBackground};` : '';
     return `<tr>
-      <td align="${cellAlign}" style="${logoStyle}${cellBackground}">
-        <img src="${escapeHtml(logoUrl)}" alt="${escapeHtml(brandKit.brandKitName)}" width="200" style="display:inline-block;max-width:200px;height:auto;border:0;" />
+      <td align="${cellAlign}" style="${logoStyle}">
+        <span style="display:inline-block;min-width:120px;padding:12px 20px;border:1px solid ${SOK_THEME.border};border-radius:4px;background:${SOK_THEME.surface};color:${SOK_THEME.muted};font-family:${SOK_FONT_STACK};font-size:14px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;text-align:center;">Logo</span>
       </td>
     </tr>`;
   }
