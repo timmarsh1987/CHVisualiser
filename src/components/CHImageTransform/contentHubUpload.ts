@@ -43,9 +43,8 @@ type ContentHubClient = {
 export type ImageUploadMode = 'version' | 'new-asset';
 
 function extensionFor(mimeType: string): string {
-  if (mimeType === 'image/png') return 'png';
   if (mimeType === 'image/webp') return 'webp';
-  return 'jpg';
+  return 'png';
 }
 
 function timestampForFileName(date = new Date()): string {
@@ -230,10 +229,14 @@ export async function uploadGeneratedImage(
     throw new Error('Content Hub returned an invalid numeric asset ID.');
   }
 
-  const extension = extensionFor(image.type);
+  const pngBlob =
+    image.type === 'image/png'
+      ? image
+      : new Blob([await image.arrayBuffer()], { type: 'image/png' });
+  const extension = extensionFor(pngBlob.type);
   const originalStem = asset.fileName.replace(/\.[^.]+$/, '') || `asset-${asset.id}`;
   const fileName = `${originalStem}-${timestampForFileName()}.${extension}`;
-  const buffer = await image.arrayBuffer();
+  const buffer = await pngBlob.arrayBuffer();
 
   // This is structurally equivalent to the SDK's ArrayBufferUploadSource and
   // UploadRequest. The authenticated context client performs create/process/finalize.

@@ -1,6 +1,7 @@
 import React from 'react';
+import { fillLayerToCanvas, resolveLayerPins } from './constraints';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
-import { useDesignerAction, useDesignerMode, useLayers, useSelection } from './store';
+import { useDesignerAction, useDesignerDocument, useDesignerMode, useLayers, useSelection } from './store';
 import type { Layer } from './types';
 
 function NumberField({
@@ -32,6 +33,7 @@ export default function PropertiesPane() {
   const selection = useSelection();
   const dispatch = useDesignerAction();
   const mode = useDesignerMode();
+  const document = useDesignerDocument();
   const isAdmin = mode === 'admin';
 
   const selected = layers.filter((l) => selection.includes(l.id));
@@ -152,19 +154,73 @@ export default function PropertiesPane() {
           )}
 
           {canEditContent && layer.type === 'image' && (
-            <label className="chd-field">
-              <span>Image URL</span>
-              <input
-                type="url"
-                placeholder="https://…"
-                value={layer.src || ''}
-                onChange={(e) => patch({ src: e.target.value })}
-              />
-            </label>
+            <>
+              <label className="chd-field">
+                <span>Image URL</span>
+                <input
+                  type="url"
+                  placeholder="https://…"
+                  value={layer.src || ''}
+                  onChange={(e) => patch({ src: e.target.value })}
+                />
+              </label>
+              <label className="chd-field">
+                <span>Fit</span>
+                <select
+                  value={layer.objectFit || 'cover'}
+                  onChange={(e) => patch({ objectFit: e.target.value as Layer['objectFit'] })}
+                >
+                  <option value="cover">Cover — fill page, keep photo ratio</option>
+                  <option value="contain">Contain — whole photo, may letterbox</option>
+                </select>
+              </label>
+            </>
           )}
 
           {isAdmin ? (
             <>
+              <div className="chd-field">
+                <span>Pin to page</span>
+                <div className="chd-pin-grid">
+                  {(['pinTop', 'pinLeft', 'pinRight', 'pinBottom'] as const).map((key) => {
+                    const pins = resolveLayerPins(layer, document.canvas.width, document.canvas.height);
+                    const inferred = {
+                      pinTop: pins.top,
+                      pinLeft: pins.left,
+                      pinRight: pins.right,
+                      pinBottom: pins.bottom,
+                    }[key];
+                    const labels = {
+                      pinTop: 'Top',
+                      pinLeft: 'Left',
+                      pinRight: 'Right',
+                      pinBottom: 'Bottom',
+                    };
+                    return (
+                      <label key={key} className="chd-field-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={inferred}
+                          onChange={(e) => patch({ [key]: e.target.checked })}
+                        />
+                        <span>{labels[key]}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="chd-field-hint">
+                  Top + left + right keeps a full-width strip. All four edges keep a full-page image when you switch portrait/landscape.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="chd-btn"
+                onClick={() =>
+                  patch(fillLayerToCanvas(layer, document.canvas.width, document.canvas.height))
+                }
+              >
+                Fill page
+              </button>
               <label className="chd-field chd-field-checkbox">
                 <input
                   type="checkbox"

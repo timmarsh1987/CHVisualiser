@@ -1,7 +1,7 @@
 // Mirrors the EPAM.* Content Hub entity schema.
 // Keep these in sync with the entity definitions in Content Hub.
 
-export type ChannelType = 'Social' | 'Email' | 'Newsletter';
+export type ChannelType = 'Social' | 'Email' | 'Newsletter' | 'Print';
 
 export type ZoneType =
   | 'Text'

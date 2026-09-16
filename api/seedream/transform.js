@@ -1,5 +1,5 @@
 import { applyCors } from '../lib/cors.js';
-import { FalError, transformWithSeedream } from '../lib/fal/client.js';
+import { FalError, transformWithSeedream, wantsTransparentCutout } from '../lib/fal/client.js';
 
 export const config = {
   maxDuration: 180,
@@ -50,7 +50,9 @@ export default async function handler(req, res) {
     const body = await readJsonBody(req);
     const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl.trim() : '';
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
-    const outputFormat = body?.outputFormat === 'jpeg' ? 'jpeg' : 'png';
+    const outputFormat = 'png';
+    const removeBackground =
+      body?.removeBackground === true || wantsTransparentCutout(prompt);
 
     if (!imageUrl || !prompt) {
       res.statusCode = 400;
@@ -63,9 +65,14 @@ export default async function handler(req, res) {
       return;
     }
 
-    const result = await transformWithSeedream({ imageUrl, prompt, outputFormat });
+    const result = await transformWithSeedream({
+      imageUrl,
+      prompt,
+      outputFormat,
+      removeBackground,
+    });
     res.statusCode = 200;
-    res.setHeader('Content-Type', result.mimeType);
+    res.setHeader('Content-Type', result.mimeType || 'image/png');
     res.setHeader('Content-Length', String(result.bytes.length));
     res.end(result.bytes);
   } catch (error) {

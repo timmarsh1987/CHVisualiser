@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { remapDocumentCanvas } from './constraints';
 import { cloneDocument, createSeedDocument, defaultLayerForType, parseDesignerDocument } from './document';
 import {
   diffInstanceOverrides,
@@ -352,6 +353,19 @@ export function DesignerProvider({
         case 'LOAD_DOCUMENT': {
           applyDocument(cloneDocument(action.document), true);
           setSelection([]);
+          break;
+        }
+        case 'SET_CANVAS_SIZE': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            if (prev.canvas.width === action.width && prev.canvas.height === action.height) {
+              if (action.presetId && prev.canvas.presetId === action.presetId) return prev;
+            }
+            const next = remapDocumentCanvas(prev, action.width, action.height, action.presetId);
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
           break;
         }
         case 'COMMIT': {

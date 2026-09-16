@@ -54,7 +54,7 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
     case 'image':
       body = layer.src ? (
         <img
-          className={`chd-layer-image${/logo/i.test(layer.name) ? ' chd-layer-image--contain' : ''}`}
+          className={`chd-layer-image${layer.objectFit === 'contain' || /logo/i.test(layer.name) ? ' chd-layer-image--contain' : ''}`}
           src={layer.src}
           alt={layer.name}
           draggable={false}

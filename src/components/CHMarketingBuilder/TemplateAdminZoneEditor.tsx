@@ -9,6 +9,7 @@ import TemplateAllowedAssets from './TemplateAllowedAssets';
 import ZoneDeleteButton from './ZoneDeleteButton';
 import { buildZoneTypeChangePatch } from './entityWrite';
 import type { Template, TemplateZone, ZoneType } from './types';
+import { isFixedCanvasChannel } from './templateDimensions';
 import { DEFAULT_HEADING_LEVEL, HEADING_LEVELS } from './headingLevel';
 import {
   CONTENT_ALIGNMENTS,
@@ -529,7 +530,7 @@ export default function TemplateAdminZoneEditor({
               </>
             )}
 
-            {template.channelType === 'Social' && (
+            {isFixedCanvasChannel(template.channelType) && (
               <div className="position-fields">
                 <label>
                   X
@@ -632,7 +633,7 @@ export default function TemplateAdminZoneEditor({
             </div>
             </div>
 
-            {template.channelType !== 'Social' && (
+            {!isFixedCanvasChannel(template.channelType) && (
               <p className="zone-sort-hint">You can also drag zones in the list to reorder.</p>
             )}
 
@@ -662,7 +663,7 @@ export default function TemplateAdminZoneEditor({
         </div>
       }
       preview={
-        <LivePreviewPanel template={template} layoutMode={template.channelType === 'Social' ? 'canvas' : 'stacked'} />
+        <LivePreviewPanel template={template} layoutMode={isFixedCanvasChannel(template.channelType) ? 'canvas' : 'stacked'} />
       }
     />
   );

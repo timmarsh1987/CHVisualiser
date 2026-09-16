@@ -23,12 +23,20 @@ export interface Layer {
   fontSize?: number;
   color?: string;
   src?: string;
+  /** Pin to canvas edges so size changes keep insets. Undefined = infer from position. */
+  pinLeft?: boolean;
+  pinRight?: boolean;
+  pinTop?: boolean;
+  pinBottom?: boolean;
+  /** How an image fills its box after the page size changes. */
+  objectFit?: 'cover' | 'contain';
 }
 
 export interface DesignerCanvasSize {
   width: number;
   height: number;
   background?: string;
+  presetId?: string;
 }
 
 export interface DesignerDocument {
@@ -76,6 +84,7 @@ export type DesignerAction =
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'LOAD_DOCUMENT'; document: DesignerDocument }
+  | { type: 'SET_CANVAS_SIZE'; width: number; height: number; presetId?: string }
   | { type: 'COMMIT' };
 
 export const MIN_LAYER_SIZE = 24;

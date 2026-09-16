@@ -35,7 +35,7 @@ type EntityPayload = {
   systemProperties?: { id?: number };
 };
 
-const CHANNEL_TYPES: ChannelType[] = ['Social', 'Email', 'Newsletter'];
+const CHANNEL_TYPES: ChannelType[] = ['Social', 'Email', 'Newsletter', 'Print'];
 const ZONE_TYPES: ZoneType[] = [
   'Text', 'Heading', 'Image', 'CTA Button', 'Logo', 'Background Color', 'Divider', 'HTML',
 ];
@@ -125,6 +125,9 @@ function coerceChannelType(value: string): ChannelType {
   const normalized = value.trim().toLowerCase();
   if (normalized.includes('email')) return 'Email';
   if (normalized.includes('newsletter')) return 'Newsletter';
+  if (normalized.includes('print') || normalized.includes('poster') || /\ba4\b/.test(normalized)) {
+    return 'Print';
+  }
   return 'Social';
 }
 

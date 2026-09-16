@@ -1,4 +1,5 @@
 import type { ChannelType, Template } from './types';
+import { CANVAS_PRESETS } from '../CHDesigner/printPresets';
 
 export interface TemplateDimensionPreset {
   id: string;
@@ -69,12 +70,28 @@ export const NEWSLETTER_DIMENSION_PRESETS: TemplateDimensionPreset[] = [
   },
 ];
 
+export const PRINT_DIMENSION_PRESETS: TemplateDimensionPreset[] = CANVAS_PRESETS.filter(
+  (preset) => preset.group === 'print'
+).map((preset) => ({
+  id: preset.id,
+  label: `${preset.label} — ${preset.width} × ${preset.height}`,
+  width: preset.width,
+  height: preset.height,
+  formatPreset: preset.id,
+}));
+
+export function isFixedCanvasChannel(channelType: ChannelType): boolean {
+  return channelType === 'Social' || channelType === 'Print';
+}
+
 export function dimensionPresetsForChannel(channelType: ChannelType): TemplateDimensionPreset[] {
   switch (channelType) {
     case 'Email':
       return EMAIL_DIMENSION_PRESETS;
     case 'Newsletter':
       return NEWSLETTER_DIMENSION_PRESETS;
+    case 'Print':
+      return PRINT_DIMENSION_PRESETS;
     default:
       return SOCIAL_DIMENSION_PRESETS;
   }

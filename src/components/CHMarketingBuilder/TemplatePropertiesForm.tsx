@@ -5,10 +5,11 @@ import {
   defaultDimensionsForChannel,
   dimensionPresetsForChannel,
   formatTemplateDimensions,
+  isFixedCanvasChannel,
   resolveDimensionPresetId,
 } from './templateDimensions';
 
-const CHANNEL_TYPES: ChannelType[] = ['Social', 'Email', 'Newsletter'];
+const CHANNEL_TYPES: ChannelType[] = ['Social', 'Email', 'Newsletter', 'Print'];
 
 interface TemplatePropertiesFormProps {
   template: Template;
@@ -21,7 +22,7 @@ export default function TemplatePropertiesForm({
   onChange,
   compact = false,
 }: TemplatePropertiesFormProps) {
-  const isSocial = template.channelType === 'Social';
+  const isFixedCanvas = isFixedCanvasChannel(template.channelType);
   const dimensionPresets = dimensionPresetsForChannel(template.channelType);
   const selectedPresetId = resolveDimensionPresetId(template);
 
@@ -84,7 +85,7 @@ export default function TemplatePropertiesForm({
 
         <div className="template-dimension-fields">
           <label>
-            {isSocial ? 'Width (px)' : 'Email width (px)'}
+            {isFixedCanvas ? 'Width (px)' : 'Email width (px)'}
             <input
               type="number"
               min={1}
@@ -101,7 +102,7 @@ export default function TemplatePropertiesForm({
               }
             />
           </label>
-          {isSocial ? (
+          {isFixedCanvas ? (
             <label>
               Height (px)
               <input
@@ -137,7 +138,7 @@ export default function TemplatePropertiesForm({
           )}
         </div>
 
-        {!isSocial && (
+        {!isFixedCanvas && (
           <p className="template-dimensions-hint">
             Email and newsletter templates use a fixed content width. Preview height is for the live preview panel only.
           </p>
@@ -156,7 +157,7 @@ function buildFormatPreset(
   width?: number,
   height?: number
 ): string {
-  if (channelType === 'Social' && width != null && height != null) {
+  if ((channelType === 'Social' || channelType === 'Print') && width != null && height != null) {
     return `${width}x${height}`;
   }
   if (channelType === 'Email' && width != null) {

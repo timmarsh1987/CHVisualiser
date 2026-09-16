@@ -2,7 +2,7 @@ import type { ChannelType, Template, TemplateZone } from './types';
 import { defaultDimensionsForChannel } from './templateDimensions';
 
 export function duplicateTargetChannels(currentChannel: ChannelType): ChannelType[] {
-  return (['Social', 'Email', 'Newsletter'] as ChannelType[]).filter((channel) => channel !== currentChannel);
+  return (['Social', 'Email', 'Newsletter', 'Print'] as ChannelType[]).filter((channel) => channel !== currentChannel);
 }
 
 function cloneZoneForDuplicate(

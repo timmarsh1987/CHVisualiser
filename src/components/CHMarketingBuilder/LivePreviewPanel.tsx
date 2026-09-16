@@ -49,7 +49,7 @@ const LivePreviewPanel = forwardRef<HTMLDivElement, LivePreviewPanelProps>(funct
     );
   }
 
-  if (template.channelType === 'Social' || layoutMode === 'canvas') {
+  if (template.channelType === 'Social' || template.channelType === 'Print' || layoutMode === 'canvas') {
     return (
       <div className="live-preview-canvas-wrap">
         <p className="live-preview-dimensions-badge" aria-label="Template dimensions">

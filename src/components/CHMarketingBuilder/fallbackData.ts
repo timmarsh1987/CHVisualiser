@@ -1,6 +1,7 @@
 import { createSokBrandKit } from './brandAssets';
 import { logFallback as emitFallback } from './debugLog';
 import { renderEmailHtml } from './renderEmailHtml';
+import { PRINT_DIMENSION_PRESETS } from './templateDimensions';
 import type { BrandKit, ChannelType, MarketingAsset, Template, ZoneValue } from './types';
 
 export const DUMMY_BRAND_KIT_ID = 'dummy-brand-kit';
@@ -21,17 +22,18 @@ export function createDummyTemplate(templateId: string, channelType: ChannelType
     return createDummyEmailTemplate(templateId);
   }
 
-  return createDummySocialTemplate(templateId);
+  return createDummySocialTemplate(templateId, channelType);
 }
 
-function createDummySocialTemplate(templateId: string): Template {
+function createDummySocialTemplate(templateId: string, channelType: ChannelType = 'Social'): Template {
+  const print = channelType === 'Print' ? PRINT_DIMENSION_PRESETS[0] : null;
   return {
     id: templateId,
-    templateName: 'Demo Social Template',
-    channelType: 'Social',
-    formatPreset: '1080x1080',
-    canvasWidth: 1080,
-    canvasHeight: 1080,
+    templateName: print ? 'Demo Print Template' : 'Demo Social Template',
+    channelType,
+    formatPreset: print?.formatPreset ?? '1080x1080',
+    canvasWidth: print?.width ?? 1080,
+    canvasHeight: print?.height ?? 1080,
     brandKitId: DUMMY_BRAND_KIT_ID,
     zones: [
       {

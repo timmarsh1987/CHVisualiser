@@ -1,6 +1,10 @@
 import { SOK_THEME } from './brand';
 import type { DesignerDocument, Layer, LayerType } from './types';
 
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 let layerSeq = 1;
 
 export function createLayerId(): string {
@@ -74,6 +78,7 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         locked: false,
         allowTransform: false,
         editableContent: true,
+        objectFit: 'cover',
       };
   }
 }
@@ -151,6 +156,11 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
       fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
       color: typeof layer.color === 'string' ? layer.color : undefined,
       src: typeof layer.src === 'string' ? layer.src : undefined,
+      pinLeft: readOptionalBoolean(layer.pinLeft),
+      pinRight: readOptionalBoolean(layer.pinRight),
+      pinTop: readOptionalBoolean(layer.pinTop),
+      pinBottom: readOptionalBoolean(layer.pinBottom),
+      objectFit: layer.objectFit === 'contain' || layer.objectFit === 'cover' ? layer.objectFit : undefined,
     };
 
     if (typeof layer.editableContent === 'boolean') {
@@ -168,6 +178,7 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
       width,
       height,
       background: typeof canvas.background === 'string' ? canvas.background : undefined,
+      presetId: typeof canvas.presetId === 'string' ? canvas.presetId : undefined,
     },
     layers,
   };

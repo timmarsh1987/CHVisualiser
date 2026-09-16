@@ -13,6 +13,15 @@ const ERROR_MESSAGES: Record<string, string> = {
   unauthorized: 'The image transform proxy rejected this component configuration.',
 };
 
+export function wantsTransparentCutout(prompt: string): boolean {
+  const text = prompt.toLowerCase();
+  if (/\b(transparent|alpha|cut\s*-?out|knock\s*-?out|isolate)\b/.test(text)) return true;
+  return (
+    /\b(remove|erase|delete|without)\b/.test(text) &&
+    /\b(background|backdrop|bg)\b/.test(text)
+  );
+}
+
 export async function generateImage(
   imageUrl: string,
   prompt: string,
@@ -37,8 +46,9 @@ export async function generateImage(
         },
         body: JSON.stringify({
           imageUrl,
-          prompt: withTransparencyInstruction(prompt),
+          prompt: prompt.trim(),
           outputFormat: 'png',
+          removeBackground: wantsTransparentCutout(prompt),
         }),
         signal: controller.signal,
       }
@@ -55,15 +65,13 @@ export async function generateImage(
       throw new Error('The proxy returned an invalid image response.');
     }
 
-    let blob = await response.blob();
-    if (!blob.size) throw new Error('The proxy returned an empty image.');
-    if ((blob.type || mimeType) !== 'image/png') {
-      blob = await convertImageToPng(blob);
-    }
+    const source = await response.blob();
+    if (!source.size) throw new Error('The proxy returned an empty image.');
+    const blob = await asPngBlob(source);
     return {
       blob,
       objectUrl: URL.createObjectURL(blob),
-      mimeType: blob.type || 'image/png',
+      mimeType: 'image/png',
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -75,11 +83,15 @@ export async function generateImage(
   }
 }
 
-const TRANSPARENCY_INSTRUCTION =
-  'If any part of the image is removed, erased, or cut out, leave those pixels fully transparent. Do not fill removed areas with white, black, or a background color.';
+function isPng(bytes: ArrayBuffer): boolean {
+  const header = new Uint8Array(bytes, 0, Math.min(4, bytes.byteLength));
+  return header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47;
+}
 
-function withTransparencyInstruction(prompt: string): string {
-  return `${prompt.trim()}\n\n${TRANSPARENCY_INSTRUCTION}`;
+async function asPngBlob(source: Blob): Promise<Blob> {
+  const bytes = await source.arrayBuffer();
+  if (isPng(bytes)) return new Blob([bytes], { type: 'image/png' });
+  return convertImageToPng(new Blob([bytes], { type: source.type || 'image/jpeg' }));
 }
 
 async function convertImageToPng(source: Blob): Promise<Blob> {
