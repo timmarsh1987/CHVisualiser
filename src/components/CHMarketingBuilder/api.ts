@@ -13,6 +13,7 @@ import {
   COLLECTION_ASSET_RELATION_NAMES,
   filterPickedAssets,
   mapEntityPayloadToPickedAsset,
+  mapSearchItemToPickedAsset,
   type PickedAsset,
 } from './assetSearch';
 import {
@@ -112,6 +113,7 @@ export const DEFAULT_RENDER_EMAIL_API_URL = '/api/render-email-html';
 
 let chClient: ChClient = {};
 let proxyBase = DEFAULT_PROXY_BASE;
+let searchComponentId: number | undefined;
 
 export function isRenderedOutputUploadEnabled(): boolean {
   const normalized = proxyBase.replace(/\/$/, '');
@@ -129,6 +131,13 @@ export function setContentHubClient(client: unknown) {
 
 export function setContentHubProxyBase(base: string) {
   proxyBase = base.replace(/\/$/, '') || DEFAULT_PROXY_BASE;
+}
+
+export function setSearchComponentId(componentId?: number) {
+  searchComponentId =
+    typeof componentId === 'number' && Number.isFinite(componentId) && componentId > 0
+      ? componentId
+      : undefined;
 }
 
 async function proxyRequest<T>(path: string, options?: RequestInit): Promise<T> {
@@ -1745,27 +1754,40 @@ async function loadAssetsFromCollection(collectionId: string): Promise<PickedAss
     .filter((asset): asset is PickedAsset => asset != null);
 }
 
-function extractSearchResultIds(body: unknown): number[] {
+function extractSearchItems(body: unknown): unknown[] {
+  if (Array.isArray(body)) return body;
   if (!body || typeof body !== 'object') return [];
 
   const record = body as Record<string, unknown>;
-  const candidates = [record.items, record.content, record.children, record.results];
-  const ids: number[] = [];
+  const candidates = [record.items, record.content, record.children, record.results, record.data];
 
   for (const candidate of candidates) {
-    if (!Array.isArray(candidate)) continue;
-    for (const item of candidate) {
-      if (typeof item === 'number' && Number.isFinite(item)) {
-        ids.push(item);
-        continue;
-      }
-      if (!item || typeof item !== 'object') continue;
-      const entry = item as Record<string, unknown>;
-      const systemId = (entry.systemProperties as { id?: number } | undefined)?.id;
-      const directId = entry.id ?? entry.entityId ?? systemId;
-      if (typeof directId === 'number' && Number.isFinite(directId)) {
-        ids.push(directId);
-      }
+    if (Array.isArray(candidate)) return candidate;
+    if (candidate && typeof candidate === 'object') {
+      const nested = (candidate as Record<string, unknown>).items;
+      if (Array.isArray(nested)) return nested;
+    }
+  }
+
+  return [];
+}
+
+function extractSearchResultIds(body: unknown): number[] {
+  const ids: number[] = [];
+
+  for (const item of extractSearchItems(body)) {
+    if (typeof item === 'number' && Number.isFinite(item)) {
+      ids.push(item);
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const entry = item as Record<string, unknown>;
+    const systemId = (entry.systemProperties as { id?: number } | undefined)?.id;
+    const directId = entry.id ?? entry.entityId ?? systemId;
+    if (typeof directId === 'number' && Number.isFinite(directId)) {
+      ids.push(directId);
+    } else if (typeof directId === 'string' && /^\d+$/.test(directId.trim())) {
+      ids.push(Number(directId.trim()));
     }
   }
 
@@ -1776,7 +1798,91 @@ function extractSearchResultIds(body: unknown): number[] {
   return [...new Set(idsFromRelationResponse(body))];
 }
 
+function buildPortalSearchPayload(query?: string, componentId?: number) {
+  const trimmed = query?.trim() ?? '';
+  const culture =
+    typeof navigator !== 'undefined' && navigator.language ? navigator.language : 'en-US';
+
+  return {
+    query: trimmed,
+    defaults: 'SearchConfiguration',
+    configuration_category: 'PortalConfiguration',
+    aggregations: [],
+    ...(componentId != null ? { component: componentId } : {}),
+    culture,
+    fields: ['Title'],
+    filters: [],
+    fulltext: trimmed ? [trimmed] : [],
+    is_initial_request: !trimmed,
+    l10n: false,
+    nested_relations: [],
+    saved_selection: 0,
+    skip: 0,
+    sorting: { field: 'None', asc: false },
+    take: 20,
+    take_user_settings: true,
+    view: 'grid',
+    visualSearch: { type: 'vector' },
+  };
+}
+
+async function assetsFromSearchBody(body: unknown): Promise<PickedAsset[]> {
+  const items = extractSearchItems(body);
+  const fromHits = items
+    .map((item) => mapSearchItemToPickedAsset(item))
+    .filter((asset): asset is PickedAsset => asset != null);
+
+  if (fromHits.length > 0) {
+    return fromHits;
+  }
+
+  const ids = extractSearchResultIds(body).slice(0, 48);
+  if (ids.length === 0) return [];
+
+  const payloads = await loadRelatedEntities(ids);
+  return payloads
+    .map((assetPayload, index) => mapEntityPayloadToPickedAsset(ids[index], assetPayload))
+    .filter((asset): asset is PickedAsset => asset != null);
+}
+
+async function searchPortalApprovedAssets(query?: string): Promise<PickedAsset[]> {
+  if (!chClient?.raw?.postAsync) return [];
+
+  const componentAttempts =
+    searchComponentId != null ? [searchComponentId, undefined] : [9815, undefined];
+
+  for (const componentId of componentAttempts) {
+    try {
+      const response = await chClient.raw.postAsync<unknown>(
+        '/api/search',
+        buildPortalSearchPayload(query, componentId)
+      );
+      if (!response.isSuccessStatusCode || response.content == null) continue;
+
+      const assets = await assetsFromSearchBody(response.content);
+      if (assets.length > 0) {
+        logResolved(
+          'asset search',
+          `Found ${assets.length} approved asset(s) via /api/search${
+            componentId != null ? ` (component ${componentId})` : ''
+          }`
+        );
+        return assets;
+      }
+    } catch {
+      // Try the next component/payload combination.
+    }
+  }
+
+  return [];
+}
+
 async function searchContentHubAssets(query?: string): Promise<PickedAsset[]> {
+  const portalAssets = await searchPortalApprovedAssets(query);
+  if (portalAssets.length > 0) {
+    return portalAssets;
+  }
+
   if (!chClient?.raw?.getAsync) return [];
 
   const searchText = query?.trim() || '*';
@@ -1790,16 +1896,9 @@ async function searchContentHubAssets(query?: string): Promise<PickedAsset[]> {
       const response = await chClient.raw.getAsync<unknown>(url);
       if (!response.isSuccessStatusCode || response.content == null) continue;
 
-      const ids = extractSearchResultIds(response.content).slice(0, 48);
-      if (ids.length === 0) continue;
-
-      const payloads = await loadRelatedEntities(ids);
-      const assets = payloads
-        .map((assetPayload, index) => mapEntityPayloadToPickedAsset(ids[index], assetPayload))
-        .filter((asset): asset is PickedAsset => asset != null);
-
+      const assets = await assetsFromSearchBody(response.content);
       if (assets.length > 0) {
-        logResolved('asset search', `Found ${assets.length} Content Hub asset(s) via search`);
+        logResolved('asset search', `Found ${assets.length} Content Hub asset(s) via entity search`);
         return assets;
       }
     } catch {

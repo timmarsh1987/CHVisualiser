@@ -189,6 +189,13 @@ function getRelationEntityId(entity: unknown, ...relationNames: string[]): strin
   return undefined;
 }
 
+function parseSearchComponentId(value?: string): number | undefined {
+  if (!value?.trim()) return undefined;
+  if (!/^\d+$/.test(value.trim())) return undefined;
+  const parsed = Number(value.trim());
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
 function coerceBoolean(value: unknown): boolean | undefined {
   if (typeof value === 'boolean') return value;
   if (typeof value === 'string') {
@@ -303,6 +310,9 @@ export function parseMarketingBuilderOptions(
     designerDocumentProperty: readConfiguredString('designerDocumentProperty', options, config),
     designerInstanceProperty: readConfiguredString('designerInstanceProperty', options, config),
     searchIdentifier: readConfiguredString('searchIdentifier', options, config),
+    searchComponentId:
+      parseSearchComponentId(readConfiguredString('searchComponentId', options, config)) ??
+      parseSearchComponentId(readConfiguredString('searchIdentifier', options, config)),
     selectionPoolIdentifier: readConfiguredString('selectionPoolIdentifier', options, config),
   };
 }

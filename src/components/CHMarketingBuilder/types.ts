@@ -149,6 +149,8 @@ export interface MarketingBuilderOptions {
   designerInstanceProperty?: string;
   /** Identifier of the OOTB Search page component on this Content Hub page. */
   searchIdentifier?: string;
+  /** Portal search component entity ID posted as `component` on `/api/search`. */
+  searchComponentId?: number;
   /** Optional selection pool identifier for OOTB Selection component integration. */
   selectionPoolIdentifier?: string;
 }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useState } from 'react';
-import { contentHubApi, setContentHubClient, setContentHubProxyBase } from './api';
+import { contentHubApi, setContentHubClient, setContentHubProxyBase, setSearchComponentId } from './api';
 import { BrandKitProvider } from './BrandKitContext';
 import { ContentHubIntegrationProvider } from './contentHubIntegration';
 import type { ContentHubIntegrationValue } from './contentHubIntegration';
@@ -102,6 +102,10 @@ export default function MarketingBuilderPanel({
       setContentHubProxyBase(resolvedOptions.contentHubProxyBase);
     }
   }, [resolvedOptions?.contentHubProxyBase]);
+
+  useEffect(() => {
+    setSearchComponentId(resolvedOptions?.searchComponentId);
+  }, [resolvedOptions?.searchComponentId]);
 
   useEffect(() => {
     if (!resolvedOptions) return;

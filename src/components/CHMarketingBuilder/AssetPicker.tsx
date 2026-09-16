@@ -131,7 +131,9 @@ export function AssetPicker({
           {collectionId ? (
             <div className="asset-picker-hint">Collection {collectionId}</div>
           ) : (
-            <div className="asset-picker-hint">Browsing M.Asset entities in Content Hub</div>
+            <div className="asset-picker-hint">
+              Searching approved assets via Content Hub SearchConfiguration
+            </div>
           )}
           {aspectRatio && <div className="asset-picker-hint">Recommended aspect ratio: {aspectRatio}</div>}
           {loading && <div className="asset-picker-loading">Searching...</div>}

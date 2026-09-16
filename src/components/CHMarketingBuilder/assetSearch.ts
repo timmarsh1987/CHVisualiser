@@ -66,6 +66,45 @@ export function getAssetPreviewFromRenditions(renditions: unknown): string | und
   return undefined;
 }
 
+function readItemId(item: Record<string, unknown>): string | number | undefined {
+  const systemId = (item.systemProperties as { id?: number } | undefined)?.id;
+  const id = item.id ?? item.entityId ?? systemId;
+  if (typeof id === 'number' && Number.isFinite(id)) return id;
+  if (typeof id === 'string' && id.trim()) return id.trim();
+  return undefined;
+}
+
+export function mapSearchItemToPickedAsset(item: unknown): PickedAsset | null {
+  if (!item || typeof item !== 'object') return null;
+
+  const record = item as Record<string, unknown>;
+  const id = readItemId(record);
+  if (id == null) return null;
+
+  const properties =
+    (record.properties as Record<string, unknown> | undefined) ??
+    (record.fields as Record<string, unknown> | undefined);
+
+  const thumbnailUrl =
+    getAssetPreviewFromRenditions(record.renditions) ??
+    hrefToString(record.thumbnailUrl) ??
+    hrefToString(record.previewUrl) ??
+    hrefToString(record.thumbnail);
+
+  if (!thumbnailUrl) return null;
+
+  const name =
+    readStringProperty(properties, 'FileName', 'fileName', 'Title', 'title', 'Name', 'name') ||
+    `Asset ${id}`;
+
+  return {
+    id: String(id),
+    name,
+    thumbnailUrl,
+    previewUrl: thumbnailUrl,
+  };
+}
+
 export function mapEntityPayloadToPickedAsset(entityId: string | number, payload: EntityPayload): PickedAsset | null {
   const properties = payload.properties ?? {};
   const thumbnailUrl = getAssetPreviewFromRenditions(payload.renditions);
