@@ -261,6 +261,19 @@ export function templateToProperties(template: Template): Record<string, unknown
   return properties;
 }
 
+/** PUT body for CHDesigner JSON stored on EPAM.Template (property designerDocumentJson). */
+export function templateDesignerDocumentProperties(
+  documentJson: string,
+  canvas?: { width: number; height: number },
+  propertyName = 'designerDocumentJson'
+): Record<string, unknown> {
+  const properties: Record<string, unknown> = {};
+  writeStringProperty(properties, propertyName, documentJson);
+  if (canvas?.width != null) writeNumberProperty(properties, 'canvasWidth', canvas.width);
+  if (canvas?.height != null) writeNumberProperty(properties, 'canvasHeight', canvas.height);
+  return properties;
+}
+
 /** Minimal properties for POST /api/entities on EPAM.TemplateZone. */
 export function templateZoneToCreateProperties(zone: TemplateZone): Record<string, unknown> {
   return {

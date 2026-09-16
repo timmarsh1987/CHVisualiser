@@ -663,7 +663,11 @@ export default function TemplateAdminZoneEditor({
         </div>
       }
       preview={
-        <LivePreviewPanel template={template} layoutMode={isFixedCanvasChannel(template.channelType) ? 'canvas' : 'stacked'} />
+        <LivePreviewPanel
+          template={template}
+          layoutMode={isFixedCanvasChannel(template.channelType) ? 'canvas' : 'stacked'}
+          onDimensionsChange={updateTemplate}
+        />
       }
     />
   );

@@ -202,11 +202,33 @@
 
 .chd-layer-list-item {
   display: grid;
-  grid-template-columns: 1fr auto auto auto;
+  grid-template-columns: 1fr;
   gap: 2px;
   align-items: center;
   border-radius: 6px;
   padding: 2px;
+}
+
+.chd-layers-panel--admin .chd-layer-list-item {
+  grid-template-columns: auto 1fr auto auto auto;
+}
+
+.chd-layer-list-item--dragging {
+  opacity: 0.45;
+}
+
+.chd-layer-list-item--drag-over {
+  outline: 1px solid var(--chd-accent);
+  background: #e8f6ee;
+}
+
+.chd-layer-drag-handle {
+  color: var(--chd-muted);
+  font-size: 11px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: grab;
+  user-select: none;
 }
 
 .chd-layer-list-item--selected {

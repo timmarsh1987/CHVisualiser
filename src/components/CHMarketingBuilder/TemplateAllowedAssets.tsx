@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { contentHubApi } from './api';
+import { AssetPicker } from './AssetPicker';
 import type { PickedAsset } from './assetSearch';
 import { useContentHubIntegration, useContentHubSearchResults } from './contentHubIntegration';
 import type { Template } from './types';
@@ -122,14 +123,22 @@ export default function TemplateAllowedAssets({ template, onAssetsChange }: Temp
     <div className="template-zone-asset-collection template-allowed-assets">
       <h4 className="template-zone-asset-collection-title">Template image library</h4>
       <p className="template-zone-asset-collection-intro">
-        Link <strong>M.Asset</strong> entities on the template via <code>templateToAllowedAsset</code>. Every
-        image zone on marketing assets built from this template can pick from these assets. Use the Content Hub
-        search on this page to find images, then click <strong>Add</strong>.
+        Link approved <strong>M.Asset</strong> entities on the template via <code>templateToAllowedAsset</code>.
+        Every image zone on marketing assets built from this template can pick from these assets.
       </p>
+      <AssetPicker
+        overlay
+        allowUrl={false}
+        triggerLabel="Browse approved assets"
+        disabled={templateNotPersisted}
+        onSelect={(asset) => {
+          void handleAddAsset(asset);
+        }}
+      />
 
       {templateNotPersisted && (
         <p className="template-zone-asset-collection-hint">
-          Save the template first so it has a persisted entity ID, then add assets from search.
+          Save this template first. An entity ID is needed before assets can be linked.
         </p>
       )}
 
@@ -167,8 +176,8 @@ export default function TemplateAllowedAssets({ template, onAssetsChange }: Temp
 
         {!hasSearchIntegration && (
           <p className="template-zone-asset-collection-hint">
-            Add a Search page component to this page and set <code>searchIdentifier</code> in the external
-            component Configuration.
+            Use <strong>Browse approved assets</strong> above, or add a Search page component and set{' '}
+            <code>searchIdentifier</code> in the external component Configuration.
           </p>
         )}
 

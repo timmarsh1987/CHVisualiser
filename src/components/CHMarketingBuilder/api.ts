@@ -31,6 +31,7 @@ import {
   marketingAssetToProperties,
   normalizeTemplateZoneForSave,
   templateToCreateProperties,
+  templateDesignerDocumentProperties,
   templateToProperties,
   templateZoneFlagsProperties,
   templateZoneIdentityProperties,
@@ -57,7 +58,7 @@ import {
   fetchDefinitionProperties,
   resolveTemplateZoneLinkRelations,
 } from './entityDefinitionResolve';
-import { TEMPLATE_ZONE_INVERSE_RELATION_NAMES, TEMPLATE_ZONE_RELATION_NAMES } from './options';
+import { describeMissingEntityId, TEMPLATE_ZONE_INVERSE_RELATION_NAMES, TEMPLATE_ZONE_RELATION_NAMES } from './options';
 import {
   appendChildRelation,
   clearParentRelation,
@@ -83,7 +84,7 @@ import {
   type EntityPayload,
 } from './entityMap';
 import type { BrandKit, ChannelType, MarketingAsset, Template, TemplateZone, ZoneType, ZoneValue } from './types';
-import { buildEntityPutBody } from './entityPut';
+import { buildEntityPutBody, resolveEntityDefinitionHref } from './entityPut';
 import { buildDuplicateTemplate } from './templateDuplicate';
 import {
   templateAllowedAssetRelationNames,
@@ -840,7 +841,8 @@ function templatePropertiesChanged(template: Template, payload: EntityPayload): 
   return (
     existing.templateName !== template.templateName ||
     existing.canvasWidth !== template.canvasWidth ||
-    existing.canvasHeight !== template.canvasHeight
+    existing.canvasHeight !== template.canvasHeight ||
+    existing.designerDocumentJson !== template.designerDocumentJson
   );
 }
 
@@ -2276,17 +2278,68 @@ async function updateMarketingAsset(asset: MarketingAsset): Promise<MarketingAss
 
 const DEFAULT_DESIGNER_DOCUMENT_PROPERTY = 'designerDocumentJson';
 const DEFAULT_DESIGNER_INSTANCE_PROPERTY = 'designerInstanceJson';
-/** Content Hub entity definition that owns designerDocumentJson. */
-const BUILDER_TEMPLATE_DEFINITION = 'EPAM.BuilderTemplate';
+/** Canvas templates are EPAM.Template entities with a designerDocumentJson property. */
+const TEMPLATE_DEFINITION = 'EPAM.Template';
 /** Content Hub entity definition that owns designerInstanceJson. */
 const BUILDER_MARKETING_ASSET_DEFINITION = 'EPAM.BuilderMarketingAsset';
 
-function resolveDesignerDocumentProperty(override?: string): string {
-  return override?.trim() || DEFAULT_DESIGNER_DOCUMENT_PROPERTY;
-}
-
 function resolveDesignerInstanceProperty(override?: string): string {
   return override?.trim() || DEFAULT_DESIGNER_INSTANCE_PROPERTY;
+}
+
+function definitionNameFromHref(href: string): string {
+  const parts = href.split('/').filter(Boolean);
+  return decodeURIComponent(parts[parts.length - 1] ?? TEMPLATE_DEFINITION);
+}
+
+function readDesignerDocumentFromProperties(
+  properties: Record<string, unknown>,
+  propertyName: string
+): string | null {
+  const aliases = [
+    propertyName,
+    `EPAM.${propertyName}`,
+    propertyName.replace(/^EPAM\./, ''),
+    propertyName.replace(/^./, (c) => c.toUpperCase()),
+  ];
+  for (const alias of aliases) {
+    const value = properties[alias];
+    if (typeof value === 'string' && value.trim()) return value;
+    if (value && typeof value === 'object') {
+      const record = value as Record<string, unknown>;
+      const nested = record.Invariant ?? record.value ?? record.Value;
+      if (typeof nested === 'string' && nested.trim()) return nested;
+    }
+  }
+  return null;
+}
+
+async function resolveDesignerDocumentPropertyName(
+  payload: EntityPayload,
+  override?: string
+): Promise<string> {
+  if (override?.trim()) return override.trim().replace(/^EPAM\./, '');
+
+  const existing = payload.properties ?? {};
+  for (const key of Object.keys(existing)) {
+    if (/designerDocumentJson/i.test(key)) {
+      return key.replace(/^EPAM\./, '');
+    }
+  }
+
+  try {
+    const href = resolveEntityDefinitionHref(payload, TEMPLATE_DEFINITION);
+    const definitionName = definitionNameFromHref(href);
+    const definitionProperties = await fetchDefinitionProperties(chClient, definitionName);
+    const match = definitionProperties.find((entry) => /designerDocumentJson/i.test(entry.name));
+    if (match) {
+      return match.name.replace(/^EPAM\./, '');
+    }
+  } catch {
+    // Fall through to the default property name.
+  }
+
+  return DEFAULT_DESIGNER_DOCUMENT_PROPERTY;
 }
 
 async function getTemplateDesignerDocument(
@@ -2295,36 +2348,32 @@ async function getTemplateDesignerDocument(
 ): Promise<string | null> {
   const payload = await getEntityPayload(templateId);
   const properties = payload.properties ?? {};
-  const prop = resolveDesignerDocumentProperty(propertyName);
-  const aliases = [`EPAM.${prop}`, prop, prop.replace(/^./, (c) => c.toUpperCase())];
-  for (const alias of aliases) {
-    const value = properties[alias];
-    if (typeof value === 'string' && value.trim()) return value;
-    if (value && typeof value === 'object' && 'value' in (value as object)) {
-      const nested = (value as { value?: unknown }).value;
-      if (typeof nested === 'string' && nested.trim()) return nested;
-    }
-  }
-  return null;
+  const prop = await resolveDesignerDocumentPropertyName(payload, propertyName);
+  return readDesignerDocumentFromProperties(properties, prop);
 }
 
 async function saveTemplateDesignerDocument(
   templateId: string,
   documentJson: string,
-  propertyName?: string
+  propertyName?: string,
+  canvas?: { width: number; height: number }
 ): Promise<boolean> {
-  const prop = resolveDesignerDocumentProperty(propertyName);
-  const properties: Record<string, unknown> = { [prop]: documentJson };
+  if (!templateId?.trim() || !isPersistedEntityId(templateId.trim())) {
+    throw new Error(describeMissingEntityId());
+  }
+  const payload = await getEntityPayload(templateId);
+  const prop = await resolveDesignerDocumentPropertyName(payload, propertyName);
+  const properties = templateDesignerDocumentProperties(documentJson, canvas, prop);
   try {
     const saved = await putEntityProperties(
       templateId,
       properties,
-      'builder template designer document',
-      BUILDER_TEMPLATE_DEFINITION
+      'template designer document',
+      TEMPLATE_DEFINITION
     );
     if (!saved) {
       throw new Error(
-        `Could not save designer document on ${BUILDER_TEMPLATE_DEFINITION} ${templateId}. Ensure property "${prop}" exists and your role can Update it.`
+        `Could not save designer document on ${TEMPLATE_DEFINITION} ${templateId}. Ensure property "${prop}" exists on the template definition and your role can Update it.`
       );
     }
   } catch (error) {
@@ -2332,14 +2381,14 @@ async function saveTemplateDesignerDocument(
       throw error;
     }
     throw new Error(
-      `Could not save designer document on ${BUILDER_TEMPLATE_DEFINITION} ${templateId}. Ensure property "${prop}" exists and your role can Update it. ${
+      `Could not save designer document on ${TEMPLATE_DEFINITION} ${templateId}. Ensure property "${prop}" exists on EPAM.Template and your role can Update it. ${
         error instanceof Error ? error.message : String(error)
       }`
     );
   }
   logResolved(
-    'builder template designer document',
-    `Saved ${prop} on ${BUILDER_TEMPLATE_DEFINITION} ${templateId}`
+    'template designer document',
+    `Saved ${prop} on ${TEMPLATE_DEFINITION} ${templateId}`
   );
   return true;
 }

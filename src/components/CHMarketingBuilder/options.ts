@@ -307,7 +307,14 @@ export function parseMarketingBuilderOptions(
   };
 }
 
+export function describeMissingEntityId(): string {
+  return 'An entity ID is needed. Save this record in Content Hub first, then reload the page.';
+}
+
 export function describeMissingTemplateId(entity?: unknown, config?: unknown): string {
+  if (!getEntitySystemId(entity)) {
+    return describeMissingEntityId();
+  }
   if (entity && typeof entity === 'object') {
     const relations = (entity as Record<string, unknown>).relations;
     if (relations && typeof relations === 'object') {

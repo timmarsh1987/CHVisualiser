@@ -10,7 +10,7 @@ import EmailNewsletterBuilder from './EmailNewsletterBuilder';
 import DesignerAssetBuilder from './DesignerAssetBuilder';
 import DesignerTemplateAdmin, { initializeDesignerTemplate } from './DesignerTemplateAdmin';
 import { hasDesignerDocument } from './designerDetect';
-import { describeMissingTemplateId, resolveBuilderMode } from './options';
+import { describeMissingEntityId, describeMissingTemplateId, resolveBuilderMode } from './options';
 import SocialAssetBuilder from './SocialAssetBuilder';
 import TemplateEditToolbar, { type TemplateEditTab } from './TemplateEditToolbar';
 import TemplateSelector from './TemplateSelector';
@@ -114,27 +114,35 @@ export default function MarketingBuilderPanel({
       setError(null);
       resetLoadReport();
 
-      if (!currentOptions.templateId) {
-        const message = describeMissingTemplateId(entity, config);
+      const templateId =
+        currentOptions.templateId ||
+        (currentOptions.builderMode === 'admin' ? currentOptions.marketingAssetId : undefined);
+
+      if (!templateId) {
+        const message = currentOptions.marketingAssetId
+          ? describeMissingTemplateId(entity, config)
+          : describeMissingEntityId();
         logError('templateId', message);
         setError(message);
         setLoading(false);
         return;
       }
 
-      if (!currentOptions.marketingAssetId) {
-        const message = 'marketingAssetId could not be resolved from context.entity.systemProperties.id.';
+      if (currentOptions.builderMode !== 'admin' && !currentOptions.marketingAssetId) {
+        const message = describeMissingEntityId();
         logError('marketingAssetId', message);
         setError(message);
         setLoading(false);
         return;
       }
 
-      logResolved('templateId', `Using template ${currentOptions.templateId}`);
-      logResolved('marketingAssetId', `Using marketing asset ${currentOptions.marketingAssetId}`);
+      logResolved('templateId', `Using template ${templateId}`);
+      if (currentOptions.marketingAssetId) {
+        logResolved('marketingAssetId', `Using marketing asset ${currentOptions.marketingAssetId}`);
+      }
 
       try {
-        const loadedTemplate = await contentHubApi.getTemplate(currentOptions.templateId);
+        const loadedTemplate = await contentHubApi.getTemplate(templateId);
         if (cancelled) return;
 
         setTemplate(loadedTemplate);
@@ -151,6 +159,13 @@ export default function MarketingBuilderPanel({
             channelType: loadedTemplate.channelType,
             zoneCount: loadedTemplate.zones.length,
           });
+          return;
+        }
+
+        if (!currentOptions.marketingAssetId) {
+          const message = describeMissingEntityId();
+          logError('marketingAssetId', message);
+          setError(message);
           return;
         }
 
@@ -311,7 +326,7 @@ export default function MarketingBuilderPanel({
                   <div className="designer-create-banner">
                     <p>
                       This template uses the zone builder. You can also create a canvas designer
-                      template (stored as designerDocumentJson on EPAM.BuilderTemplate).
+                      template (stored as designerDocumentJson on EPAM.Template).
                     </p>
                     <button
                       type="button"

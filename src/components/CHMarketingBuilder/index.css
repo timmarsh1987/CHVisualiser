@@ -76,6 +76,7 @@
 }
 
 .builder-split-preview-body {
+  overflow: auto;
   padding: 16px;
   background: var(--mb-background);
 }
@@ -226,6 +227,62 @@
   flex-direction: column;
   gap: 8px;
   height: 100%;
+}
+
+.live-preview-resize-frame {
+  position: relative;
+  flex: 0 0 auto;
+  max-width: 100%;
+  box-sizing: content-box;
+}
+
+.live-preview-resize-content {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.live-preview-resize-content .live-preview-canvas,
+.live-preview-resize-content .email-builder-preview-frame {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 0;
+  margin: 0;
+  display: block;
+}
+
+.live-preview-resize-handle {
+  position: absolute;
+  z-index: 2;
+  padding: 0;
+  border: none;
+  background: var(--mb-primary);
+  opacity: 0.35;
+  touch-action: none;
+  user-select: none;
+}
+
+.live-preview-resize-handle:hover,
+.live-preview-resize-handle:focus-visible {
+  opacity: 0.85;
+}
+
+.live-preview-resize-handle-right {
+  top: 0;
+  right: -8px;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  border-radius: 0 4px 4px 0;
+}
+
+.live-preview-resize-handle-bottom {
+  left: 0;
+  bottom: -8px;
+  width: 100%;
+  height: 8px;
+  cursor: ns-resize;
+  border-radius: 0 0 4px 4px;
 }
 
 .live-preview-dimensions-badge {
@@ -688,6 +745,49 @@
   gap: 16px;
 }
 
+.template-setup-tools {
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+  padding: 0;
+}
+
+.template-setup-tools > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mb-text);
+}
+
+.template-setup-tools > summary::-webkit-details-marker {
+  display: none;
+}
+
+.template-setup-tools > summary::before {
+  content: '▸';
+  display: inline-block;
+  margin-right: 8px;
+  color: #57606a;
+}
+
+.template-setup-tools[open] > summary::before {
+  content: '▾';
+}
+
+.template-setup-tools-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0 16px 16px;
+}
+
+.template-setup-tools .figma-import-panel,
+.template-setup-tools .template-duplicate-panel {
+  margin-bottom: 0;
+}
+
 .figma-import-panel {
   margin-bottom: 16px;
   padding: 14px 16px;
@@ -910,35 +1010,6 @@
   font-size: 12px;
 }
 
-.template-setup-banner {
-  border: 1px solid #ffb74d;
-  background: #fff8e1;
-  border-radius: 6px;
-  padding: 16px;
-}
-
-.template-setup-banner h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-
-.template-setup-banner p {
-  margin: 0 0 8px;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #555;
-}
-
-.template-setup-hint {
-  font-size: 13px;
-  color: #777;
-}
-
-.template-setup-banner-info {
-  border-color: var(--mb-primary-border);
-  background: var(--mb-primary-soft);
-}
-
 .marketing-builder-toolbar {
   display: flex;
   align-items: center;
@@ -946,6 +1017,22 @@
   gap: 12px;
   margin-bottom: 16px;
   padding: 0 4px;
+}
+
+.marketing-builder-toolbar-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.marketing-builder-editing-template {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--mb-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .marketing-builder-tab-bar {
@@ -1781,6 +1868,54 @@
   width: 320px;
 }
 
+.asset-picker-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.asset-picker-backdrop {
+  position: absolute;
+  inset: 0;
+  border: none;
+  padding: 0;
+  background: rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.asset-picker-panel-overlay {
+  position: relative;
+  z-index: 1;
+  width: min(720px, 100%);
+  max-height: min(80vh, 720px);
+  overflow: auto;
+}
+
+.asset-picker-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.asset-picker-close {
+  border: 1px solid #d0d0d0;
+  background: #fff;
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.template-allowed-assets .asset-picker {
+  margin-bottom: 12px;
+}
+
 .asset-picker-search {
   width: 100%;
   padding: 6px 8px;
@@ -1801,6 +1936,11 @@
   gap: 8px;
   max-height: 240px;
   overflow-y: auto;
+}
+
+.asset-picker-panel-overlay .asset-picker-grid {
+  grid-template-columns: repeat(4, 1fr);
+  max-height: 420px;
 }
 
 .asset-picker-thumb {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { fillLayerToCanvas, resolveLayerPins } from './constraints';
+import { fillLayerToCanvas, pinLayerInPlace, resolveLayerPins } from './constraints';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
 import { useDesignerAction, useDesignerDocument, useDesignerMode, useLayers, useSelection } from './store';
 import type { Layer } from './types';
@@ -190,6 +190,8 @@ export default function PropertiesPane() {
                       pinRight: pins.right,
                       pinBottom: pins.bottom,
                     }[key];
+                    const explicit = layer[key];
+                    const checked = explicit === true || (explicit === undefined && inferred);
                     const labels = {
                       pinTop: 'Top',
                       pinLeft: 'Left',
@@ -200,8 +202,15 @@ export default function PropertiesPane() {
                       <label key={key} className="chd-field-checkbox">
                         <input
                           type="checkbox"
-                          checked={inferred}
-                          onChange={(e) => patch({ [key]: e.target.checked })}
+                          checked={checked}
+                          onChange={(e) => {
+                            const next = e.target.checked;
+                            if (explicit === undefined && inferred && !next) {
+                              patch({ [key]: true });
+                              return;
+                            }
+                            patch({ [key]: next });
+                          }}
                         />
                         <span>{labels[key]}</span>
                       </label>
@@ -209,9 +218,13 @@ export default function PropertiesPane() {
                   })}
                 </div>
                 <p className="chd-field-hint">
-                  Top + left + right keeps a full-width strip. All four edges keep a full-page image when you switch portrait/landscape.
+                  Pin in place keeps this block at its current X/Y and size when you change page size.
+                  Pinning opposite edges stretches the block to keep those insets.
                 </p>
               </div>
+              <button type="button" className="chd-btn" onClick={() => patch(pinLayerInPlace())}>
+                Pin in place
+              </button>
               <button
                 type="button"
                 className="chd-btn"

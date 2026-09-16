@@ -3,7 +3,9 @@ import DesignerShell from '../CHDesigner/DesignerShell';
 import { createSeedDocument, parseDesignerDocument } from '../CHDesigner/document';
 import type { DesignerDocument } from '../CHDesigner/types';
 import { contentHubApi } from './api';
+import { describeMissingEntityId } from './options';
 import type { Template } from './types';
+import { isPersistedEntityId } from './entityWrite';
 
 const AUTO_SAVE_DELAY_MS = 900;
 
@@ -44,6 +46,11 @@ export default function DesignerTemplateAdmin({
 
   const persist = useCallback(
     async (doc: DesignerDocument) => {
+      if (!isPersistedEntityId(template.id)) {
+        setSaveStatus('error');
+        setSaveError(describeMissingEntityId());
+        return;
+      }
       const generation = ++generationRef.current;
       setSaveStatus('saving');
       setSaveError(null);
@@ -52,10 +59,16 @@ export default function DesignerTemplateAdmin({
         await contentHubApi.saveTemplateDesignerDocument(
           template.id,
           json,
-          designerDocumentProperty
+          designerDocumentProperty,
+          { width: doc.canvas.width, height: doc.canvas.height }
         );
         if (generation !== generationRef.current) return;
-        const nextTemplate: Template = { ...template, designerDocumentJson: json };
+        const nextTemplate: Template = {
+          ...template,
+          designerDocumentJson: json,
+          canvasWidth: doc.canvas.width,
+          canvasHeight: doc.canvas.height,
+        };
         onTemplateSaved?.(nextTemplate);
         setSaveStatus('saved');
       } catch (error) {
@@ -98,6 +111,14 @@ export default function DesignerTemplateAdmin({
           ? saveError || 'Save failed'
           : 'Saved to template';
 
+  if (!isPersistedEntityId(template.id)) {
+    return (
+      <div className="marketing-builder-status marketing-builder-error">
+        {describeMissingEntityId()}
+      </div>
+    );
+  }
+
   return (
     <DesignerShell
       key={`${template.id}:${template.designerDocumentJson ? 'doc' : 'seed'}`}
@@ -116,10 +137,21 @@ export async function initializeDesignerTemplate(
   template: Template,
   designerDocumentProperty?: string
 ): Promise<Template> {
+  if (!isPersistedEntityId(template.id)) {
+    throw new Error(describeMissingEntityId());
+  }
   const seed = createSeedDocument();
   if (template.canvasWidth) seed.canvas.width = template.canvasWidth;
   if (template.canvasHeight) seed.canvas.height = template.canvasHeight;
   const json = JSON.stringify(seed);
-  await contentHubApi.saveTemplateDesignerDocument(template.id, json, designerDocumentProperty);
-  return { ...template, designerDocumentJson: json };
+  await contentHubApi.saveTemplateDesignerDocument(template.id, json, designerDocumentProperty, {
+    width: seed.canvas.width,
+    height: seed.canvas.height,
+  });
+  return {
+    ...template,
+    designerDocumentJson: json,
+    canvasWidth: seed.canvas.width,
+    canvasHeight: seed.canvas.height,
+  };
 }

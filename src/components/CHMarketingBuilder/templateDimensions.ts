@@ -137,6 +137,23 @@ export function resolveDimensionPresetId(
   return 'custom';
 }
 
+export function buildFormatPreset(
+  channelType: ChannelType,
+  width?: number,
+  height?: number
+): string {
+  if ((channelType === 'Social' || channelType === 'Print') && width != null && height != null) {
+    return `${width}x${height}`;
+  }
+  if (channelType === 'Email' && width != null) {
+    return `${width}px email`;
+  }
+  if (channelType === 'Newsletter' && width != null) {
+    return `${width}px newsletter`;
+  }
+  return '';
+}
+
 export function applyDimensionPreset(
   channelType: ChannelType,
   presetId: string

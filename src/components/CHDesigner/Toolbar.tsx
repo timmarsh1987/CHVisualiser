@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { fillLayerToCanvas } from './constraints';
+import { fillLayerToCanvas, pinLayerInPlace } from './constraints';
 import {
   CANVAS_PRESET_GROUPS,
   CANVAS_PRESETS,
@@ -61,6 +61,17 @@ export default function Toolbar() {
     });
   };
 
+  const handlePinInPlace = () => {
+    const selected = document.layers.filter((layer) => selection.includes(layer.id));
+    for (const layer of selected) {
+      dispatch({
+        type: 'UPDATE_LAYER',
+        id: layer.id,
+        patch: pinLayerInPlace(),
+      });
+    }
+  };
+
   const handleFillPage = () => {
     const selected = document.layers.filter((layer) => selection.includes(layer.id));
     for (const layer of selected) {
@@ -118,6 +129,14 @@ export default function Toolbar() {
           <span className="chd-toolbar-size">
             {Math.round(document.canvas.width)} × {Math.round(document.canvas.height)}
           </span>
+          <button
+            type="button"
+            className="chd-btn"
+            disabled={selection.length === 0}
+            onClick={handlePinInPlace}
+          >
+            Pin to page
+          </button>
           <button
             type="button"
             className="chd-btn"

@@ -23,7 +23,7 @@ export interface Layer {
   fontSize?: number;
   color?: string;
   src?: string;
-  /** Pin to canvas edges so size changes keep insets. Undefined = infer from position. */
+  /** Pin to canvas edges so page-size changes keep insets. Undefined = infer until any pin is set. */
   pinLeft?: boolean;
   pinRight?: boolean;
   pinTop?: boolean;

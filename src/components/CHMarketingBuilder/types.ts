@@ -79,7 +79,7 @@ export interface Template {
   zones: TemplateZone[];
   /** M.Asset IDs on the template — available to every image zone. */
   allowedAssetIds?: string[];
-  /** CHDesigner template document JSON on EPAM.BuilderTemplate (property designerDocumentJson). */
+  /** CHDesigner template document JSON on EPAM.Template (property designerDocumentJson). */
   designerDocumentJson?: string;
 }
 
@@ -143,7 +143,7 @@ export interface MarketingBuilderOptions {
   figmaImportApiUrl?: string;
   /** Bearer token matching FIGMA_IMPORT_API_SECRET / BRAND_COMPLIANCE_API_SECRET when set. */
   figmaImportApiToken?: string;
-  /** Override Content Hub property name for EPAM.BuilderTemplate designer JSON (default designerDocumentJson). */
+  /** Override Content Hub property name for EPAM.Template designer JSON (default designerDocumentJson). */
   designerDocumentProperty?: string;
   /** Override Content Hub property name for EPAM.BuilderMarketingAsset instance JSON (default designerInstanceJson). */
   designerInstanceProperty?: string;

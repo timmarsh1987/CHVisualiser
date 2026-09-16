@@ -19,16 +19,45 @@ function pinValue(explicit: boolean | undefined, inferred: boolean): boolean {
   return inferred;
 }
 
+function hasExplicitPins(
+  layer: Pick<Layer, 'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom'>
+): boolean {
+  return (
+    typeof layer.pinLeft === 'boolean' ||
+    typeof layer.pinRight === 'boolean' ||
+    typeof layer.pinTop === 'boolean' ||
+    typeof layer.pinBottom === 'boolean'
+  );
+}
+
 export function resolveLayerPins(
   layer: Pick<Layer, 'x' | 'y' | 'width' | 'height' | 'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom'>,
   canvasWidth: number,
   canvasHeight: number
 ): LayerPins {
+  if (hasExplicitPins(layer)) {
+    return {
+      left: layer.pinLeft === true,
+      right: layer.pinRight === true,
+      top: layer.pinTop === true,
+      bottom: layer.pinBottom === true,
+    };
+  }
   return {
     left: pinValue(layer.pinLeft, near(layer.x, 0)),
     right: pinValue(layer.pinRight, near(layer.x + layer.width, canvasWidth)),
     top: pinValue(layer.pinTop, near(layer.y, 0)),
     bottom: pinValue(layer.pinBottom, near(layer.y + layer.height, canvasHeight)),
+  };
+}
+
+/** Keep the layer at its current x/y/size when the page size changes. */
+export function pinLayerInPlace(): Partial<Layer> {
+  return {
+    pinLeft: true,
+    pinTop: true,
+    pinRight: false,
+    pinBottom: false,
   };
 }
 
