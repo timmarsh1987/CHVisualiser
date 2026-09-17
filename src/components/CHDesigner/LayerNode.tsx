@@ -80,6 +80,19 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
       }}
     >
       {body}
+      {layer.locked ? (
+        <span className="chd-layer-lock" title="Locked" aria-label="Locked">
+          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <rect x="2" y="5.5" width="8" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+            <path
+              d="M4 5.5V3.8a2 2 0 0 1 4 0v1.7"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+            />
+          </svg>
+        </span>
+      ) : null}
     </div>
   );
 }

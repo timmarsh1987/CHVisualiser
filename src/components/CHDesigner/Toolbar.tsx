@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { fillLayerToCanvas, pinLayerInPlace } from './constraints';
+import GenerateMenu from './GenerateMenu';
 import {
   CANVAS_PRESET_GROUPS,
   CANVAS_PRESETS,
@@ -197,13 +198,14 @@ export default function Toolbar() {
       </div>
 
       <div className="chd-toolbar-group">
+        <GenerateMenu />
         <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ZOOM_RESET' })}>
           {Math.round(viewport.zoom * 100)}%
         </button>
         {isAdmin ? (
           <>
             <button type="button" className="chd-btn" onClick={handleExport}>
-              Export
+              Export JSON
             </button>
             <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
               Import

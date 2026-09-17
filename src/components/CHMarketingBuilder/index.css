@@ -13,6 +13,16 @@
   --mb-font: Arial, Helvetica, sans-serif;
   font-family: var(--mb-font);
   color: var(--mb-text);
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 12px);
+  height: 100%;
+}
+
+.marketing-builder .chd-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 
 .marketing-builder-status {
@@ -2059,6 +2069,14 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.designer-asset-builder .chd-root {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
 }
 
 .designer-asset-builder-actions {

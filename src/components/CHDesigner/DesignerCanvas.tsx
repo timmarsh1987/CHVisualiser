@@ -267,6 +267,7 @@ export default function DesignerCanvas() {
       >
         <div
           className="chd-artboard"
+          data-chd-artboard="true"
           style={{
             width: document.canvas.width,
             height: document.canvas.height,
@@ -278,6 +279,7 @@ export default function DesignerCanvas() {
             dispatch({ type: 'UNSELECT_ALL' });
           }}
         >
+          <div className="chd-artboard-page" />
           {document.layers.map((layer) => (
             <LayerNode
               key={layer.id}
