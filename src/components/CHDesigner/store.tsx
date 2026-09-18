@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { remapDocumentCanvas } from './constraints';
+import { persistCurrentPageLayout, pushLayerToAllPages, switchDocumentPage } from './pageLayout';
 import { cloneDocument, createSeedDocument, defaultLayerForType, parseDesignerDocument } from './document';
 import {
   diffInstanceOverrides,
@@ -212,7 +212,7 @@ export function DesignerProvider({
                 if (typeof patched.height === 'number') {
                   patched.height = Math.max(MIN_LAYER_SIZE, patched.height);
                 }
-                return patched;
+                return isEndUser ? patched : persistCurrentPageLayout(patched, prev.canvas);
               }),
             };
             if (push) pushHistory(next);
@@ -358,10 +358,24 @@ export function DesignerProvider({
         case 'SET_CANVAS_SIZE': {
           if (isEndUser) return;
           setDocument((prev) => {
-            if (prev.canvas.width === action.width && prev.canvas.height === action.height) {
-              if (action.presetId && prev.canvas.presetId === action.presetId) return prev;
-            }
-            const next = remapDocumentCanvas(prev, action.width, action.height, action.presetId);
+            const next = switchDocumentPage(prev, action.width, action.height, action.presetId);
+            if (next === prev) return prev;
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'PUSH_LAYER_TO_ALL_PAGES': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const next: DesignerDocument = {
+              ...prev,
+              layers: prev.layers.map((layer) => {
+                if (layer.id !== action.id) return layer;
+                return { ...layer, ...pushLayerToAllPages(layer, prev.canvas) };
+              }),
+            };
             pushHistory(next);
             emitChanges(next);
             return next;

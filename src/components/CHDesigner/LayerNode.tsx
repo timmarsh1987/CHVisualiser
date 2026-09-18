@@ -6,9 +6,16 @@ interface LayerNodeProps {
   selected: boolean;
   onSelect: (e: React.PointerEvent) => void;
   onMoveStart: (e: React.PointerEvent) => void;
+  onUnlock?: () => void;
 }
 
-export default function LayerNode({ layer, selected, onSelect, onMoveStart }: LayerNodeProps) {
+export default function LayerNode({
+  layer,
+  selected,
+  onSelect,
+  onMoveStart,
+  onUnlock,
+}: LayerNodeProps) {
   if (!layer.visible) return null;
 
   const style: React.CSSProperties = {
@@ -81,7 +88,20 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
     >
       {body}
       {layer.locked ? (
-        <span className="chd-layer-lock" title="Locked" aria-label="Locked">
+        <button
+          type="button"
+          className="chd-layer-lock"
+          title="Double-click to unlock"
+          aria-label="Locked. Double-click to unlock"
+          onPointerDown={(e) => {
+            e.stopPropagation();
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onUnlock?.();
+          }}
+        >
           <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <rect x="2" y="5.5" width="8" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
             <path
@@ -91,7 +111,7 @@ export default function LayerNode({ layer, selected, onSelect, onMoveStart }: La
               strokeLinecap="round"
             />
           </svg>
-        </span>
+        </button>
       ) : null}
     </div>
   );

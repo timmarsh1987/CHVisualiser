@@ -18,6 +18,8 @@ export interface DesignerShellProps {
   /** Optional status line under the toolbar (e.g. save state). */
   statusSlot?: React.ReactNode;
   statusClassName?: string;
+  /** Floating save state, typically bottom-right. */
+  saveStatus?: React.ReactNode;
 }
 
 export default function DesignerShell({
@@ -29,6 +31,7 @@ export default function DesignerShell({
   onInstanceChange,
   statusSlot,
   statusClassName,
+  saveStatus,
 }: DesignerShellProps) {
   const providerProps: Omit<DesignerProviderProps, 'children'> = {
     mode,
@@ -53,6 +56,7 @@ export default function DesignerShell({
           <DesignerCanvas />
           <PropertiesPane />
         </div>
+        {saveStatus}
       </div>
     </DesignerProvider>
   );

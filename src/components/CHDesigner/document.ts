@@ -1,8 +1,41 @@
 import { SOK_THEME } from './brand';
-import type { DesignerDocument, Layer, LayerType } from './types';
+import type { DesignerDocument, Layer, LayerPageLayout, LayerType } from './types';
 
 function readOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function parsePageLayouts(raw: unknown): Record<string, LayerPageLayout> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const layouts: Record<string, LayerPageLayout> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!value || typeof value !== 'object') continue;
+    const item = value as Record<string, unknown>;
+    const x = Number(item.x);
+    const y = Number(item.y);
+    const width = Number(item.width);
+    const height = Number(item.height);
+    if (![x, y, width, height].every(Number.isFinite)) continue;
+    layouts[key] = {
+      x,
+      y,
+      width,
+      height,
+      pinLeft: item.pinLeft === true,
+      pinRight: item.pinRight === true,
+      pinTop: item.pinTop === true,
+      pinBottom: item.pinBottom === true,
+      marginTop: Number.isFinite(Number(item.marginTop)) ? Math.max(0, Number(item.marginTop)) : 0,
+      marginRight: Number.isFinite(Number(item.marginRight)) ? Math.max(0, Number(item.marginRight)) : 0,
+      marginBottom: Number.isFinite(Number(item.marginBottom)) ? Math.max(0, Number(item.marginBottom)) : 0,
+      marginLeft: Number.isFinite(Number(item.marginLeft)) ? Math.max(0, Number(item.marginLeft)) : 0,
+    };
+  }
+  return Object.keys(layouts).length > 0 ? layouts : undefined;
 }
 
 let layerSeq = 1;
@@ -160,6 +193,11 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
       pinRight: readOptionalBoolean(layer.pinRight),
       pinTop: readOptionalBoolean(layer.pinTop),
       pinBottom: readOptionalBoolean(layer.pinBottom),
+      marginTop: readOptionalNumber(layer.marginTop),
+      marginRight: readOptionalNumber(layer.marginRight),
+      marginBottom: readOptionalNumber(layer.marginBottom),
+      marginLeft: readOptionalNumber(layer.marginLeft),
+      pageLayouts: parsePageLayouts(layer.pageLayouts),
       objectFit: layer.objectFit === 'contain' || layer.objectFit === 'cover' ? layer.objectFit : undefined,
     };
 

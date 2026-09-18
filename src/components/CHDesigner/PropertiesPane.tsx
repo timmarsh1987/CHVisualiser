@@ -1,5 +1,6 @@
 import React from 'react';
-import { fillLayerToCanvas, pinLayerInPlace, resolveLayerPins } from './constraints';
+import { fillLayerToCanvas } from './constraints';
+import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
 import { useDesignerAction, useDesignerDocument, useDesignerMode, useLayers, useSelection } from './store';
 import type { Layer } from './types';
@@ -183,16 +184,7 @@ export default function PropertiesPane() {
                 <span>Pin to page</span>
                 <div className="chd-pin-grid">
                   {(['pinTop', 'pinLeft', 'pinRight', 'pinBottom'] as const).map((key) => {
-                    const pins = resolveLayerPins(layer, document.canvas.width, document.canvas.height);
-                    const inferred = {
-                      pinTop: pins.top,
-                      pinLeft: pins.left,
-                      pinRight: pins.right,
-                      pinBottom: pins.bottom,
-                    }[key];
-                    const explicit = layer[key];
-                    const checked = explicit === true || (explicit === undefined && inferred);
-                    const labels = {
+                    const labels: Record<PinKey, string> = {
                       pinTop: 'Top',
                       pinLeft: 'Left',
                       pinRight: 'Right',
@@ -202,15 +194,18 @@ export default function PropertiesPane() {
                       <label key={key} className="chd-field-checkbox">
                         <input
                           type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked;
-                            if (explicit === undefined && inferred && !next) {
-                              patch({ [key]: true });
-                              return;
-                            }
-                            patch({ [key]: next });
-                          }}
+                          checked={layer[key] === true}
+                          onChange={(e) =>
+                            patch(
+                              toggleLayerPin(
+                                layer,
+                                key,
+                                e.target.checked,
+                                document.canvas.width,
+                                document.canvas.height
+                              )
+                            )
+                          }
                         />
                         <span>{labels[key]}</span>
                       </label>
@@ -218,12 +213,59 @@ export default function PropertiesPane() {
                   })}
                 </div>
                 <p className="chd-field-hint">
-                  Pin in place keeps this block at its current X/Y and size when you change page size.
-                  Pinning opposite edges stretches the block to keep those insets.
+                  Pinning a side moves this block to that edge using the margin. Pin left and right
+                  together to stretch width; pin top and bottom to stretch height.
                 </p>
               </div>
-              <button type="button" className="chd-btn" onClick={() => patch(pinLayerInPlace())}>
+              <div className="chd-field">
+                <span>Margins</span>
+                <div className="chd-pin-grid">
+                  {(
+                    [
+                      ['marginTop', 'Top'],
+                      ['marginLeft', 'Left'],
+                      ['marginRight', 'Right'],
+                      ['marginBottom', 'Bottom'],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <NumberField
+                      key={key}
+                      label={label}
+                      value={Math.round(typeof layer[key] === 'number' ? layer[key]! : 0)}
+                      onChange={(value) =>
+                        patch(
+                          setLayerMargin(
+                            layer,
+                            key as MarginKey,
+                            value,
+                            document.canvas.width,
+                            document.canvas.height
+                          )
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+                <p className="chd-field-hint">
+                  Margins are stored per page size. Change page, then adjust; use Push to all pages
+                  to copy this layout to every preset.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="chd-btn"
+                onClick={() => patch(pinLayerInPlace(layer, document.canvas.width, document.canvas.height))}
+              >
                 Pin in place
+              </button>
+              <button
+                type="button"
+                className="chd-btn"
+                onClick={() =>
+                  dispatch({ type: 'PUSH_LAYER_TO_ALL_PAGES', id: layer.id })
+                }
+              >
+                Push to all pages
               </button>
               <button
                 type="button"

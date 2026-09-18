@@ -30,6 +30,8 @@ function hasExplicitPins(
   );
 }
 
+export { hasExplicitPins };
+
 export function resolveLayerPins(
   layer: Pick<Layer, 'x' | 'y' | 'width' | 'height' | 'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom'>,
   canvasWidth: number,
@@ -51,14 +53,50 @@ export function resolveLayerPins(
   };
 }
 
-/** Keep the layer at its current x/y/size when the page size changes. */
-export function pinLayerInPlace(): Partial<Layer> {
-  return {
-    pinLeft: true,
-    pinTop: true,
-    pinRight: false,
-    pinBottom: false,
-  };
+function readMargin(
+  layer: Pick<Layer, 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft'>,
+  key: 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft'
+): number {
+  const value = layer[key];
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
+/** Stick the layer to its pinned edges using margins. */
+export function applyEdgePins(
+  layer: Layer,
+  canvasWidth: number,
+  canvasHeight: number
+): { x: number; y: number; width: number; height: number } {
+  const pins = resolveLayerPins(layer, canvasWidth, canvasHeight);
+  const marginTop = readMargin(layer, 'marginTop');
+  const marginRight = readMargin(layer, 'marginRight');
+  const marginBottom = readMargin(layer, 'marginBottom');
+  const marginLeft = readMargin(layer, 'marginLeft');
+
+  let x = layer.x;
+  let y = layer.y;
+  let width = layer.width;
+  let height = layer.height;
+
+  if (pins.left && pins.right) {
+    x = marginLeft;
+    width = Math.max(MIN_LAYER_SIZE, canvasWidth - marginLeft - marginRight);
+  } else if (pins.left) {
+    x = marginLeft;
+  } else if (pins.right) {
+    x = canvasWidth - marginRight - width;
+  }
+
+  if (pins.top && pins.bottom) {
+    y = marginTop;
+    height = Math.max(MIN_LAYER_SIZE, canvasHeight - marginTop - marginBottom);
+  } else if (pins.top) {
+    y = marginTop;
+  } else if (pins.bottom) {
+    y = canvasHeight - marginBottom - height;
+  }
+
+  return { x, y, width, height };
 }
 
 export function isFullBleed(
@@ -110,6 +148,13 @@ export function remapLayerToCanvas(
 ): Layer {
   if (from.width === to.width && from.height === to.height) return layer;
 
+  if (hasExplicitPins(layer)) {
+    return {
+      ...layer,
+      ...applyEdgePins(layer, to.width, to.height),
+    };
+  }
+
   const pins = resolveLayerPins(layer, from.width, from.height);
   const xAxis = remapAxis(layer.x, layer.width, from.width, to.width, pins.left, pins.right);
   const yAxis = remapAxis(layer.y, layer.height, from.height, to.height, pins.top, pins.bottom);
@@ -155,6 +200,10 @@ export function fillLayerToCanvas(layer: Layer, canvasWidth: number, canvasHeigh
     pinRight: true,
     pinTop: true,
     pinBottom: true,
+    marginTop: 0,
+    marginRight: 0,
+    marginBottom: 0,
+    marginLeft: 0,
     objectFit: layer.type === 'image' ? layer.objectFit ?? 'cover' : layer.objectFit,
   };
 }

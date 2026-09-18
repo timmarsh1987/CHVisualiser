@@ -28,8 +28,30 @@ export interface Layer {
   pinRight?: boolean;
   pinTop?: boolean;
   pinBottom?: boolean;
+  /** Inset from a pinned edge, in canvas pixels. */
+  marginTop?: number;
+  marginRight?: number;
+  marginBottom?: number;
+  marginLeft?: number;
+  /** Per page-size geometry so switching A4/landscape etc. restores this item. */
+  pageLayouts?: Record<string, LayerPageLayout>;
   /** How an image fills its box after the page size changes. */
   objectFit?: 'cover' | 'contain';
+}
+
+export interface LayerPageLayout {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  pinLeft: boolean;
+  pinRight: boolean;
+  pinTop: boolean;
+  pinBottom: boolean;
+  marginTop: number;
+  marginRight: number;
+  marginBottom: number;
+  marginLeft: number;
 }
 
 export interface DesignerCanvasSize {
@@ -85,6 +107,7 @@ export type DesignerAction =
   | { type: 'REDO' }
   | { type: 'LOAD_DOCUMENT'; document: DesignerDocument }
   | { type: 'SET_CANVAS_SIZE'; width: number; height: number; presetId?: string }
+  | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
   | { type: 'COMMIT' };
 
 export const MIN_LAYER_SIZE = 24;

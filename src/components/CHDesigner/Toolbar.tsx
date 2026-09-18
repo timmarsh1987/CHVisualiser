@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { fillLayerToCanvas, pinLayerInPlace } from './constraints';
+import { fillLayerToCanvas } from './constraints';
+import { pinLayerInPlace } from './pageLayout';
 import GenerateMenu from './GenerateMenu';
 import {
   CANVAS_PRESET_GROUPS,
@@ -68,7 +69,7 @@ export default function Toolbar() {
       dispatch({
         type: 'UPDATE_LAYER',
         id: layer.id,
-        patch: pinLayerInPlace(),
+        patch: pinLayerInPlace(layer, canvasDocument.canvas.width, canvasDocument.canvas.height),
       });
     }
   };

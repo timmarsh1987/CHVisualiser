@@ -287,6 +287,11 @@ export default function DesignerCanvas() {
               selected={selection.includes(layer.id)}
               onSelect={(e) => handleLayerSelect(layer, e)}
               onMoveStart={(e) => handleMoveStart(layer, e)}
+              onUnlock={
+                mode === 'admin'
+                  ? () => dispatch({ type: 'UPDATE_LAYER', id: layer.id, patch: { locked: false } })
+                  : undefined
+              }
             />
           ))}
 
