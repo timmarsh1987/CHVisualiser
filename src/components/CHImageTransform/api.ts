@@ -1,3 +1,4 @@
+import { getImageDimensions, validateCutout } from './cutoutValidation';
 import type { GeneratedImage, ImageTransformOptions } from './types';
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -22,6 +23,13 @@ export function wantsTransparentCutout(prompt: string): boolean {
   );
 }
 
+async function fetchSourceDimensions(imageUrl: string): Promise<{ width: number; height: number }> {
+  const response = await fetch(imageUrl, { method: 'GET' });
+  if (!response.ok) throw new Error('Could not load source image for dimension check.');
+  const blob = await response.blob();
+  return getImageDimensions(blob);
+}
+
 export async function generateImage(
   imageUrl: string,
   prompt: string,
@@ -33,7 +41,18 @@ export async function generateImage(
     options.requestTimeoutMs ?? 65_000
   );
 
+  const isCutout = wantsTransparentCutout(prompt);
+  let sourceDimensions: { width: number; height: number } | undefined;
+
   try {
+    if (isCutout) {
+      try {
+        sourceDimensions = await fetchSourceDimensions(imageUrl);
+      } catch {
+        console.warn('[CHImageTransform] Could not fetch source dimensions for cutout validation.');
+      }
+    }
+
     const response = await fetch(
       `${options.apiBaseUrl.replace(/\/+$/, '')}/api/seedream/transform`,
       {
@@ -48,7 +67,7 @@ export async function generateImage(
           imageUrl,
           prompt: prompt.trim(),
           outputFormat: 'png',
-          removeBackground: wantsTransparentCutout(prompt),
+          removeBackground: isCutout,
         }),
         signal: controller.signal,
       }
@@ -68,10 +87,20 @@ export async function generateImage(
     const source = await response.blob();
     if (!source.size) throw new Error('The proxy returned an empty image.');
     const blob = await asPngBlob(source);
+
+    if (isCutout) {
+      const cutoutCheck = await validateCutout(blob, sourceDimensions ?? null);
+      if (!cutoutCheck.ok) {
+        throw new Error(cutoutCheck.reason);
+      }
+    }
+
     return {
       blob,
       objectUrl: URL.createObjectURL(blob),
       mimeType: 'image/png',
+      isCutout,
+      sourceDimensions,
     };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {

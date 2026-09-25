@@ -1,4 +1,8 @@
-import type { ImageAssetContext, ImageTransformOptions } from './types';
+import type {
+  GeneratedImage,
+  ImageAssetContext,
+  ImageTransformOptions,
+} from './types';
 
 type UploadResponse = {
   isSuccessStatusCode?: boolean;
@@ -109,6 +113,66 @@ function shouldPreserveTargetRelation(name: string): boolean {
   );
 }
 
+async function setAssetVariant(
+  client: ContentHubClient,
+  assetId: number,
+  variant: string
+): Promise<void> {
+  if (!client.raw?.putAsync) {
+    throw new Error('The Content Hub entity client is unavailable for setting asset variant.');
+  }
+
+  const response = await client.raw.putAsync(`/api/entities/${assetId}`, {
+    entitydefinition: { href: '/api/entitydefinitions/M.Asset' },
+    properties: { assetVariant: variant },
+  });
+
+  if (!response.isSuccessStatusCode) {
+    throw new Error(
+      `Content Hub could not set assetVariant property (HTTP ${response.statusCode ?? 'unknown'}).`
+    );
+  }
+}
+
+async function createCutoutRelation(
+  client: ContentHubClient,
+  sourceAssetId: number,
+  cutoutAssetId: number
+): Promise<boolean> {
+  if (!client.raw?.putAsync) {
+    console.warn(
+      '[CHImageTransform] Entity client unavailable for creating EPAMCutoutToSourceAsset relation.'
+    );
+    return false;
+  }
+
+  try {
+    const response = await client.raw.putAsync(`/api/entities/${cutoutAssetId}`, {
+      entitydefinition: { href: '/api/entitydefinitions/M.Asset' },
+      relations: {
+        EPAMCutoutToSourceAsset: {
+          parents: [{ href: `/api/entities/${sourceAssetId}` }],
+        },
+      },
+    });
+
+    if (!response.isSuccessStatusCode) {
+      console.warn(
+        `[CHImageTransform] Could not create EPAMCutoutToSourceAsset relation (HTTP ${response.statusCode ?? 'unknown'}). ` +
+        'The relation may not exist on this instance.'
+      );
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.warn(
+      '[CHImageTransform] Could not create EPAMCutoutToSourceAsset relation.',
+      err
+    );
+    return false;
+  }
+}
+
 async function copyAssetMetadata(
   client: ContentHubClient,
   sourceAssetId: number,
@@ -213,10 +277,26 @@ async function copyNumericProperties(
   }
 }
 
+function determineCutoutUploadMode(
+  generated: GeneratedImage,
+  options: ImageTransformOptions,
+  requestedMode: ImageUploadMode
+): { uploadMode: ImageUploadMode; shouldTagAsCutout: boolean } {
+  if (!generated.isCutout) {
+    return { uploadMode: requestedMode, shouldTagAsCutout: false };
+  }
+
+  const cutoutMode = options.cutoutOutputMode ?? 'newAsset';
+  if (cutoutMode === 'newVersion') {
+    return { uploadMode: 'version', shouldTagAsCutout: true };
+  }
+  return { uploadMode: 'new-asset', shouldTagAsCutout: true };
+}
+
 export async function uploadGeneratedImage(
   client: ContentHubClient | undefined,
   asset: ImageAssetContext,
-  image: Blob,
+  generated: GeneratedImage,
   options: ImageTransformOptions,
   mode: ImageUploadMode
 ): Promise<number> {
@@ -229,17 +309,19 @@ export async function uploadGeneratedImage(
     throw new Error('Content Hub returned an invalid numeric asset ID.');
   }
 
+  const { uploadMode, shouldTagAsCutout } = determineCutoutUploadMode(generated, options, mode);
+
   const pngBlob =
-    image.type === 'image/png'
-      ? image
-      : new Blob([await image.arrayBuffer()], { type: 'image/png' });
+    generated.blob.type === 'image/png'
+      ? generated.blob
+      : new Blob([await generated.blob.arrayBuffer()], { type: 'image/png' });
   const extension = extensionFor(pngBlob.type);
   const originalStem = asset.fileName.replace(/\.[^.]+$/, '') || `asset-${asset.id}`;
-  const fileName = `${originalStem}-${timestampForFileName()}.${extension}`;
+  const fileName = shouldTagAsCutout && uploadMode === 'new-asset'
+    ? `${originalStem}-cutout.${extension}`
+    : `${originalStem}-${timestampForFileName()}.${extension}`;
   const buffer = await pngBlob.arrayBuffer();
 
-  // This is structurally equivalent to the SDK's ArrayBufferUploadSource and
-  // UploadRequest. The authenticated context client performs create/process/finalize.
   const request: UploadRequestShape = {
     source: {
       name: fileName,
@@ -247,19 +329,24 @@ export async function uploadGeneratedImage(
     },
     configurationName:
       options.uploadConfiguration || 'AssetUploadConfiguration',
-    actionName: mode === 'version' ? 'NewMainFile' : 'NewAsset',
-    actionParameters: mode === 'version' ? { AssetId: assetId } : {},
+    actionName: uploadMode === 'version' ? 'NewMainFile' : 'NewAsset',
+    actionParameters: uploadMode === 'version' ? { AssetId: assetId } : {},
   };
 
   const response = await client.uploads.uploadAsync(request);
   if (response?.isSuccessStatusCode === false) {
     throw new Error(
-      `Content Hub could not ${mode === 'version' ? 'create the new version' : 'create the new asset'} ` +
+      `Content Hub could not ${uploadMode === 'version' ? 'create the new version' : 'create the new asset'} ` +
       `(HTTP ${response.statusCode ?? 'unknown'}).`
     );
   }
 
-  if (mode === 'version') return assetId;
+  if (uploadMode === 'version') {
+    if (shouldTagAsCutout) {
+      await setAssetVariant(client, assetId, 'cutout');
+    }
+    return assetId;
+  }
 
   const newAssetId =
     createdAssetId(response?.content) ||
@@ -267,6 +354,13 @@ export async function uploadGeneratedImage(
   if (!newAssetId) {
     throw new Error('Content Hub created the asset but did not return its asset ID.');
   }
+
   await copyAssetMetadata(client, assetId, newAssetId);
+
+  if (shouldTagAsCutout) {
+    await setAssetVariant(client, newAssetId, 'cutout');
+    await createCutoutRelation(client, assetId, newAssetId);
+  }
+
   return newAssetId;
 }
