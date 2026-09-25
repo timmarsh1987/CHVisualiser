@@ -18,6 +18,7 @@ const COMPONENTS = [
   "AIGovernancePanel",
   "CHImageTransform",
   "CHC2PAProvenance",
+  "CHImageComposer",
 ];
 const distDir = path.join(__dirname, "../../dist");
 

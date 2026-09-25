@@ -19,6 +19,7 @@ export const COMPONENTS = [
   "AIGovernancePanel",
   "CHImageTransform",
   "CHC2PAProvenance",
+  "CHImageComposer",
 ] as const;
 export type ComponentName = (typeof COMPONENTS)[number];
 
