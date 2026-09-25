@@ -1,0 +1,187 @@
+{
+  "_readme": [
+    "Template for the EPAM Image Composer schema.",
+    "The exact import shape differs between Content Hub versions.",
+    "Before importing, export one existing entity definition from your instance (Manage > Schema) and match this file to that shape.",
+    "Names, types and relations below are the part that matters. The wrapper structure is the part to adjust."
+  ],
+
+  "propertyAdditions": [
+    {
+      "targetDefinition": "M.Asset",
+      "name": "assetVariant",
+      "label": "Asset variant",
+      "type": "String",
+      "control": "DropdownList",
+      "isMultiValue": false,
+      "isMandatory": false,
+      "defaultValue": "original",
+      "options": [
+        { "value": "original", "label": "Original" },
+        { "value": "cutout", "label": "Cutout (background removed)" },
+        { "value": "composed", "label": "Composed" }
+      ],
+      "help": "Set by the image adapter (cutout) and the composer (composed)."
+    },
+    {
+      "targetDefinition": "M.Asset",
+      "name": "compositionLayout",
+      "label": "Composition layout",
+      "type": "String",
+      "control": "LongText",
+      "isMultiValue": false,
+      "isMandatory": false,
+      "help": "JSON written by the composer. Do not edit by hand."
+    }
+  ],
+
+  "entityDefinitions": [
+    {
+      "name": "EPAM.ComposerBackground",
+      "label": "Composer background",
+      "labelPlural": "Composer backgrounds",
+      "isTaxonomyItemDefinition": false,
+      "properties": [
+        {
+          "name": "backgroundName",
+          "label": "Background name",
+          "type": "String",
+          "isMandatory": true,
+          "isMultiValue": false
+        },
+        {
+          "name": "sortOrder",
+          "label": "Sort order",
+          "type": "Integer",
+          "isMandatory": true,
+          "defaultValue": 100
+        },
+        {
+          "name": "isActive",
+          "label": "Active",
+          "type": "Boolean",
+          "isMandatory": true,
+          "defaultValue": true
+        },
+        {
+          "name": "defaultAnchorX",
+          "label": "Default anchor X (0 to 1)",
+          "type": "Decimal",
+          "isMandatory": true,
+          "defaultValue": 0.5,
+          "minValue": 0,
+          "maxValue": 1
+        },
+        {
+          "name": "defaultAnchorBottom",
+          "label": "Default anchor bottom (0 to 1)",
+          "type": "Decimal",
+          "isMandatory": true,
+          "defaultValue": 1,
+          "minValue": 0,
+          "maxValue": 1.5
+        },
+        {
+          "name": "defaultHeadshotHeight",
+          "label": "Default headshot height (0 to 1)",
+          "type": "Decimal",
+          "isMandatory": true,
+          "defaultValue": 0.85,
+          "minValue": 0.1,
+          "maxValue": 1.6
+        }
+      ],
+      "notes": "isActive defaults to true. Admins switch a background off instead of deleting it, so old compositions keep their relation."
+    }
+  ],
+
+  "relationDefinitions": [
+    {
+      "name": "EPAMComposerBackgroundToAsset",
+      "label": "Background image",
+      "parentDefinition": "M.Asset",
+      "childDefinition": "EPAM.ComposerBackground",
+      "cardinality": "OneToMany",
+      "parentLabel": "Used as composer background",
+      "childLabel": "Background image",
+      "notes": "One asset can back many composer backgrounds. Each composer background has one asset. Confirm which side is parent and child against how Content Hub exports an existing relation."
+    },
+    {
+      "name": "EPAMCutoutToSourceAsset",
+      "label": "Source asset",
+      "parentDefinition": "M.Asset",
+      "childDefinition": "M.Asset",
+      "cardinality": "OneToMany",
+      "parentLabel": "Cutouts made from this asset",
+      "childLabel": "Source asset",
+      "notes": "Parent is the original headshot. Child is the cutout."
+    },
+    {
+      "name": "EPAMComposedAssetToCutout",
+      "label": "Cutout used",
+      "parentDefinition": "M.Asset",
+      "childDefinition": "M.Asset",
+      "cardinality": "OneToMany",
+      "parentLabel": "Compositions using this cutout",
+      "childLabel": "Cutout used",
+      "notes": "Parent is the cutout. Child is the composed output."
+    },
+    {
+      "name": "EPAMComposedAssetToBackground",
+      "label": "Background used",
+      "parentDefinition": "EPAM.ComposerBackground",
+      "childDefinition": "M.Asset",
+      "cardinality": "OneToMany",
+      "parentLabel": "Compositions using this background",
+      "childLabel": "Background used",
+      "notes": "Parent is the composer background. Child is the composed output."
+    }
+  ],
+
+  "seedData": [
+    {
+      "definition": "EPAM.ComposerBackground",
+      "properties": {
+        "backgroundName": "Studio grey",
+        "sortOrder": 10,
+        "isActive": true,
+        "defaultAnchorX": 0.5,
+        "defaultAnchorBottom": 1,
+        "defaultHeadshotHeight": 0.85
+      }
+    },
+    {
+      "definition": "EPAM.ComposerBackground",
+      "properties": {
+        "backgroundName": "Modern office",
+        "sortOrder": 20,
+        "isActive": true,
+        "defaultAnchorX": 0.55,
+        "defaultAnchorBottom": 1,
+        "defaultHeadshotHeight": 0.8
+      }
+    },
+    {
+      "definition": "EPAM.ComposerBackground",
+      "properties": {
+        "backgroundName": "Brand gradient",
+        "sortOrder": 30,
+        "isActive": true,
+        "defaultAnchorX": 0.5,
+        "defaultAnchorBottom": 1,
+        "defaultHeadshotHeight": 0.9
+      }
+    },
+    {
+      "definition": "EPAM.ComposerBackground",
+      "properties": {
+        "backgroundName": "Outdoor blur",
+        "sortOrder": 40,
+        "isActive": true,
+        "defaultAnchorX": 0.45,
+        "defaultAnchorBottom": 1,
+        "defaultHeadshotHeight": 0.85
+      }
+    }
+  ]
+}
