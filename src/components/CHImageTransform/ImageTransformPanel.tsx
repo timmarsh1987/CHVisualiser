@@ -103,11 +103,13 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
       const uploadedAssetId = await uploadGeneratedImage(
         client,
         asset,
-        generated.blob,
+        generated,
         resolvedOptions,
         mode
       );
-      if (mode === 'version') {
+      if (mode === 'version' && !generated.isCutout) {
+        window.location.reload();
+      } else if (generated.isCutout && resolvedOptions.cutoutOutputMode === 'newVersion') {
         window.location.reload();
       } else {
         window.location.assign(`/en-us/asset/${uploadedAssetId}`);

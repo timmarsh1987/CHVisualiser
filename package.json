@@ -19,6 +19,8 @@
     "codemie:smoke": "node ./scripts/codemie-smoke-test.js"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
     "@mui/material": "^5.11.13",
     "@sitecore/sc-contenthub-webclient-sdk": "^1.2.8",
     "c2pa-node": "0.5.26",

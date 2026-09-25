@@ -1,6 +1,7 @@
-import type { ImageTransformOptions } from './types';
+import type { CutoutOutputMode, ImageTransformOptions } from './types';
 
 const NESTED_KEYS = ['config', 'settings', 'json', 'componentOptions'];
+const VALID_CUTOUT_MODES: CutoutOutputMode[] = ['newAsset', 'newVersion'];
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value) return undefined;
@@ -34,6 +35,17 @@ function asNumber(value: unknown): number | undefined {
   return Number.isFinite(number) ? number : undefined;
 }
 
+function asCutoutOutputMode(value: unknown): CutoutOutputMode | undefined {
+  if (typeof value !== 'string') return undefined;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'newasset') return 'newAsset';
+  if (normalized === 'newversion') return 'newVersion';
+  if (VALID_CUTOUT_MODES.includes(value.trim() as CutoutOutputMode)) {
+    return value.trim() as CutoutOutputMode;
+  }
+  return undefined;
+}
+
 function parseSource(value: unknown): Partial<ImageTransformOptions> {
   const record = toRecord(value);
   if (!record) return {};
@@ -43,6 +55,7 @@ function parseSource(value: unknown): Partial<ImageTransformOptions> {
     apiToken: asString(pick(record, 'apiToken')),
     uploadConfiguration: asString(pick(record, 'uploadConfiguration')),
     requestTimeoutMs: asNumber(pick(record, 'requestTimeoutMs')),
+    cutoutOutputMode: asCutoutOutputMode(pick(record, 'cutoutOutputMode')),
   };
 
   for (const key of NESTED_KEYS) {
