@@ -89,7 +89,10 @@ export default function createExternalRoot(container: HTMLElement) {
         if (cutout.variant !== "cutout") {
           root.render(
             <ThemeProvider theme={context.theme}>
-              <div>This asset is not a cutout. Run background removal first.</div>
+              <div>
+                Asset {cutout.assetId} is not a cutout (AssetVariant is {cutout.variant ?? "empty"}).
+                Run background removal first.
+              </div>
             </ThemeProvider>
           );
           return;

@@ -99,15 +99,30 @@ function idFromHref(href: unknown): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-async function assetWithRenditions(client: ContentHubClient, linked: any): Promise<any | null> {
-  if (!linked) return null;
-  if (linked.renditions) return linked;
-  const assetId = Number(linked.id) || idFromHref(linked.href);
-  if (!assetId || !client.raw?.getAsync) return linked;
-  const assetResponse = await client.raw.getAsync<any>(
-    `/api/entities/${assetId}?members=renditions`
+function renditionUrl(asset: any): string | null {
+  return (
+    asset?.renditions?.preview?.[0]?.href ??
+    asset?.renditions?.downloadOriginal?.[0]?.href ??
+    asset?.renditions?.original?.[0]?.href ??
+    null
   );
-  return assetResponse.isSuccessStatusCode ? assetResponse.content : linked;
+}
+
+async function loadFullEntity(client: ContentHubClient, entity: any): Promise<any | null> {
+  if (!client.raw?.getAsync) return entity ?? null;
+  const id = Number(entity?.id) || idFromHref(entity?.full?.href ?? entity?.href ?? entity?.self?.href);
+  if (!id) return entity ?? null;
+  const response = await client.raw.getAsync<any>(`/api/entities/${id}`);
+  return response.isSuccessStatusCode && response.content ? response.content : entity;
+}
+
+function backgroundRelationHref(relations: Record<string, any> | undefined): string | null {
+  if (!relations) return null;
+  const match = Object.entries(relations).find(
+    ([name]) => name.toLowerCase() === "epamcomposerbackgroundtoasset"
+  );
+  const relation = match?.[1];
+  return relation?.href ?? relation?.self?.href ?? null;
 }
 
 export async function loadBackgrounds(client: ContentHubClient): Promise<Background[]> {
@@ -117,31 +132,27 @@ export async function loadBackgrounds(client: ContentHubClient): Promise<Backgro
 
   const query = encodeURIComponent("Definition.Name=='EPAM.ComposerBackground'");
   const listResponse = await client.raw.getAsync<any>(
-    `/api/entities/query?query=${query}&take=20&members=properties,relations`
+    `/api/entities/query?query=${query}&take=20`
   );
   if (!listResponse.isSuccessStatusCode || !listResponse.content) {
     throw new Error("Failed to load composer backgrounds");
   }
 
   const items: Background[] = [];
-  for (const entity of listResponse.content.items ?? []) {
-    if (!isActiveBackground(entity.properties)) continue;
+  for (const stub of listResponse.content.items ?? []) {
+    // Query results on this instance are stubs with empty properties and relations.
+    const entity = await loadFullEntity(client, stub);
+    if (!entity || !isActiveBackground(entity.properties)) continue;
 
-    const relation = entity.relations?.EPAMComposerBackgroundToAsset;
-    const relHref = relation?.href ?? relation?.self?.href;
+    const relHref = backgroundRelationHref(entity.relations);
     if (!relHref) continue;
 
     const relResponse = await client.raw.getAsync<any>(relHref);
     if (!relResponse.isSuccessStatusCode) continue;
 
     const linked = relResponse.content?.items?.[0] ?? relResponse.content?.parent;
-    const asset = await assetWithRenditions(client, linked);
-    if (!asset) continue;
-
-    const url =
-      asset.renditions?.preview?.[0]?.href ??
-      asset.renditions?.downloadOriginal?.[0]?.href ??
-      asset.renditions?.original?.[0]?.href;
+    const asset = await loadFullEntity(client, linked);
+    const url = renditionUrl(asset);
     if (!url) continue;
 
     const properties = entity.properties ?? {};
@@ -201,9 +212,7 @@ export async function loadComposition(
 ): Promise<{ layout: Layout; backgroundId: number } | null> {
   if (!client.raw?.getAsync) return null;
 
-  const res = await client.raw.getAsync<any>(
-    `/api/entities/${composedAssetId}?members=properties`
-  );
+  const res = await client.raw.getAsync<any>(`/api/entities/${composedAssetId}`);
   if (!res.isSuccessStatusCode || !res.content) return null;
 
   const properties = res.content.properties ?? {};

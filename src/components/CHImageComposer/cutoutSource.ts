@@ -12,6 +12,20 @@ export type CutoutSource = {
   variant: string | null;
 };
 
+function variantText(value: unknown): string | null {
+  if (value == null || value === "") return null;
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (Array.isArray(value)) return variantText(value[0]);
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return variantText(
+      record.identifier ?? record.value ?? record.Invariant ?? record["en-US"] ?? record["en-us"]
+    );
+  }
+  return null;
+}
+
 type ContentHubClient = {
   raw?: {
     getAsync?: <T>(url: string) => Promise<{
@@ -30,9 +44,8 @@ export async function resolveCutout(
     throw new Error("Content Hub client is not available");
   }
 
-  const res = await client.raw.getAsync<any>(
-    `/api/entities/${assetId}?members=renditions,properties`
-  );
+  // A members filter on this instance returns empty property bags. Load the full entity.
+  const res = await client.raw.getAsync<any>(`/api/entities/${assetId}`);
   if (!res.isSuccessStatusCode || !res.content) {
     throw new Error(`Could not load cutout asset ${assetId}: ${res.statusCode}`);
   }
@@ -48,14 +61,11 @@ export async function resolveCutout(
     throw new Error("No original rendition found on the cutout asset");
   }
 
-  const variantValue = asset.properties?.AssetVariant ?? asset.properties?.assetVariant;
-  const variant: string | null = Array.isArray(variantValue)
-    ? (variantValue[0] ?? null)
-    : (variantValue ?? null);
+  const variant = variantText(asset.properties?.AssetVariant ?? asset.properties?.assetVariant);
 
   // Modified date is a cheap fingerprint. Swap for a content hash if available.
   const fingerprint = String(
-    asset.properties?.modifiedOn ?? asset.properties?.["Content-Md5"] ?? asset.id ?? ""
+    asset.modified_on ?? asset.properties?.modifiedOn ?? asset.properties?.["Content-Md5"] ?? asset.id ?? ""
   );
 
   return { url, assetId, fingerprint, variant };
