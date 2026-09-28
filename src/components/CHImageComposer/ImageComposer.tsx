@@ -197,13 +197,6 @@ export function ImageComposer({
     drag.current = null;
   };
 
-  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    setLayout((l) => {
-      const next = l.h * (e.deltaY < 0 ? 1.03 : 0.97);
-      return { ...l, h: Math.min(1.6, Math.max(0.1, next)) };
-    });
-  };
-
   const reset = () => selected && setLayout(makeDefault(selected));
 
   const save = useCallback(async () => {
@@ -271,7 +264,10 @@ export function ImageComposer({
           width={OUT_W}
           height={OUT_H}
           style={{
-            width: "100%",
+            display: "block",
+            width: "min(100%, calc(100vh - 180px))",
+            maxWidth: "100%",
+            height: "auto",
             aspectRatio: "1 / 1",
             touchAction: "none",
             cursor: "grab",
@@ -280,7 +276,6 @@ export function ImageComposer({
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onWheel={onWheel}
         />
       </div>
 
@@ -320,6 +315,7 @@ export function ImageComposer({
             step={0.01}
             value={layout.h}
             onChange={(e) => setLayout((l) => ({ ...l, h: Number(e.target.value) }))}
+            onWheel={(e) => e.currentTarget.blur()}
             style={{ width: "100%" }}
           />
         </label>
