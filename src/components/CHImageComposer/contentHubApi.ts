@@ -79,28 +79,63 @@ function assetIdFromLocation(headers: Record<string, unknown> | undefined): numb
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
+function firstProperty(properties: Record<string, unknown> | undefined, ...names: string[]): unknown {
+  if (!properties) return undefined;
+  for (const name of names) {
+    if (properties[name] != null && properties[name] !== "") return properties[name];
+  }
+  return undefined;
+}
+
+function isActiveBackground(properties: Record<string, unknown> | undefined): boolean {
+  const value = firstProperty(properties, "isActive", "IsActive");
+  return value !== false && value !== "false";
+}
+
+function idFromHref(href: unknown): number | null {
+  const match = String(href ?? "").match(/\/api\/entities\/(\d+)/i);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+async function assetWithRenditions(client: ContentHubClient, linked: any): Promise<any | null> {
+  if (!linked) return null;
+  if (linked.renditions) return linked;
+  const assetId = Number(linked.id) || idFromHref(linked.href);
+  if (!assetId || !client.raw?.getAsync) return linked;
+  const assetResponse = await client.raw.getAsync<any>(
+    `/api/entities/${assetId}?members=renditions`
+  );
+  return assetResponse.isSuccessStatusCode ? assetResponse.content : linked;
+}
+
 export async function loadBackgrounds(client: ContentHubClient): Promise<Background[]> {
   if (!client.raw?.getAsync) {
     throw new Error("Content Hub client is not available");
   }
 
-  const query = encodeURIComponent(
-    "Definition.Name=='EPAM.ComposerBackground' AND isActive==true"
+  const query = encodeURIComponent("Definition.Name=='EPAM.ComposerBackground'");
+  const listResponse = await client.raw.getAsync<any>(
+    `/api/entities/query?query=${query}&take=20&members=properties,relations`
   );
-  const listResponse = await client.raw.getAsync<any>(`/api/entities/query?query=${query}&take=20`);
   if (!listResponse.isSuccessStatusCode || !listResponse.content) {
     throw new Error("Failed to load composer backgrounds");
   }
 
   const items: Background[] = [];
   for (const entity of listResponse.content.items ?? []) {
-    const relHref = entity.relations?.EPAMComposerBackgroundToAsset?.href;
+    if (!isActiveBackground(entity.properties)) continue;
+
+    const relation = entity.relations?.EPAMComposerBackgroundToAsset;
+    const relHref = relation?.href ?? relation?.self?.href;
     if (!relHref) continue;
 
     const relResponse = await client.raw.getAsync<any>(relHref);
     if (!relResponse.isSuccessStatusCode) continue;
 
-    const asset = relResponse.content?.items?.[0] ?? relResponse.content?.parent;
+    const linked = relResponse.content?.items?.[0] ?? relResponse.content?.parent;
+    const asset = await assetWithRenditions(client, linked);
     if (!asset) continue;
 
     const url =
@@ -109,14 +144,17 @@ export async function loadBackgrounds(client: ContentHubClient): Promise<Backgro
       asset.renditions?.original?.[0]?.href;
     if (!url) continue;
 
+    const properties = entity.properties ?? {};
     items.push({
       id: entity.id,
-      name: entity.properties?.backgroundName ?? "Background",
+      name: String(firstProperty(properties, "backgroundName", "BackgroundName") ?? "Background"),
       url,
-      anchorX: entity.properties?.defaultAnchorX ?? 0.5,
-      anchorBottom: entity.properties?.defaultAnchorBottom ?? 1,
-      headshotHeight: entity.properties?.defaultHeadshotHeight ?? 0.85,
-      sortOrder: entity.properties?.sortOrder ?? 100,
+      anchorX: Number(firstProperty(properties, "defaultAnchorX", "DefaultAnchorX") ?? 0.5),
+      anchorBottom: Number(firstProperty(properties, "defaultAnchorBottom", "DefaultAnchorBottom") ?? 1),
+      headshotHeight: Number(
+        firstProperty(properties, "defaultHeadshotHeight", "DefaultHeadshotHeight") ?? 0.85
+      ),
+      sortOrder: Number(firstProperty(properties, "sortOrder", "SortOrder") ?? 100),
     });
   }
   return items.sort((a, b) => a.sortOrder - b.sortOrder);
