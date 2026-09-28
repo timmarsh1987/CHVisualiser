@@ -11,14 +11,64 @@ import { ImageComposer } from "./ImageComposer";
 import { loadBackgrounds, loadComposition, saveComposition } from "./contentHubApi";
 import { resolveCutout } from "./cutoutSource";
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    try {
+      return asRecord(JSON.parse(value));
+    } catch {
+      return null;
+    }
+  }
+  return typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function pickId(record: Record<string, unknown> | null, key: string): number | null {
+  if (!record) return null;
+  const entry = Object.entries(record).find(([name]) => name.toLowerCase() === key.toLowerCase());
+  const id = Number(entry?.[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+function queryId(key: string): number | null {
+  try {
+    return pickId({ [key]: new URLSearchParams(window.location.search).get(key) ?? "" }, key);
+  } catch {
+    return null;
+  }
+}
+
+function entityId(entity: any): number | null {
+  return pickId(
+    { id: entity?.systemProperties?.id ?? entity?.id },
+    "id"
+  );
+}
+
+function resolveIds(context: any): { cutoutAssetId: number | null; composedAssetId: number | null } {
+  const config = asRecord(context?.config);
+  const options = asRecord(context?.options);
+  const cutoutAssetId =
+    pickId(config, "cutoutAssetId") ??
+    pickId(options, "cutoutAssetId") ??
+    queryId("cutoutAssetId") ??
+    pickId(options, "entityId") ??
+    pickId(asRecord(context), "entityId") ??
+    entityId(context?.entity);
+  const composedAssetId =
+    pickId(config, "composedAssetId") ??
+    pickId(options, "composedAssetId") ??
+    queryId("composedAssetId");
+  return { cutoutAssetId, composedAssetId };
+}
+
 export default function createExternalRoot(container: HTMLElement) {
   const root = createRoot(container);
   return {
     async render(context: any) {
-      const cutoutAssetId = Number(context.options?.cutoutAssetId);
-      const composedAssetId = context.options?.composedAssetId
-        ? Number(context.options.composedAssetId)
-        : null;
+      const { cutoutAssetId, composedAssetId } = resolveIds(context);
 
       if (!cutoutAssetId) {
         root.render(
