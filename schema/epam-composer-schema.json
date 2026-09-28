@@ -12,26 +12,18 @@
       "name": "assetVariant",
       "label": "Asset variant",
       "type": "String",
-      "control": "DropdownList",
       "isMultiValue": false,
       "isMandatory": false,
-      "defaultValue": "original",
-      "options": [
-        { "value": "original", "label": "Original" },
-        { "value": "cutout", "label": "Cutout (background removed)" },
-        { "value": "composed", "label": "Composed" }
-      ],
-      "help": "Set by the image adapter (cutout) and the composer (composed)."
+      "help": "Plain string. Image Transform writes cutout. The composer writes composed. Original assets can leave this empty."
     },
     {
       "targetDefinition": "M.Asset",
       "name": "compositionLayout",
       "label": "Composition layout",
-      "type": "String",
-      "control": "LongText",
+      "type": "Json",
       "isMultiValue": false,
       "isMandatory": false,
-      "help": "JSON written by the composer. Do not edit by hand."
+      "help": "JSON object written by the composer. Includes placement plus backgroundId and cutoutAssetId, so those links do not need relations."
     }
   ],
 
@@ -104,39 +96,19 @@
       "cardinality": "OneToMany",
       "parentLabel": "Used as composer background",
       "childLabel": "Background image",
-      "notes": "One asset can back many composer backgrounds. Each composer background has one asset. Confirm which side is parent and child against how Content Hub exports an existing relation."
-    },
-    {
-      "name": "EPAMCutoutToSourceAsset",
-      "label": "Source asset",
-      "parentDefinition": "M.Asset",
-      "childDefinition": "M.Asset",
-      "cardinality": "OneToMany",
-      "parentLabel": "Cutouts made from this asset",
-      "childLabel": "Source asset",
-      "notes": "Parent is the original headshot. Child is the cutout."
-    },
-    {
-      "name": "EPAMComposedAssetToCutout",
-      "label": "Cutout used",
-      "parentDefinition": "M.Asset",
-      "childDefinition": "M.Asset",
-      "cardinality": "OneToMany",
-      "parentLabel": "Compositions using this cutout",
-      "childLabel": "Cutout used",
-      "notes": "Parent is the cutout. Child is the composed output."
-    },
-    {
-      "name": "EPAMComposedAssetToBackground",
-      "label": "Background used",
-      "parentDefinition": "EPAM.ComposerBackground",
-      "childDefinition": "M.Asset",
-      "cardinality": "OneToMany",
-      "parentLabel": "Compositions using this background",
-      "childLabel": "Background used",
-      "notes": "Parent is the composer background. Child is the composed output."
+      "notes": "The only relation between M.Asset and EPAM.ComposerBackground. Do not also create a relation from EPAM.ComposerBackground back to M.Asset. Content Hub rejects that as a circular reference. Which background a composed asset used is stored as backgroundId inside compositionLayout."
     }
   ],
+
+  "compositionLayoutShape": {
+    "cx": 0.5,
+    "by": 1,
+    "h": 0.85,
+    "flipped": false,
+    "cutoutAssetId": 12345,
+    "cutoutFingerprint": "2026-09-25T20:10:00Z",
+    "backgroundId": 67890
+  },
 
   "seedData": [
     {

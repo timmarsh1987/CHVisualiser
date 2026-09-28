@@ -122,6 +122,41 @@ export async function loadBackgrounds(client: ContentHubClient): Promise<Backgro
   return items.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+function readComposition(
+  raw: unknown
+): { layout: Layout; backgroundId: number } | null {
+  let value = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+
+  const record = value as Record<string, unknown>;
+  const backgroundId = Number(record.backgroundId);
+  const cutoutAssetId = Number(record.cutoutAssetId);
+  const cx = Number(record.cx);
+  const by = Number(record.by);
+  const h = Number(record.h);
+  if (![backgroundId, cutoutAssetId, cx, by, h].every((n) => Number.isFinite(n))) return null;
+  if (backgroundId <= 0) return null;
+
+  return {
+    backgroundId,
+    layout: {
+      cx,
+      by,
+      h,
+      flipped: Boolean(record.flipped),
+      cutoutAssetId,
+      cutoutFingerprint: String(record.cutoutFingerprint ?? ""),
+    },
+  };
+}
+
 export async function loadComposition(
   client: ContentHubClient,
   composedAssetId: number
@@ -129,30 +164,11 @@ export async function loadComposition(
   if (!client.raw?.getAsync) return null;
 
   const res = await client.raw.getAsync<any>(
-    `/api/entities/${composedAssetId}?members=properties,relations`
+    `/api/entities/${composedAssetId}?members=properties`
   );
   if (!res.isSuccessStatusCode || !res.content) return null;
 
-  const raw = res.content.properties?.compositionLayout;
-  if (!raw) return null;
-
-  let layout: Layout;
-  try {
-    layout = JSON.parse(raw);
-  } catch {
-    return null;
-  }
-
-  const bgHref = res.content.relations?.EPAMComposedAssetToBackground?.href;
-  if (!bgHref) return null;
-
-  const relResponse = await client.raw.getAsync<any>(bgHref);
-  if (!relResponse.isSuccessStatusCode) return null;
-
-  const backgroundId = relResponse.content?.items?.[0]?.id ?? relResponse.content?.parent?.id;
-  if (!backgroundId) return null;
-
-  return { layout, backgroundId };
+  return readComposition(res.content.properties?.compositionLayout);
 }
 
 async function uploadBlob(
@@ -215,7 +231,10 @@ export async function saveComposition(
     entitydefinition: { href: "/api/entitydefinitions/M.Asset" },
     properties: {
       assetVariant: "composed",
-      compositionLayout: JSON.stringify(opts.layout),
+      compositionLayout: {
+        ...opts.layout,
+        backgroundId: opts.background.id,
+      },
     },
   });
 
@@ -223,30 +242,6 @@ export async function saveComposition(
     console.warn(
       `[CHImageComposer] Could not set properties on asset ${newAssetId}: ${updateResponse.statusCode}`
     );
-  }
-
-  // Set relations to cutout and background
-  // Using the children pattern since composed asset is the child
-  try {
-    await client.raw.putAsync(
-      `/api/entities/${newAssetId}/relations/EPAMComposedAssetToCutout`,
-      {
-        parent: { href: `/api/entities/${opts.cutoutAssetId}` },
-      }
-    );
-  } catch (e) {
-    console.warn("[CHImageComposer] Could not set cutout relation:", e);
-  }
-
-  try {
-    await client.raw.putAsync(
-      `/api/entities/${newAssetId}/relations/EPAMComposedAssetToBackground`,
-      {
-        parent: { href: `/api/entities/${opts.background.id}` },
-      }
-    );
-  } catch (e) {
-    console.warn("[CHImageComposer] Could not set background relation:", e);
   }
 
   return newAssetId;

@@ -18,10 +18,10 @@ A user opens a cutout asset, picks one of up to four backgrounds, drags and scal
 Original headshot (assetVariant = original)
    |  image transform: remove background  (see TRANSFORM_BRIEF.md)
    v
-Cutout, transparent PNG (assetVariant = cutout)   relation: EPAMCutoutToSourceAsset
+Cutout, transparent PNG (assetVariant = cutout)
    |  "Open in composer" action, then the composer (this spec)
    v
-Composed JPEG (assetVariant = composed)   relations: EPAMComposedAssetToCutout, EPAMComposedAssetToBackground
+Composed JPEG (assetVariant = composed)   compositionLayout JSON: cutoutAssetId, backgroundId
 ```
 
 Two separate deliverables, built in this order:
@@ -58,8 +58,8 @@ Treat the code as a starting point, not final. Several API calls were written fr
 
 | Property | Type | Values or notes |
 |---|---|---|
-| `assetVariant` | Dropdown (string) | `original`, `cutout`, `composed`. Default `original`. Set to `cutout` by the transform and `composed` by the composer. |
-| `compositionLayout` | Long text | JSON written by the composer. |
+| `assetVariant` | String | `cutout` or `composed`. Set to `cutout` by the transform and `composed` by the composer. Original assets leave it empty. |
+| `compositionLayout` | JSON | Object written by the composer. Includes placement, `cutoutAssetId`, and `backgroundId`. |
 
 ### 5.2 New entity `EPAM.ComposerBackground`
 
@@ -77,9 +77,8 @@ Treat the code as a starting point, not final. Several API calls were written fr
 | Relation | Parent | Child | Created by |
 |---|---|---|---|
 | `EPAMComposerBackgroundToAsset` | `M.Asset` (the background image) | `EPAM.ComposerBackground` | Admin |
-| `EPAMCutoutToSourceAsset` | `M.Asset` (original headshot) | `M.Asset` (cutout) | Transform |
-| `EPAMComposedAssetToCutout` | `M.Asset` (cutout) | `M.Asset` (composed) | Composer |
-| `EPAMComposedAssetToBackground` | `EPAM.ComposerBackground` | `M.Asset` (composed) | Composer |
+
+Do not add a second relation from `EPAM.ComposerBackground` back to `M.Asset`. Content Hub treats the two directions as a circular reference. The composed asset records its cutout and background inside `compositionLayout` (`cutoutAssetId`, `backgroundId`) instead of relations. `EPAMCutoutToSourceAsset` is optional and is a self-relation on `M.Asset`; it is not required for the composer.
 
 ### 5.4 Layout JSON (stored in `compositionLayout`)
 
@@ -90,12 +89,13 @@ Treat the code as a starting point, not final. Several API calls were written fr
   "h": 0.85,
   "flipped": false,
   "cutoutAssetId": 12345,
-  "cutoutFingerprint": "2026-09-25T20:10:00Z"
+  "cutoutFingerprint": "2026-09-25T20:10:00Z",
+  "backgroundId": 67890
 }
 ```
 
 - `cx`, `by`, `h` are fractions of the 1200 x 1200 canvas, so the layout does not depend on screen size.
-- The background is not stored in the JSON. It comes from the `EPAMComposedAssetToBackground` relation.
+- `backgroundId` is the `EPAM.ComposerBackground` entity id. `cutoutAssetId` is the cutout asset id.
 
 ## 6. Functional requirements
 
@@ -154,7 +154,7 @@ export function hasTransparency(img: HTMLImageElement): boolean {
 
 1. Export the canvas as JPEG at quality 0.92, 1200 x 1200. The composed output is a JPEG because it has a solid background. The transparent PNG is only the cutout.
 2. Create a new asset from the blob.
-3. On the new asset set `assetVariant = composed`, set `compositionLayout`, and create the relations to the cutout and the background.
+3. On the new asset set `assetVariant = composed` and set `compositionLayout` to the JSON object, including `backgroundId`.
 4. The asset gets whatever lifecycle default the instance has. No custom lifecycle.
 5. On success show an inline confirmation with a link to the new asset. On failure show an inline error and keep the composer state so the user can retry.
 
@@ -195,7 +195,7 @@ Stop for review after each step.
 4. Selecting each background places the headshot at that background's default anchors.
 5. An opaque cutout shows the warning and cannot be saved.
 6. The exported JPEG matches the canvas the user saw, at 1200 x 1200, with no white box around the head.
-7. After saving, a new asset exists with `assetVariant = composed`, `compositionLayout` populated, and relations to the correct cutout and background.
+7. After saving, a new asset exists with `assetVariant = composed` and `compositionLayout` populated, including the correct `cutoutAssetId` and `backgroundId`.
 8. Reopening the composed asset in the composer restores position, size, flip and background.
 9. Replacing the cutout with a new version and reopening shows the stale banner. "Keep layout" dismisses it.
 10. No modal dialogs appear anywhere in the flow.
@@ -215,8 +215,8 @@ Stop for review after each step.
 These were written from memory and have not been run against a real instance.
 
 1. **Upload flow.** The v2.0 upload steps, especially finalize and how to read the new asset id, differ by version. The transform already uploads successfully, so reuse that approach and delete `uploadBlob` if it works.
-2. **Relation payload shape.** `parents: [{ href }]` inside `relations` is the expected shape. Confirm on a real PUT.
-3. **Relation direction.** Confirm which side is parent and child in the export format so the cardinality is right.
+2. **No composed-asset relations.** Content Hub rejects a relation from `EPAM.ComposerBackground` back to `M.Asset` once `EPAMComposerBackgroundToAsset` exists. Cutout and background ids live in `compositionLayout`.
+3. **JSON property shape.** `compositionLayout` is a JSON member. The save call writes an object. Load accepts that object or a JSON string.
 4. **Rendition names.** `downloadOriginal`, `original` and `preview` may be named differently. Log the renditions object once and fix the names.
 5. **Fingerprint.** `modifiedOn` is a weak fingerprint. Use a content hash if the instance exposes one.
 6. **Page registration.** The `createExternalRoot` signature and option passing depend on the Content Hub version.
