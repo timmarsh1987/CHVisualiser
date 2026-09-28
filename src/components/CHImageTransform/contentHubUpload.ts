@@ -124,7 +124,7 @@ async function setAssetVariant(
 
   const response = await client.raw.putAsync(`/api/entities/${assetId}`, {
     entitydefinition: { href: '/api/entitydefinitions/M.Asset' },
-    properties: { assetVariant: variant },
+    properties: { AssetVariant: variant },
   });
 
   if (!response.isSuccessStatusCode) {

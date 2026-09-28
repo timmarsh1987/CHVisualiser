@@ -48,7 +48,7 @@ export async function resolveCutout(
     throw new Error("No original rendition found on the cutout asset");
   }
 
-  const variantValue = asset.properties?.assetVariant;
+  const variantValue = asset.properties?.AssetVariant ?? asset.properties?.assetVariant;
   const variant: string | null = Array.isArray(variantValue)
     ? (variantValue[0] ?? null)
     : (variantValue ?? null);

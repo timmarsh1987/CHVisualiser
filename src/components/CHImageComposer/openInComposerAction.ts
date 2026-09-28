@@ -24,13 +24,13 @@ async function getAssetVariant(entityId: number): Promise<string | null> {
   });
   if (!res.ok) return null;
   const asset = await res.json();
-  const value = asset.properties?.assetVariant;
+  const value = asset.properties?.AssetVariant ?? asset.properties?.assetVariant;
   // Taxonomy and dropdown values can come back as a string or an array
   return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }
 
 export async function canOpenInComposer(ctx: ActionContext): Promise<boolean> {
-  const fromContext = ctx.properties?.assetVariant;
+  const fromContext = ctx.properties?.AssetVariant ?? ctx.properties?.assetVariant;
   if (fromContext !== undefined) {
     const v = Array.isArray(fromContext) ? fromContext[0] : fromContext;
     return v === "cutout";

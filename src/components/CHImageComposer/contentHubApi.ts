@@ -168,7 +168,8 @@ export async function loadComposition(
   );
   if (!res.isSuccessStatusCode || !res.content) return null;
 
-  return readComposition(res.content.properties?.compositionLayout);
+  const properties = res.content.properties ?? {};
+  return readComposition(properties.CompositionLayout ?? properties.compositionLayout);
 }
 
 async function uploadBlob(
@@ -230,8 +231,8 @@ export async function saveComposition(
   const updateResponse = await client.raw.putAsync(`/api/entities/${newAssetId}`, {
     entitydefinition: { href: "/api/entitydefinitions/M.Asset" },
     properties: {
-      assetVariant: "composed",
-      compositionLayout: {
+      AssetVariant: "composed",
+      CompositionLayout: {
         ...opts.layout,
         backgroundId: opts.background.id,
       },

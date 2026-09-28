@@ -8800,13 +8800,16 @@ function Kg(e) {
   };
 }
 async function Qg(e, t) {
-  var r, o;
-  if (!((r = e.raw) != null && r.getAsync))
+  var o;
+  if (!((o = e.raw) != null && o.getAsync))
     return null;
   const n = await e.raw.getAsync(
     `/api/entities/${t}?members=properties`
   );
-  return !n.isSuccessStatusCode || !n.content ? null : Kg((o = n.content.properties) == null ? void 0 : o.compositionLayout);
+  if (!n.isSuccessStatusCode || !n.content)
+    return null;
+  const r = n.content.properties ?? {};
+  return Kg(r.CompositionLayout ?? r.compositionLayout);
 }
 async function Yg(e, t, n) {
   var u;
@@ -8838,8 +8841,8 @@ async function Gg(e, t) {
   const l = await e.raw.putAsync(`/api/entities/${o}`, {
     entitydefinition: { href: "/api/entitydefinitions/M.Asset" },
     properties: {
-      assetVariant: "composed",
-      compositionLayout: {
+      AssetVariant: "composed",
+      CompositionLayout: {
         ...t.layout,
         backgroundId: t.background.id
       }
@@ -8850,7 +8853,7 @@ async function Gg(e, t) {
   ), o;
 }
 async function Xg(e, t) {
-  var s, a, h, m, p, v, g, y, _, f, c, d, w;
+  var s, a, h, m, p, v, g, y, _, f, c, d, w, x;
   if (!((s = e.raw) != null && s.getAsync))
     throw new Error("Content Hub client is not available");
   const n = await e.raw.getAsync(
@@ -8861,8 +8864,8 @@ async function Xg(e, t) {
   const r = n.content, o = ((m = (h = (a = r.renditions) == null ? void 0 : a.downloadOriginal) == null ? void 0 : h[0]) == null ? void 0 : m.href) ?? ((g = (v = (p = r.renditions) == null ? void 0 : p.original) == null ? void 0 : v[0]) == null ? void 0 : g.href) ?? ((f = (_ = (y = r.renditions) == null ? void 0 : y.preview) == null ? void 0 : _[0]) == null ? void 0 : f.href);
   if (!o)
     throw new Error("No original rendition found on the cutout asset");
-  const l = (c = r.properties) == null ? void 0 : c.assetVariant, i = Array.isArray(l) ? l[0] ?? null : l ?? null, u = String(
-    ((d = r.properties) == null ? void 0 : d.modifiedOn) ?? ((w = r.properties) == null ? void 0 : w["Content-Md5"]) ?? r.id ?? ""
+  const l = ((c = r.properties) == null ? void 0 : c.AssetVariant) ?? ((d = r.properties) == null ? void 0 : d.assetVariant), i = Array.isArray(l) ? l[0] ?? null : l ?? null, u = String(
+    ((w = r.properties) == null ? void 0 : w.modifiedOn) ?? ((x = r.properties) == null ? void 0 : x["Content-Md5"]) ?? r.id ?? ""
   );
   return { url: o, assetId: t, fingerprint: u, variant: i };
 }

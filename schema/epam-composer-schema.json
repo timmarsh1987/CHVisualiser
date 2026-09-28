@@ -9,7 +9,7 @@
   "propertyAdditions": [
     {
       "targetDefinition": "M.Asset",
-      "name": "assetVariant",
+      "name": "AssetVariant",
       "label": "Asset variant",
       "type": "String",
       "isMultiValue": false,
@@ -18,7 +18,7 @@
     },
     {
       "targetDefinition": "M.Asset",
-      "name": "compositionLayout",
+      "name": "CompositionLayout",
       "label": "Composition layout",
       "type": "Json",
       "isMultiValue": false,
