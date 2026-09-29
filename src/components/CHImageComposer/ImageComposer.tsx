@@ -1,6 +1,6 @@
 // ImageComposer.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { isLogoId, LOGOS, type LogoId } from "./logos";
+import { EPAM_LOGOS, LOGO_SOURCES, SITECORE_LOGO, type EpamLogo, type LogoImageKey } from "./logos";
 
 export type Background = {
   id: number;
@@ -20,7 +20,18 @@ export type Layout = {
   cutoutAssetId: number;
   cutoutFingerprint: string;
   text: string;
-  logo: LogoId;
+  textColor: "white" | "black";
+  textSize: number;
+  textX: number;
+  textY: number;
+  showSitecore: boolean;
+  epamLogo: EpamLogo;
+  sitecoreX: number;
+  sitecoreY: number;
+  sitecoreScale: number;
+  epamX: number;
+  epamY: number;
+  epamScale: number;
 };
 
 type Props = {
@@ -76,12 +87,38 @@ export function hasTransparency(img: HTMLImageElement): boolean {
   }
 }
 
-function drawLogo(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
-  const margin = 48;
-  const maxW = OUT_W * 0.36;
-  const maxH = OUT_H * 0.12;
-  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
-  ctx.drawImage(img, margin, margin, img.naturalWidth * scale, img.naturalHeight * scale);
+const OVERLAY_DEFAULTS = {
+  text: "",
+  textColor: "white" as const,
+  textSize: 46,
+  textX: 0.04,
+  textY: 0.78,
+  showSitecore: false,
+  epamLogo: "none" as const,
+  sitecoreX: 0.04,
+  sitecoreY: 0.04,
+  sitecoreScale: 1,
+  epamX: 0.46,
+  epamY: 0.04,
+  epamScale: 1,
+};
+
+type Box = { x: number; y: number; w: number; h: number };
+
+function logoPixelSize(img: HTMLImageElement, scale: number) {
+  const maxW = OUT_W * 0.36 * scale;
+  const maxH = OUT_H * 0.12 * scale;
+  const fit = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+  return { w: img.naturalWidth * fit, h: img.naturalHeight * fit };
+}
+
+function logoBox(img: HTMLImageElement, x: number, y: number, scale: number): Box {
+  const size = logoPixelSize(img, scale);
+  return { x: x * OUT_W, y: y * OUT_H, w: size.w, h: size.h };
+}
+
+function drawLogoAt(ctx: CanvasRenderingContext2D, img: HTMLImageElement, box: Box) {
+  ctx.drawImage(img, box.x, box.y, box.w, box.h);
 }
 
 function wrapLine(ctx: CanvasRenderingContext2D, line: string, maxWidth: number): string[] {
@@ -102,30 +139,133 @@ function wrapLine(ctx: CanvasRenderingContext2D, line: string, maxWidth: number)
   return lines;
 }
 
-function drawCaption(ctx: CanvasRenderingContext2D, text: string) {
+type CaptionMetrics = Box & { lines: string[]; lineHeight: number };
+
+function captionMetrics(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  fontSize: number,
+  x: number,
+  y: number
+): CaptionMetrics | null {
   const source = text
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
-  if (source.length === 0) return;
+  if (source.length === 0) return null;
 
-  const margin = 48;
-  const maxWidth = OUT_W - margin * 2;
   ctx.save();
-  ctx.font = "600 46px Arial, Helvetica, sans-serif";
-  ctx.textBaseline = "bottom";
-  const lines = source.flatMap((line) => wrapLine(ctx, line, maxWidth));
-  const lineHeight = 58;
-  let y = OUT_H - margin;
-  ctx.shadowColor = "rgba(0,0,0,0.72)";
-  ctx.shadowBlur = 12;
-  ctx.shadowOffsetY = 2;
-  ctx.fillStyle = "#ffffff";
-  for (let i = lines.length - 1; i >= 0; i--) {
-    ctx.fillText(lines[i], margin, y);
-    y -= lineHeight;
-  }
+  ctx.font = `600 ${fontSize}px Arial, Helvetica, sans-serif`;
+  const lines = source.flatMap((line) => wrapLine(ctx, line, OUT_W * 0.72));
   ctx.restore();
+  const lineHeight = fontSize * 1.25;
+  const width = Math.max(...lines.map((line) => {
+    ctx.font = `600 ${fontSize}px Arial, Helvetica, sans-serif`;
+    return ctx.measureText(line).width;
+  }));
+  return { x: x * OUT_W, y: y * OUT_H, w: width, h: lines.length * lineHeight, lines, lineHeight };
+}
+
+function drawCaptionAt(
+  ctx: CanvasRenderingContext2D,
+  metrics: CaptionMetrics,
+  color: "white" | "black"
+) {
+  ctx.save();
+  ctx.font = `600 ${metrics.lineHeight / 1.25}px Arial, Helvetica, sans-serif`;
+  ctx.textBaseline = "top";
+  ctx.fillStyle = color === "black" ? "#111111" : "#ffffff";
+  ctx.shadowColor = color === "black" ? "rgba(255,255,255,0.65)" : "rgba(0,0,0,0.72)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetY = 2;
+  metrics.lines.forEach((line, index) => {
+    ctx.fillText(line, metrics.x, metrics.y + index * metrics.lineHeight);
+  });
+  ctx.restore();
+}
+
+function pointInBox(px: number, py: number, box: Box) {
+  return px >= box.x && px <= box.x + box.w && py >= box.y && py <= box.y + box.h;
+}
+
+type DragLayer = "cutout" | "sitecore" | "epam" | "text";
+
+type DragState = {
+  layer: DragLayer;
+  startX: number;
+  startY: number;
+  cx: number;
+  by: number;
+  x: number;
+  y: number;
+};
+
+function choiceStyle(selected: boolean, background = "#fff"): React.CSSProperties {
+  return {
+    padding: 6,
+    minHeight: 52,
+    border: selected ? "2px solid #0a6cff" : "2px solid #ddd",
+    borderRadius: 6,
+    background,
+    cursor: "pointer",
+    color: "#222",
+  };
+}
+
+function strokeBox(ctx: CanvasRenderingContext2D, box: Box) {
+  ctx.save();
+  ctx.strokeStyle = "#0a6cff";
+  ctx.lineWidth = 3;
+  ctx.setLineDash([10, 6]);
+  ctx.strokeRect(box.x - 6, box.y - 6, box.w + 12, box.h + 12);
+  ctx.restore();
+}
+
+function overlayOf(layout: Layout) {
+  return {
+    text: layout.text,
+    textColor: layout.textColor,
+    textSize: layout.textSize,
+    textX: layout.textX,
+    textY: layout.textY,
+    showSitecore: layout.showSitecore,
+    epamLogo: layout.epamLogo,
+    sitecoreX: layout.sitecoreX,
+    sitecoreY: layout.sitecoreY,
+    sitecoreScale: layout.sitecoreScale,
+    epamX: layout.epamX,
+    epamY: layout.epamY,
+    epamScale: layout.epamScale,
+  };
+}
+
+function layerAtPoint(
+  canvas: HTMLCanvasElement,
+  clientX: number,
+  clientY: number,
+  layout: Layout,
+  images: Partial<Record<LogoImageKey, HTMLImageElement>>
+): DragLayer {
+  const rect = canvas.getBoundingClientRect();
+  const px = ((clientX - rect.left) / rect.width) * OUT_W;
+  const py = ((clientY - rect.top) / rect.height) * OUT_H;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    const caption = captionMetrics(ctx, layout.text, layout.textSize, layout.textX, layout.textY);
+    if (caption && pointInBox(px, py, caption)) return "text";
+  }
+  if (layout.epamLogo !== "none") {
+    const img = images[layout.epamLogo];
+    if (img && pointInBox(px, py, logoBox(img, layout.epamX, layout.epamY, layout.epamScale))) {
+      return "epam";
+    }
+  }
+  if (layout.showSitecore && images.sitecore) {
+    if (pointInBox(px, py, logoBox(images.sitecore, layout.sitecoreX, layout.sitecoreY, layout.sitecoreScale))) {
+      return "sitecore";
+    }
+  }
+  return "cutout";
 }
 
 export function ImageComposer({
@@ -146,10 +286,11 @@ export function ImageComposer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
-  const [logoImages, setLogoImages] = useState<Partial<Record<LogoId, HTMLImageElement>>>({});
+  const [logoImages, setLogoImages] = useState<Partial<Record<LogoImageKey, HTMLImageElement>>>({});
+  const [activeLayer, setActiveLayer] = useState<DragLayer>("cutout");
   const [opaque, setOpaque] = useState(false);
   const [staleDismissed, setStaleDismissed] = useState(false);
-  const drag = useRef<{ startX: number; startY: number; cx: number; by: number } | null>(null);
+  const drag = useRef<DragState | null>(null);
 
   const makeDefault = useCallback(
     (bg: Background): Layout => ({
@@ -159,31 +300,25 @@ export function ImageComposer({
       flipped: false,
       cutoutAssetId,
       cutoutFingerprint,
-      text: "",
-      logo: "none",
+      ...OVERLAY_DEFAULTS,
     }),
     [cutoutAssetId, cutoutFingerprint]
   );
 
   const [layout, setLayout] = useState<Layout>(() => {
     const base = initial?.layout ?? (backgrounds[0] ? makeDefault(backgrounds[0]) : null);
-    if (base) {
+    if (!base) {
       return {
-        ...base,
-        text: base.text ?? "",
-        logo: isLogoId(base.logo) ? base.logo : "none",
+        cx: 0.5,
+        by: 1,
+        h: 0.85,
+        flipped: false,
+        cutoutAssetId,
+        cutoutFingerprint,
+        ...OVERLAY_DEFAULTS,
       };
     }
-    return {
-      cx: 0.5,
-      by: 1,
-      h: 0.85,
-      flipped: false,
-      cutoutAssetId,
-      cutoutFingerprint,
-      text: "",
-      logo: "none",
-    };
+    return { ...OVERLAY_DEFAULTS, ...base };
   });
 
   const selected = backgrounds.find((b) => b.id === selectedId) ?? null;
@@ -222,11 +357,11 @@ export function ImageComposer({
   useEffect(() => {
     let cancelled = false;
     Promise.all(
-      LOGOS.map(async (logo) => [logo.id, await loadImage(logo.src)] as const)
+      LOGO_SOURCES.map(async (logo) => [logo.id, await loadImage(logo.src)] as const)
     )
       .then((pairs) => {
         if (cancelled) return;
-        const map: Partial<Record<LogoId, HTMLImageElement>> = {};
+        const map: Partial<Record<LogoImageKey, HTMLImageElement>> = {};
         for (const [id, img] of pairs) map[id] = img;
         setLogoImages(map);
       })
@@ -264,24 +399,49 @@ export function ImageComposer({
     ctx.drawImage(cutout, -w / 2, -h, w, h);
     ctx.restore();
 
-    const logoImage = layout.logo !== "none" ? logoImages[layout.logo] : null;
-    if (logoImage) drawLogo(ctx, logoImage);
-    drawCaption(ctx, layout.text);
-  }, [cutout, bgImages, selected, layout, logoImages]);
+    const sitecoreImage = layout.showSitecore ? logoImages.sitecore : null;
+    if (sitecoreImage) {
+      drawLogoAt(ctx, sitecoreImage, logoBox(sitecoreImage, layout.sitecoreX, layout.sitecoreY, layout.sitecoreScale));
+    }
+    const epamImage = layout.epamLogo !== "none" ? logoImages[layout.epamLogo] : null;
+    if (epamImage) {
+      drawLogoAt(ctx, epamImage, logoBox(epamImage, layout.epamX, layout.epamY, layout.epamScale));
+    }
+    const caption = captionMetrics(ctx, layout.text, layout.textSize, layout.textX, layout.textY);
+    if (caption) drawCaptionAt(ctx, caption, layout.textColor);
+
+    if (activeLayer === "sitecore" && sitecoreImage) {
+      strokeBox(ctx, logoBox(sitecoreImage, layout.sitecoreX, layout.sitecoreY, layout.sitecoreScale));
+    }
+    if (activeLayer === "epam" && epamImage) {
+      strokeBox(ctx, logoBox(epamImage, layout.epamX, layout.epamY, layout.epamScale));
+    }
+    if (activeLayer === "text" && caption) strokeBox(ctx, caption);
+  }, [cutout, bgImages, selected, layout, logoImages, activeLayer]);
 
   const chooseBackground = (bg: Background) => {
     setSelectedId(bg.id);
     setLayout((current) => ({
       ...makeDefault(bg),
-      text: current.text,
-      logo: current.logo,
+      ...overlayOf(current),
     }));
     setStaleDismissed(true);
   };
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
-    e.currentTarget.setPointerCapture(e.pointerId);
-    drag.current = { startX: e.clientX, startY: e.clientY, cx: layout.cx, by: layout.by };
+    const canvas = e.currentTarget;
+    canvas.setPointerCapture(e.pointerId);
+    const layer = layerAtPoint(canvas, e.clientX, e.clientY, layout, logoImages);
+    setActiveLayer(layer);
+    drag.current = {
+      layer,
+      startX: e.clientX,
+      startY: e.clientY,
+      cx: layout.cx,
+      by: layout.by,
+      x: layer === "sitecore" ? layout.sitecoreX : layer === "epam" ? layout.epamX : layout.textX,
+      y: layer === "sitecore" ? layout.sitecoreY : layer === "epam" ? layout.epamY : layout.textY,
+    };
   };
 
   const onPointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -290,7 +450,15 @@ export function ImageComposer({
     const rect = e.currentTarget.getBoundingClientRect();
     const dx = (e.clientX - d.startX) / rect.width;
     const dy = (e.clientY - d.startY) / rect.height;
-    setLayout((l) => ({ ...l, cx: d.cx + dx, by: d.by + dy }));
+    if (d.layer === "cutout") {
+      setLayout((l) => ({ ...l, cx: d.cx + dx, by: d.by + dy }));
+      return;
+    }
+    const x = d.x + dx;
+    const y = d.y + dy;
+    if (d.layer === "sitecore") setLayout((l) => ({ ...l, sitecoreX: x, sitecoreY: y }));
+    if (d.layer === "epam") setLayout((l) => ({ ...l, epamX: x, epamY: y }));
+    if (d.layer === "text") setLayout((l) => ({ ...l, textX: x, textY: y }));
   };
 
   const onPointerUp = () => {
@@ -301,8 +469,7 @@ export function ImageComposer({
     selected &&
     setLayout((current) => ({
       ...makeDefault(selected),
-      text: current.text,
-      logo: current.logo,
+      ...overlayOf(current),
     }));
 
   const save = useCallback(async () => {
@@ -413,63 +580,108 @@ export function ImageComposer({
         </div>
 
         <div>
-          <strong>Logo</strong>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+          <strong>Logos</strong>
+          <p style={{ margin: "6px 0 8px", fontSize: 12, color: "#444" }}>
+            Sitecore and one EPAM logo can be on together. Drag a logo on the preview to move it.
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <button
               type="button"
-              onClick={() => setLayout((l) => ({ ...l, logo: "none" }))}
-              style={{
-                minHeight: 52,
-                border: layout.logo === "none" ? "2px solid #0a6cff" : "2px solid #ddd",
-                borderRadius: 6,
-                background: "#fff",
-                cursor: "pointer",
-              }}
+              onClick={() => setLayout((l) => ({ ...l, showSitecore: false, epamLogo: "none" }))}
+              style={choiceStyle(!layout.showSitecore && layout.epamLogo === "none")}
             >
-              None
+              Logos off
             </button>
-            {LOGOS.map((logo) => (
+            <button
+              type="button"
+              onClick={() => setLayout((l) => ({ ...l, showSitecore: !l.showSitecore }))}
+              style={choiceStyle(layout.showSitecore, "#fff")}
+            >
+              <img src={SITECORE_LOGO.src} alt="Sitecore" style={{ width: "100%", height: 28, objectFit: "contain" }} />
+              <div style={{ fontSize: 11, paddingTop: 4 }}>Sitecore</div>
+            </button>
+            {EPAM_LOGOS.map((logo) => (
               <button
                 key={logo.id}
                 type="button"
-                onClick={() => setLayout((l) => ({ ...l, logo: logo.id }))}
-                style={{
-                  padding: 6,
-                  border: layout.logo === logo.id ? "2px solid #0a6cff" : "2px solid #ddd",
-                  borderRadius: 6,
-                  background: logo.id === "epam-white" ? "#1a1a1a" : "#fff",
-                  cursor: "pointer",
-                }}
+                onClick={() =>
+                  setLayout((l) => ({ ...l, epamLogo: l.epamLogo === logo.id ? "none" : logo.id }))
+                }
+                style={choiceStyle(layout.epamLogo === logo.id, logo.id === "white" ? "#1a1a1a" : "#fff")}
               >
-                <img
-                  src={logo.src}
-                  alt={logo.label}
-                  style={{ width: "100%", height: 28, objectFit: "contain" }}
-                />
-                <div
-                  style={{
-                    fontSize: 11,
-                    paddingTop: 4,
-                    color: logo.id === "epam-white" ? "#fff" : "#222",
-                  }}
-                >
+                <img src={logo.src} alt={logo.label} style={{ width: "100%", height: 28, objectFit: "contain" }} />
+                <div style={{ fontSize: 11, paddingTop: 4, color: logo.id === "white" ? "#fff" : "#222" }}>
                   {logo.label}
                 </div>
               </button>
             ))}
           </div>
+          {layout.showSitecore && (
+            <label style={{ display: "block", marginTop: 10 }}>
+              Sitecore size
+              <input
+                type="range"
+                min={0.4}
+                max={2.5}
+                step={0.01}
+                value={layout.sitecoreScale}
+                onChange={(e) => setLayout((l) => ({ ...l, sitecoreScale: Number(e.target.value) }))}
+                onWheel={(e) => e.currentTarget.blur()}
+                style={{ width: "100%" }}
+              />
+            </label>
+          )}
+          {layout.epamLogo !== "none" && (
+            <label style={{ display: "block", marginTop: 10 }}>
+              EPAM size
+              <input
+                type="range"
+                min={0.4}
+                max={2.5}
+                step={0.01}
+                value={layout.epamScale}
+                onChange={(e) => setLayout((l) => ({ ...l, epamScale: Number(e.target.value) }))}
+                onWheel={(e) => e.currentTarget.blur()}
+                style={{ width: "100%" }}
+              />
+            </label>
+          )}
         </div>
 
-        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-          Custom text
-          <textarea
-            value={layout.text}
-            rows={3}
-            placeholder="Add a name or caption"
-            onChange={(e) => setLayout((l) => ({ ...l, text: e.target.value }))}
-            style={{ width: "100%", resize: "vertical", font: "inherit" }}
-          />
-        </label>
+        <div>
+          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            Custom text
+            <textarea
+              value={layout.text}
+              rows={3}
+              placeholder="Add a name or caption"
+              onChange={(e) => setLayout((l) => ({ ...l, text: e.target.value }))}
+              style={{ width: "100%", resize: "vertical", font: "inherit" }}
+            />
+          </label>
+          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+            <button type="button" onClick={() => setLayout((l) => ({ ...l, textColor: "white" }))} style={choiceStyle(layout.textColor === "white")}>
+              White text
+            </button>
+            <button type="button" onClick={() => setLayout((l) => ({ ...l, textColor: "black" }))} style={choiceStyle(layout.textColor === "black")}>
+              Black text
+            </button>
+          </div>
+          <label style={{ display: "block", marginTop: 10 }}>
+            Font size
+            <input
+              type="range"
+              min={24}
+              max={96}
+              step={1}
+              value={layout.textSize}
+              onChange={(e) => setLayout((l) => ({ ...l, textSize: Number(e.target.value) }))}
+              onWheel={(e) => e.currentTarget.blur()}
+              style={{ width: "100%" }}
+            />
+          </label>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: "#444" }}>Drag the text on the preview to move it.</p>
+        </div>
 
         <label>
           Size

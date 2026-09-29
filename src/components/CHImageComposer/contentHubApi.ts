@@ -5,7 +5,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Background, Layout } from "./ImageComposer";
-import { isLogoId } from "./logos";
+import type { EpamLogo } from "./logos";
 
 type ContentHubClient = {
   uploads?: {
@@ -172,6 +172,37 @@ export async function loadBackgrounds(client: ContentHubClient): Promise<Backgro
   return items.sort((a, b) => a.sortOrder - b.sortOrder);
 }
 
+function finite(value: unknown, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function overlayFromRecord(record: Record<string, unknown>) {
+  let showSitecore = record.showSitecore === true;
+  let epamLogo: EpamLogo = record.epamLogo === "white" || record.epamLogo === "black" ? record.epamLogo : "none";
+  if (record.showSitecore == null && record.epamLogo == null) {
+    if (record.logo === "sitecore") showSitecore = true;
+    if (record.logo === "epam-white") epamLogo = "white";
+    if (record.logo === "epam-black") epamLogo = "black";
+  }
+
+  return {
+    text: typeof record.text === "string" ? record.text : "",
+    textColor: record.textColor === "black" ? "black" as const : "white" as const,
+    textSize: finite(record.textSize, 46),
+    textX: finite(record.textX, 0.04),
+    textY: finite(record.textY, 0.78),
+    showSitecore,
+    epamLogo,
+    sitecoreX: finite(record.sitecoreX, 0.04),
+    sitecoreY: finite(record.sitecoreY, 0.04),
+    sitecoreScale: finite(record.sitecoreScale, 1),
+    epamX: finite(record.epamX, 0.46),
+    epamY: finite(record.epamY, 0.04),
+    epamScale: finite(record.epamScale, 1),
+  };
+}
+
 function readComposition(
   raw: unknown
 ): { layout: Layout; backgroundId: number } | null {
@@ -203,8 +234,7 @@ function readComposition(
       flipped: Boolean(record.flipped),
       cutoutAssetId,
       cutoutFingerprint: String(record.cutoutFingerprint ?? ""),
-      text: typeof record.text === "string" ? record.text : "",
-      logo: isLogoId(record.logo) ? record.logo : "none",
+      ...overlayFromRecord(record),
     },
   };
 }

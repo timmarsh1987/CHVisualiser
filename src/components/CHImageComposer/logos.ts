@@ -2,14 +2,19 @@ import epamBlack from "./logos/epam-black.png";
 import epamWhite from "./logos/epam-white.png";
 import sitecore from "./logos/sitecore.png";
 
-export type LogoId = "none" | "sitecore" | "epam-white" | "epam-black";
+export type EpamLogo = "none" | "white" | "black";
 
-export const LOGOS: { id: Exclude<LogoId, "none">; label: string; src: string }[] = [
-  { id: "sitecore", label: "Sitecore", src: sitecore },
-  { id: "epam-white", label: "EPAM white", src: epamWhite },
-  { id: "epam-black", label: "EPAM black", src: epamBlack },
+export const SITECORE_LOGO = { label: "Sitecore", src: sitecore };
+
+export const EPAM_LOGOS: { id: Exclude<EpamLogo, "none">; label: string; src: string }[] = [
+  { id: "white", label: "EPAM white", src: epamWhite },
+  { id: "black", label: "EPAM black", src: epamBlack },
 ];
 
-export function isLogoId(value: unknown): value is LogoId {
-  return value === "none" || value === "sitecore" || value === "epam-white" || value === "epam-black";
-}
+export type LogoImageKey = "sitecore" | "white" | "black";
+
+export const LOGO_SOURCES: { id: LogoImageKey; src: string }[] = [
+  { id: "sitecore", src: sitecore },
+  { id: "white", src: epamWhite },
+  { id: "black", src: epamBlack },
+];
