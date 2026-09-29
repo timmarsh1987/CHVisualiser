@@ -1,5 +1,5 @@
 import { CANVAS_PRESETS, resolveCanvasPresetId } from './printPresets';
-import { applyEdgePins, hasExplicitPins, remapLayerToCanvas } from './constraints';
+import { applyEdgePins, hasExplicitPins } from './constraints';
 import type { DesignerCanvasSize, DesignerDocument, Layer, LayerPageLayout } from './types';
 
 export type PinKey = 'pinTop' | 'pinLeft' | 'pinRight' | 'pinBottom';
@@ -174,12 +174,12 @@ export function switchDocumentPage(
         };
       }
 
-      const remapped = hasExplicitPins(layer)
+      const placed = hasExplicitPins(layer)
         ? { ...layer, ...applyEdgePins(layer, width, height) }
-        : remapLayerToCanvas(layer, from, { width, height });
+        : layer;
 
-      pageLayouts[toKey] = snapshotPageLayout(remapped);
-      return { ...remapped, pageLayouts };
+      pageLayouts[toKey] = snapshotPageLayout(placed);
+      return { ...placed, pageLayouts };
     }),
   };
 }

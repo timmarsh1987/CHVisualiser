@@ -1,3 +1,4 @@
+import epamBlack from '../CHImageComposer/logos/epam-black.png';
 import { SOK_THEME } from './brand';
 import type { DesignerDocument, Layer, LayerPageLayout, LayerType } from './types';
 
@@ -127,7 +128,8 @@ export function createSeedDocument(): DesignerDocument {
   logo.name = 'Logo';
   logo.width = 240;
   logo.height = 80;
-  logo.src = '';
+  logo.src = epamBlack;
+  logo.objectFit = 'contain';
   logo.fill = '#ffffff';
   logo.locked = true;
 

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { setContentHubClient } from '../CHMarketingBuilder/api';
 import DesignerShell from './DesignerShell';
 import {
   loadBuilderTemplateDocument,
@@ -30,6 +31,10 @@ export default function DesignerApp({ client, entity, options }: DesignerAppProp
   const skipNextChangeRef = useRef(true);
 
   docRef.current = document;
+
+  useEffect(() => {
+    setContentHubClient(client ?? null);
+  }, [client]);
 
   const persist = useCallback(
     async (doc: DesignerDocument) => {

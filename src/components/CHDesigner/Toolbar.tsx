@@ -1,4 +1,5 @@
 import React, { useRef } from 'react';
+import epamWhite from '../CHImageComposer/logos/epam-white.png';
 import { fillLayerToCanvas } from './constraints';
 import { pinLayerInPlace } from './pageLayout';
 import GenerateMenu from './GenerateMenu';
@@ -88,7 +89,9 @@ export default function Toolbar() {
   return (
     <header className="chd-toolbar">
       <div className="chd-toolbar-brand">
-        <span className="chd-toolbar-logo-wrap">Logo</span>
+        <span className="chd-toolbar-logo-wrap">
+          <img className="chd-toolbar-logo" src={epamWhite} alt="EPAM" />
+        </span>
         <span className="chd-toolbar-mode">{isAdmin ? 'Admin' : 'Edit'}</span>
       </div>
 

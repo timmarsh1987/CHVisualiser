@@ -62,6 +62,7 @@ export default function LayerNode({
       body = layer.src ? (
         <img
           className={`chd-layer-image${layer.objectFit === 'contain' || /logo/i.test(layer.name) ? ' chd-layer-image--contain' : ''}`}
+          style={{ background: layer.fill || 'transparent' }}
           src={layer.src}
           alt={layer.name}
           draggable={false}

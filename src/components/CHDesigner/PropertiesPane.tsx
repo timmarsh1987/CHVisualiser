@@ -1,4 +1,5 @@
 import React from 'react';
+import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
 import { fillLayerToCanvas } from './constraints';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
@@ -156,6 +157,18 @@ export default function PropertiesPane() {
 
           {canEditContent && layer.type === 'image' && (
             <>
+              <div className="chd-image-source">
+                <span>Image</span>
+                <AssetPicker
+                  overlay
+                  compact
+                  triggerLabel={layer.src ? 'Choose from Content Hub' : 'Choose image'}
+                  onSelect={(asset) => {
+                    const src = asset.previewUrl || asset.thumbnailUrl;
+                    if (src) patch({ src });
+                  }}
+                />
+              </div>
               <label className="chd-field">
                 <span>Image URL</span>
                 <input
@@ -180,7 +193,7 @@ export default function PropertiesPane() {
 
           {isAdmin ? (
             <>
-              <div className="chd-field">
+              <div className="chd-field chd-pin-field">
                 <span>Pin to page</span>
                 <div className="chd-pin-grid">
                   {(['pinTop', 'pinLeft', 'pinRight', 'pinBottom'] as const).map((key) => {
