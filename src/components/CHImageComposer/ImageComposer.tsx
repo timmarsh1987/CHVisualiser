@@ -1,5 +1,6 @@
 // ImageComposer.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { isLogoId, LOGOS, type LogoId } from "./logos";
 
 export type Background = {
   id: number;
@@ -18,6 +19,8 @@ export type Layout = {
   flipped: boolean;
   cutoutAssetId: number;
   cutoutFingerprint: string;
+  text: string;
+  logo: LogoId;
 };
 
 type Props = {
@@ -73,6 +76,58 @@ export function hasTransparency(img: HTMLImageElement): boolean {
   }
 }
 
+function drawLogo(ctx: CanvasRenderingContext2D, img: HTMLImageElement) {
+  const margin = 48;
+  const maxW = OUT_W * 0.36;
+  const maxH = OUT_H * 0.12;
+  const scale = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight);
+  ctx.drawImage(img, margin, margin, img.naturalWidth * scale, img.naturalHeight * scale);
+}
+
+function wrapLine(ctx: CanvasRenderingContext2D, line: string, maxWidth: number): string[] {
+  const words = line.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [];
+  const lines: string[] = [];
+  let current = words[0];
+  for (const word of words.slice(1)) {
+    const next = `${current} ${word}`;
+    if (ctx.measureText(next).width <= maxWidth) {
+      current = next;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+function drawCaption(ctx: CanvasRenderingContext2D, text: string) {
+  const source = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (source.length === 0) return;
+
+  const margin = 48;
+  const maxWidth = OUT_W - margin * 2;
+  ctx.save();
+  ctx.font = "600 46px Arial, Helvetica, sans-serif";
+  ctx.textBaseline = "bottom";
+  const lines = source.flatMap((line) => wrapLine(ctx, line, maxWidth));
+  const lineHeight = 58;
+  let y = OUT_H - margin;
+  ctx.shadowColor = "rgba(0,0,0,0.72)";
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 2;
+  ctx.fillStyle = "#ffffff";
+  for (let i = lines.length - 1; i >= 0; i--) {
+    ctx.fillText(lines[i], margin, y);
+    y -= lineHeight;
+  }
+  ctx.restore();
+}
+
 export function ImageComposer({
   cutoutUrl,
   cutoutAssetId,
@@ -91,6 +146,7 @@ export function ImageComposer({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [logoImages, setLogoImages] = useState<Partial<Record<LogoId, HTMLImageElement>>>({});
   const [opaque, setOpaque] = useState(false);
   const [staleDismissed, setStaleDismissed] = useState(false);
   const drag = useRef<{ startX: number; startY: number; cx: number; by: number } | null>(null);
@@ -103,14 +159,31 @@ export function ImageComposer({
       flipped: false,
       cutoutAssetId,
       cutoutFingerprint,
+      text: "",
+      logo: "none",
     }),
     [cutoutAssetId, cutoutFingerprint]
   );
 
   const [layout, setLayout] = useState<Layout>(() => {
-    if (initial) return initial.layout;
-    if (backgrounds[0]) return makeDefault(backgrounds[0]);
-    return { cx: 0.5, by: 1, h: 0.85, flipped: false, cutoutAssetId, cutoutFingerprint };
+    const base = initial?.layout ?? (backgrounds[0] ? makeDefault(backgrounds[0]) : null);
+    if (base) {
+      return {
+        ...base,
+        text: base.text ?? "",
+        logo: isLogoId(base.logo) ? base.logo : "none",
+      };
+    }
+    return {
+      cx: 0.5,
+      by: 1,
+      h: 0.85,
+      flipped: false,
+      cutoutAssetId,
+      cutoutFingerprint,
+      text: "",
+      logo: "none",
+    };
   });
 
   const selected = backgrounds.find((b) => b.id === selectedId) ?? null;
@@ -146,6 +219,25 @@ export function ImageComposer({
     };
   }, [cutoutUrl, backgrounds]);
 
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(
+      LOGOS.map(async (logo) => [logo.id, await loadImage(logo.src)] as const)
+    )
+      .then((pairs) => {
+        if (cancelled) return;
+        const map: Partial<Record<LogoId, HTMLImageElement>> = {};
+        for (const [id, img] of pairs) map[id] = img;
+        setLogoImages(map);
+      })
+      .catch((e) => {
+        if (!cancelled) setError((e as Error).message);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // Draw whenever anything changes
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -171,11 +263,19 @@ export function ImageComposer({
     if (layout.flipped) ctx.scale(-1, 1);
     ctx.drawImage(cutout, -w / 2, -h, w, h);
     ctx.restore();
-  }, [cutout, bgImages, selected, layout]);
+
+    const logoImage = layout.logo !== "none" ? logoImages[layout.logo] : null;
+    if (logoImage) drawLogo(ctx, logoImage);
+    drawCaption(ctx, layout.text);
+  }, [cutout, bgImages, selected, layout, logoImages]);
 
   const chooseBackground = (bg: Background) => {
     setSelectedId(bg.id);
-    setLayout(makeDefault(bg));
+    setLayout((current) => ({
+      ...makeDefault(bg),
+      text: current.text,
+      logo: current.logo,
+    }));
     setStaleDismissed(true);
   };
 
@@ -197,7 +297,13 @@ export function ImageComposer({
     drag.current = null;
   };
 
-  const reset = () => selected && setLayout(makeDefault(selected));
+  const reset = () =>
+    selected &&
+    setLayout((current) => ({
+      ...makeDefault(selected),
+      text: current.text,
+      logo: current.logo,
+    }));
 
   const save = useCallback(async () => {
     const canvas = canvasRef.current;
@@ -305,6 +411,65 @@ export function ImageComposer({
             ))}
           </div>
         </div>
+
+        <div>
+          <strong>Logo</strong>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginTop: 8 }}>
+            <button
+              type="button"
+              onClick={() => setLayout((l) => ({ ...l, logo: "none" }))}
+              style={{
+                minHeight: 52,
+                border: layout.logo === "none" ? "2px solid #0a6cff" : "2px solid #ddd",
+                borderRadius: 6,
+                background: "#fff",
+                cursor: "pointer",
+              }}
+            >
+              None
+            </button>
+            {LOGOS.map((logo) => (
+              <button
+                key={logo.id}
+                type="button"
+                onClick={() => setLayout((l) => ({ ...l, logo: logo.id }))}
+                style={{
+                  padding: 6,
+                  border: layout.logo === logo.id ? "2px solid #0a6cff" : "2px solid #ddd",
+                  borderRadius: 6,
+                  background: logo.id === "epam-white" ? "#1a1a1a" : "#fff",
+                  cursor: "pointer",
+                }}
+              >
+                <img
+                  src={logo.src}
+                  alt={logo.label}
+                  style={{ width: "100%", height: 28, objectFit: "contain" }}
+                />
+                <div
+                  style={{
+                    fontSize: 11,
+                    paddingTop: 4,
+                    color: logo.id === "epam-white" ? "#fff" : "#222",
+                  }}
+                >
+                  {logo.label}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          Custom text
+          <textarea
+            value={layout.text}
+            rows={3}
+            placeholder="Add a name or caption"
+            onChange={(e) => setLayout((l) => ({ ...l, text: e.target.value }))}
+            style={{ width: "100%", resize: "vertical", font: "inherit" }}
+          />
+        </label>
 
         <label>
           Size

@@ -44,6 +44,7 @@ export default defineConfig({
     },
     outDir: "./dist",
     emptyOutDir: false,
+    assetsInlineLimit: 1024 * 1024,
     lib: {
       entry: resolve(__dirname, `src/components/${component}/index.tsx`),
       formats: ["es"],

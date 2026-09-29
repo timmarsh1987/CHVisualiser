@@ -5,6 +5,7 @@
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Background, Layout } from "./ImageComposer";
+import { isLogoId } from "./logos";
 
 type ContentHubClient = {
   uploads?: {
@@ -202,6 +203,8 @@ function readComposition(
       flipped: Boolean(record.flipped),
       cutoutAssetId,
       cutoutFingerprint: String(record.cutoutFingerprint ?? ""),
+      text: typeof record.text === "string" ? record.text : "",
+      logo: isLogoId(record.logo) ? record.logo : "none",
     },
   };
 }
