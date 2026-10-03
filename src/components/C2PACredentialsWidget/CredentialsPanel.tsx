@@ -1,8 +1,5 @@
-/**
- * PLACEHOLDER CredentialsPanel — match this Section / card structure in
- * AIGovernancePanel evidence cards. Replace with the real widget when available.
- */
 import React from 'react';
+import type { C2PAManifestSummary } from './c2paSummary';
 
 export function Section({
   title,
@@ -20,34 +17,50 @@ export function Section({
 }
 
 export interface CredentialsPanelProps {
-  manifest: {
-    hasManifest: boolean;
-    claimGenerator?: string;
-    title?: string;
-    ingredients?: unknown[];
-    assertions?: unknown[];
-  } | null;
+  manifest: C2PAManifestSummary | null;
   loading?: boolean;
   error?: string | null;
+  /** True once a stored provenance check has been read from the asset. */
+  ready?: boolean;
   /** When true, omit outer border/header so the panel nests inside EvidenceTab cards. */
   embedded?: boolean;
+}
+
+function formatCheckedAt(value: string | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 export function CredentialsPanel({
   manifest,
   loading,
   error,
+  ready = false,
   embedded = false,
 }: CredentialsPanelProps) {
+  const checkedAt = formatCheckedAt(manifest?.checkedAt);
   const body = (
     <>
-      {loading && <p className="c2pa-muted">Reading Content Credentials…</p>}
+      {loading && <p className="c2pa-muted">Reading the stored C2PA summary…</p>}
       {!loading && error && <p className="c2pa-error">{error}</p>}
-      {!loading && !error && manifest && !manifest.hasManifest && (
-        <p className="c2pa-muted">No C2PA Content Credentials found on this asset.</p>
+      {!loading && !error && !ready && (
+        <p className="c2pa-muted">
+          No C2PA summary is stored on this asset yet. Run a provenance check so Content Hub can
+          save SC.Asset.C2PA.Summary.
+        </p>
+      )}
+      {!loading && !error && ready && manifest && !manifest.hasManifest && (
+        <p className="c2pa-muted">
+          This asset was checked{checkedAt ? ` on ${checkedAt}` : ''} and has no C2PA Content
+          Credentials.
+        </p>
       )}
       {!loading && manifest?.hasManifest && (
         <>
+          <Section title="Validation">
+            <p>{manifest.verified ? 'Verified' : 'Found, validation failed'}</p>
+          </Section>
           <Section title="Claim generator">
             <p>{manifest.claimGenerator || '—'}</p>
           </Section>
@@ -59,6 +72,11 @@ export function CredentialsPanel({
           <Section title="Ingredients">
             <p>{manifest.ingredients?.length ?? 0} ingredient(s)</p>
           </Section>
+          {checkedAt ? (
+            <Section title="Checked">
+              <p>{checkedAt}</p>
+            </Section>
+          ) : null}
         </>
       )}
     </>

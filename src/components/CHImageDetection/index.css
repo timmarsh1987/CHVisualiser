@@ -1,0 +1,366 @@
+.ch-image-detection {
+  --ch-id-pad: 12px;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: auto;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #102a43;
+  background: #f5f8fb;
+}
+
+.ch-image-detection *,
+.ch-image-detection *::before,
+.ch-image-detection *::after {
+  box-sizing: border-box;
+}
+
+.ch-image-detection__header {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: var(--ch-id-pad);
+  border-bottom: 1px solid #d9e2ec;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.ch-image-detection__eyebrow {
+  margin: 0 0 2px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #0b5cab;
+}
+
+.ch-image-detection__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.ch-image-detection__checks {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  min-width: 0;
+}
+
+.ch-image-detection__checks-legend {
+  margin: 0 0 2px;
+  padding: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #627d98;
+}
+
+.ch-image-detection__check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.ch-image-detection__check input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.ch-image-detection__check span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ch-image-detection__check small {
+  color: #627d98;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.ch-image-detection__check--all {
+  font-weight: 700;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #edf2f7;
+}
+
+.ch-image-detection__checks:disabled {
+  opacity: 0.65;
+}
+
+.ch-image-detection__primary-button {
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 14px;
+  background: #0b5cab;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.ch-image-detection__primary-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.ch-image-detection__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.ch-image-detection__column {
+  min-width: 0;
+  padding: var(--ch-id-pad);
+  background: #fff;
+  padding-bottom: 24px;
+  flex: 1;
+}
+
+.ch-image-detection__asset-card {
+  margin-bottom: 14px;
+  min-width: 0;
+}
+
+.ch-image-detection__asset-title {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.ch-image-detection__asset-details {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.ch-image-detection__asset-details div {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+}
+
+.ch-image-detection__asset-details dt {
+  margin: 0;
+  color: #627d98;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding-top: 1px;
+}
+
+.ch-image-detection__asset-details dd {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-image-detection__empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100px;
+  padding: 14px;
+  border: 1px dashed #bcccdc;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.ch-image-detection__empty h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.ch-image-detection__empty p,
+.ch-image-detection__hint {
+  margin: 0;
+  color: #486581;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ch-image-detection__empty--error {
+  border-color: #f9b8b8;
+  background: #fff5f5;
+}
+
+.ch-image-detection__report {
+  min-width: 0;
+  margin-top: 4px;
+}
+
+.ch-image-detection__report-header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ch-image-detection__status {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.ch-image-detection__status--clear {
+  background: #e3f9e5;
+  color: #0f7b3a;
+}
+
+.ch-image-detection__status--flagged {
+  background: #ffe3e3;
+  color: #ab091e;
+}
+
+.ch-image-detection__report-summary {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-image-detection__report-meta {
+  margin: 0;
+  color: #627d98;
+  font-size: 11px;
+}
+
+.ch-image-detection__report-meta--ok {
+  color: #0f7b3a;
+}
+
+.ch-image-detection__report-meta--error {
+  color: #ab091e;
+}
+
+.ch-image-detection__finding-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ch-image-detection__finding {
+  border: 1px solid #d9e2ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #f8fbff;
+  min-width: 0;
+}
+
+.ch-image-detection__finding--flagged {
+  border-color: #f9b8b8;
+  background: #fff5f5;
+}
+
+.ch-image-detection__finding--clear {
+  border-color: #b7ebc1;
+  background: #f3fbf5;
+}
+
+.ch-image-detection__finding-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.ch-image-detection__finding-title {
+  margin: 0;
+  font-size: 13px;
+  flex: 1 1 140px;
+  overflow-wrap: anywhere;
+}
+
+.ch-image-detection__badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 7px;
+  background: #ab091e;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.ch-image-detection__badge--clear {
+  background: #0f7b3a;
+}
+
+.ch-image-detection__badge--muted {
+  background: #e0e7ff;
+  color: #334e68;
+}
+
+.ch-image-detection__finding-copy {
+  margin: 8px 0 0;
+  color: #486581;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.ch-image-detection__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 120px;
+  padding: 12px;
+}
+
+.ch-image-detection__loading-label {
+  margin: 0;
+  max-width: 100%;
+  text-align: center;
+  color: #486581;
+  font-size: 12px;
+}
+
+.ch-image-detection__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d9e2ec;
+  border-top-color: #0b5cab;
+  border-radius: 50%;
+  animation: ch-image-detection-spin 0.8s linear infinite;
+}
+
+@keyframes ch-image-detection-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

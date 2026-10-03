@@ -4,6 +4,7 @@ import { C2PAEvidenceCard } from '../evidence-cards/C2PAEvidenceCard';
 import { AIDetectionEvidenceCard } from '../evidence-cards/AIDetectionEvidenceCard';
 import { ManualEvidenceCard } from '../evidence-cards/ManualEvidenceCard';
 import { useAIDetection } from '../hooks/useAIDetection';
+import type { C2PAManifestRequest } from '../../C2PACredentialsWidget/useC2PAManifest';
 import type {
   C2PAEvidenceData,
   EvidenceType,
@@ -23,9 +24,10 @@ interface EvidenceTabProps {
   }) => Promise<void>;
   /** Optional asset file/blob or preview URL for collectors. */
   assetSource?: string | Blob | null;
+  c2paRequest?: C2PAManifestRequest | null;
 }
 
-export function EvidenceTab({ record, addEvidence, assetSource }: EvidenceTabProps) {
+export function EvidenceTab({ record, addEvidence, assetSource, c2paRequest }: EvidenceTabProps) {
   const { result, loading, error, runDetection } = useAIDetection();
   const [collectorError, setCollectorError] = useState<string | null>(null);
   const hasC2PA = record.evidenceRecords.some((e) => e.evidenceType === 'c2paManifest');
@@ -134,14 +136,15 @@ export function EvidenceTab({ record, addEvidence, assetSource }: EvidenceTabPro
               <div>
                 <h3 className="ch-ai-gov__card-title">C2PA Content Credentials</h3>
                 <p className="ch-ai-gov__card-meta">
-                  Runs automatically on mount. {hasC2PA ? 'Already saved on this record.' : ''}
+                  Reads SC.Asset.C2PA.Summary from this asset.
+                  {hasC2PA ? ' Already saved on this record.' : ''}
                 </p>
               </div>
             </div>
             {!hasC2PA && (
               <C2PAEvidenceCard
                 mode="collector"
-                source={assetSource ?? null}
+                request={c2paRequest ?? null}
                 onCaptured={persistC2PA}
               />
             )}

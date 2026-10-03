@@ -1,13 +1,16 @@
 import React, { useEffect, useRef } from 'react';
 import { CredentialsPanel } from '../../C2PACredentialsWidget/CredentialsPanel';
-import { useC2PAManifest } from '../../C2PACredentialsWidget/useC2PAManifest';
+import {
+  useC2PAManifest,
+  type C2PAManifestRequest,
+} from '../../C2PACredentialsWidget/useC2PAManifest';
 import type { C2PAEvidenceData, EvidenceRecord, VerificationStatus } from '../types';
 import { Section } from './Section';
 
 interface C2PAEvidenceCardProps {
   evidence?: EvidenceRecord;
   mode: 'stored' | 'collector';
-  source?: string | Blob | null;
+  request?: C2PAManifestRequest | null;
   onCaptured?: (input: {
     evidenceSource: string;
     confidenceScore: number | null;
@@ -16,20 +19,29 @@ interface C2PAEvidenceCardProps {
   }) => Promise<void>;
 }
 
+function verificationStatusFor(manifest: {
+  verified: boolean;
+  hasManifest: boolean;
+}): VerificationStatus {
+  if (manifest.verified) return 'verified';
+  if (manifest.hasManifest) return 'invalid';
+  return 'notApplicable';
+}
+
 export function C2PAEvidenceCard({
   evidence,
   mode,
-  source,
+  request,
   onCaptured,
 }: C2PAEvidenceCardProps) {
-  const { manifest, loading, error, hasCredentials } = useC2PAManifest(
-    mode === 'collector' ? source ?? null : null
+  const { manifest, loading, error, ready } = useC2PAManifest(
+    mode === 'collector' ? request ?? null : null
   );
   const savedRef = useRef(false);
 
   useEffect(() => {
-    if (mode !== 'collector' || !onCaptured || loading || savedRef.current) return;
-    if (!manifest) return;
+    if (mode !== 'collector' || !onCaptured || loading || error || !ready || !manifest) return;
+    if (savedRef.current) return;
 
     savedRef.current = true;
     const data: C2PAEvidenceData = {
@@ -40,12 +52,14 @@ export function C2PAEvidenceCard({
     };
 
     void onCaptured({
-      evidenceSource: 'c2pa',
+      evidenceSource: 'content-hub',
       confidenceScore: null,
-      verificationStatus: hasCredentials ? 'verified' : 'notApplicable',
+      verificationStatus: verificationStatusFor(manifest),
       evidenceData: data,
+    }).catch(() => {
+      savedRef.current = false;
     });
-  }, [mode, onCaptured, loading, manifest, hasCredentials]);
+  }, [mode, onCaptured, loading, error, ready, manifest]);
 
   if (mode === 'stored' && evidence) {
     const data = (evidence.evidenceData ?? {}) as C2PAEvidenceData;
@@ -63,13 +77,13 @@ export function C2PAEvidenceCard({
     );
   }
 
-  // Embedded: strip outer border/header — EvidenceTab owns the card chrome.
   return (
     <CredentialsPanel
       embedded
       manifest={manifest}
       loading={loading}
       error={error}
+      ready={ready}
     />
   );
 }

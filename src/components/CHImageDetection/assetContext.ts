@@ -1,0 +1,310 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { AssetMetadataEntry, ImageDetectionAsset, ImageDetectionOptions } from './types';
+import { parseMetadataPropertyList } from './options';
+
+const PREVIEW_RENDITION_PRIORITY = [
+  'preview',
+  'thumbnail',
+  'bigthumbnail',
+  'thumbnail_cropped',
+  'downloadPreview',
+  'medium',
+] as const;
+
+const DOWNLOAD_RENDITION_PRIORITY = [
+  'downloadOriginal',
+  'original',
+  'download',
+  'high',
+] as const;
+
+const DEFAULT_NAME_PROPERTIES = ['FileName', 'fileName', 'Title', 'title', 'Name', 'name'];
+const DEFAULT_FILE_NAME_PROPERTIES = ['FileName', 'fileName'];
+const DEFAULT_DESCRIPTION_PROPERTIES = [
+  'Description',
+  'description',
+  'AssetDescription',
+  'Summary',
+  'summary',
+];
+
+function hrefToString(href: unknown): string | undefined {
+  if (typeof href === 'string' && href.trim()) {
+    return href.trim();
+  }
+
+  if (href != null && typeof href === 'object') {
+    const nested = (href as { href?: unknown }).href;
+    if (typeof nested === 'string' && nested.trim()) {
+      return nested.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function readPropertyValue(value: unknown): unknown {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+
+  const record = value as Record<string, unknown>;
+  const preferredKeys = ['Invariant', 'invariant', '_value', 'value', 'en-US', 'en-us', 'en'];
+
+  for (const key of preferredKeys) {
+    if (key in record) {
+      const nested = readPropertyValue(record[key]);
+      if (typeof nested === 'string' && nested.trim()) {
+        return nested;
+      }
+      if (nested != null && typeof nested !== 'object') {
+        return nested;
+      }
+    }
+  }
+
+  const firstPrimitive = Object.values(record).find(
+    (entry) =>
+      (typeof entry === 'string' && entry.trim()) ||
+      typeof entry === 'number' ||
+      typeof entry === 'boolean'
+  );
+
+  return firstPrimitive;
+}
+
+function readStringProperty(properties: Record<string, unknown> | undefined, keys: string[]): string {
+  if (!properties) {
+    return '';
+  }
+
+  for (const key of keys) {
+    const raw = readPropertyValue(properties[key]);
+    if (raw == null || typeof raw === 'object') {
+      continue;
+    }
+
+    const text = String(raw).trim();
+    if (text && text !== '[object Object]') {
+      return text;
+    }
+  }
+
+  return '';
+}
+
+function getUrlFromRenditions(renditions: unknown, priority: readonly string[]): string | undefined {
+  if (renditions == null || typeof renditions !== 'object') {
+    return undefined;
+  }
+
+  const record = renditions as Record<string, unknown>;
+  for (const name of priority) {
+    const items = record[name];
+    if (!Array.isArray(items) || items.length === 0) {
+      continue;
+    }
+
+    const url = hrefToString(items[0]?.href ?? items[0]);
+    if (url) {
+      return url;
+    }
+  }
+
+  return undefined;
+}
+
+function getUrlFromEntity(
+  entity: any,
+  priority: readonly string[],
+  publicLinkNames: string[]
+): string | undefined {
+  for (const name of priority) {
+    try {
+      const rendition = entity?.getRendition?.(name);
+      const url = hrefToString(rendition?.items?.[0]?.href);
+      if (url) {
+        return url;
+      }
+    } catch {
+      // rendition not loaded
+    }
+  }
+
+  if (Array.isArray(entity?.renditions)) {
+    for (const name of priority) {
+      const rendition = entity.renditions.find((entry: any) => entry?.name === name);
+      const url = hrefToString(rendition?.items?.[0]?.href);
+      if (url) {
+        return url;
+      }
+    }
+  }
+
+  const fromRaw = getUrlFromRenditions(entity?.renditions, priority);
+  if (fromRaw) {
+    return fromRaw;
+  }
+
+  for (const name of publicLinkNames) {
+    try {
+      const link = entity?.getPublicLink?.(name);
+      if (typeof link === 'string' && link.trim()) {
+        return link.trim();
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return undefined;
+}
+
+async function fetchEntityPayload(
+  client: any,
+  entityId: string
+): Promise<Record<string, unknown> | null> {
+  if (!client?.raw?.getAsync) {
+    return null;
+  }
+
+  try {
+    const response = await client.raw.getAsync(`/api/entities/${entityId}`);
+    if (response.isSuccessStatusCode && response.content) {
+      return response.content as Record<string, unknown>;
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
+function coerceDisplayString(value: unknown): string {
+  if (value == null) {
+    return '';
+  }
+
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+    const text = String(value).trim();
+    return text === '[object Object]' ? '' : text;
+  }
+
+  if (typeof value === 'object') {
+    const nested = readPropertyValue(value);
+    if (nested != null && nested !== value) {
+      return coerceDisplayString(nested);
+    }
+  }
+
+  return '';
+}
+
+function buildMetadata(
+  properties: Record<string, unknown> | undefined,
+  configuredKeys: string[]
+): AssetMetadataEntry[] {
+  if (!properties) {
+    return [];
+  }
+
+  const keys = configuredKeys.length > 0 ? configuredKeys : Object.keys(properties).slice(0, 12);
+
+  return keys
+    .map((key) => {
+      const value = coerceDisplayString(readPropertyValue(properties[key]));
+      if (!value) {
+        return null;
+      }
+
+      return { key, value };
+    })
+    .filter((entry): entry is AssetMetadataEntry => entry != null);
+}
+
+function resolveDefinitionName(entity: any): string {
+  const fromProperty = coerceDisplayString(entity?.definition?.name);
+  if (fromProperty) {
+    return fromProperty;
+  }
+
+  const fromDefinitionName = coerceDisplayString(entity?.definitionName);
+  if (fromDefinitionName) {
+    return fromDefinitionName;
+  }
+
+  if (typeof entity?.definition === 'string') {
+    return entity.definition.trim();
+  }
+
+  return '';
+}
+
+export async function resolveAssetContext(
+  client: any,
+  entity: any,
+  options: ImageDetectionOptions
+): Promise<ImageDetectionAsset | null> {
+  const entityId = String(entity?.systemProperties?.id ?? entity?.id ?? '').trim();
+
+  if (!entityId) {
+    return null;
+  }
+
+  const properties = (entity?.properties ?? {}) as Record<string, unknown>;
+  const nameKeys = options.nameProperty ? [options.nameProperty] : DEFAULT_NAME_PROPERTIES;
+  const fileNameKeys = options.fileNameProperty
+    ? [options.fileNameProperty]
+    : DEFAULT_FILE_NAME_PROPERTIES;
+  const descriptionKeys = options.descriptionProperty
+    ? [options.descriptionProperty]
+    : DEFAULT_DESCRIPTION_PROPERTIES;
+  const metadataKeys = parseMetadataPropertyList(options.metadataProperties);
+
+  const fileName = readStringProperty(properties, fileNameKeys) || undefined;
+  const mimeType =
+    readStringProperty(properties, ['MimeType', 'mimeType', 'ContentType', 'contentType']) ||
+    undefined;
+
+  let previewUrl = getUrlFromEntity(entity, PREVIEW_RENDITION_PRIORITY, ['preview', 'thumbnail']);
+  let downloadUrl = getUrlFromEntity(entity, DOWNLOAD_RENDITION_PRIORITY, [
+    'downloadOriginal',
+    'original',
+    'download',
+  ]);
+
+  if (!previewUrl || !downloadUrl) {
+    const payload = await fetchEntityPayload(client, entityId);
+    if (payload) {
+      if (!previewUrl) {
+        previewUrl = getUrlFromRenditions(payload.renditions, PREVIEW_RENDITION_PRIORITY);
+      }
+      if (!downloadUrl) {
+        downloadUrl = getUrlFromRenditions(payload.renditions, DOWNLOAD_RENDITION_PRIORITY);
+      }
+    }
+  }
+
+  const fileUrl = previewUrl || downloadUrl;
+  const name = readStringProperty(properties, nameKeys) || fileName || `Asset ${entityId}`;
+
+  return {
+    id: entityId,
+    name,
+    fileName,
+    mimeType,
+    description: readStringProperty(properties, descriptionKeys) || undefined,
+    previewUrl,
+    downloadUrl,
+    fileUrl,
+    definition:
+      readStringProperty(properties, ['Definition', 'definition']) ||
+      resolveDefinitionName(entity) ||
+      undefined,
+    metadata: buildMetadata(properties, metadataKeys),
+  };
+}

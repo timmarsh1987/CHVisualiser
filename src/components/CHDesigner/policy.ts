@@ -2,10 +2,14 @@ import type {
   DesignerDocument,
   DesignerInstanceDocument,
   DesignerMode,
+  DesignerSettings,
   Layer,
   LayerOverride,
 } from './types';
 import { cloneDocument } from './document';
+import { layerIsShown, syncActiveTemplatePage } from './templateSettings';
+
+export { layerIsShown };
 
 export function defaultEditableContent(layer: Pick<Layer, 'type' | 'editableContent'>): boolean {
   if (typeof layer.editableContent === 'boolean') return layer.editableContent;
@@ -22,9 +26,13 @@ export function layerAllowsTransform(layer: Layer): boolean {
   return Boolean(layer.allowTransform);
 }
 
-export function layerIsSelectable(layer: Layer, mode: DesignerMode): boolean {
+export function layerIsSelectable(
+  layer: Layer,
+  mode: DesignerMode,
+  settings?: DesignerSettings
+): boolean {
+  if (!layerIsShown(layer, settings)) return false;
   if (mode === 'admin') return true;
-  if (!layer.visible) return false;
   return layerAllowsContentEdit(layer) || layerAllowsTransform(layer);
 }
 
@@ -61,7 +69,48 @@ export function parseDesignerInstance(raw: unknown): DesignerInstanceDocument | 
     }
   }
 
-  return { version: 1, templateId: record.templateId, overrides };
+  return {
+    version: 1,
+    templateId: record.templateId,
+    overrides,
+    fields: compactFieldValues(record.fields),
+  };
+}
+
+export function compactFieldValues(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const fields: Record<string, string> = {};
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string' && value.trim()) fields[id] = value;
+  }
+  return Object.keys(fields).length > 0 ? fields : undefined;
+}
+
+function applyLayerOverrides(layers: Layer[], overrides: Record<string, LayerOverride>): Layer[] {
+  return layers.map((layer) => {
+    const override = overrides[layer.id];
+    if (!override) return layer;
+    const next: Layer = { ...layer };
+    if (layerAllowsTransform(layer)) {
+      if (typeof override.x === 'number') next.x = override.x;
+      if (typeof override.y === 'number') next.y = override.y;
+      if (typeof override.width === 'number') next.width = override.width;
+      if (typeof override.height === 'number') next.height = override.height;
+    }
+    if (layerAllowsContentEdit(layer)) {
+      if (typeof override.text === 'string') next.text = override.text;
+      if (typeof override.fill === 'string') next.fill = override.fill;
+      if (typeof override.color === 'string') next.color = override.color;
+      if (typeof override.src === 'string') next.src = override.src;
+    }
+    return next;
+  });
+}
+
+function layersForOverrides(doc: DesignerDocument): Layer[] {
+  const synced = syncActiveTemplatePage(doc);
+  if (synced.pages?.length) return synced.pages.flatMap((page) => page.layers);
+  return synced.layers;
 }
 
 export function mergeTemplateAndInstance(
@@ -70,39 +119,27 @@ export function mergeTemplateAndInstance(
 ): DesignerDocument {
   const base = cloneDocument(template);
   if (!instance?.overrides) return base;
-
+  const layers = applyLayerOverrides(base.layers, instance.overrides);
   return {
     ...base,
-    layers: base.layers.map((layer) => {
-      const override = instance.overrides[layer.id];
-      if (!override) return layer;
-      const next: Layer = { ...layer };
-      if (layerAllowsTransform(layer)) {
-        if (typeof override.x === 'number') next.x = override.x;
-        if (typeof override.y === 'number') next.y = override.y;
-        if (typeof override.width === 'number') next.width = override.width;
-        if (typeof override.height === 'number') next.height = override.height;
-      }
-      if (layerAllowsContentEdit(layer)) {
-        if (typeof override.text === 'string') next.text = override.text;
-        if (typeof override.fill === 'string') next.fill = override.fill;
-        if (typeof override.color === 'string') next.color = override.color;
-        if (typeof override.src === 'string') next.src = override.src;
-      }
-      return next;
-    }),
+    layers,
+    pages: base.pages?.map((page) => ({
+      ...page,
+      layers: page.id === base.activePageId ? layers : applyLayerOverrides(page.layers, instance.overrides),
+    })),
   };
 }
 
 export function diffInstanceOverrides(
   template: DesignerDocument,
   merged: DesignerDocument,
-  templateId: string
+  templateId: string,
+  fieldValues?: Record<string, string>
 ): DesignerInstanceDocument {
   const overrides: Record<string, LayerOverride> = {};
-  const byId = new Map(template.layers.map((layer) => [layer.id, layer]));
+  const byId = new Map(layersForOverrides(template).map((layer) => [layer.id, layer]));
 
-  for (const layer of merged.layers) {
+  for (const layer of layersForOverrides(merged)) {
     const base = byId.get(layer.id);
     if (!base) continue;
     const override: LayerOverride = {};
@@ -114,7 +151,7 @@ export function diffInstanceOverrides(
       if (layer.height !== base.height) override.height = layer.height;
     }
     if (layerAllowsContentEdit(base)) {
-      if ((layer.text ?? '') !== (base.text ?? '')) override.text = layer.text;
+      if (!base.fieldId && (layer.text ?? '') !== (base.text ?? '')) override.text = layer.text;
       if ((layer.fill ?? '') !== (base.fill ?? '')) override.fill = layer.fill;
       if ((layer.color ?? '') !== (base.color ?? '')) override.color = layer.color;
       if ((layer.src ?? '') !== (base.src ?? '')) override.src = layer.src;
@@ -125,7 +162,8 @@ export function diffInstanceOverrides(
     }
   }
 
-  return { version: 1, templateId, overrides };
+  const fields = compactFieldValues(fieldValues);
+  return fields ? { version: 1, templateId, overrides, fields } : { version: 1, templateId, overrides };
 }
 
 /** Restrict an end-user patch to fields allowed by layer policy. */

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { generateDesignerOutput, type GenerateFormat } from './exportArtboard';
-import { useDesignerDocument } from './store';
+import { useOutputDocument } from './store';
 
 const OPTIONS: { format: GenerateFormat; label: string; hint: string }[] = [
   { format: 'pdf', label: 'PDF', hint: 'Print-ready page' },
@@ -8,7 +8,7 @@ const OPTIONS: { format: GenerateFormat; label: string; hint: string }[] = [
 ];
 
 export default function GenerateMenu() {
-  const canvasDocument = useDesignerDocument();
+  const canvasDocument = useOutputDocument();
   const rootRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);

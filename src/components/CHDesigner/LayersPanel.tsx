@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
-import { layerIsSelectable } from './policy';
-import { useDesignerAction, useDesignerMode, useLayers, useSelection } from './store';
+import { layerIsSelectable, layerIsShown } from './policy';
+import { useDesignerAction, useDesignerDocument, useDesignerMode, useLayers, useSelection } from './store';
 
-export default function LayersPanel() {
+export default function LayersPanel({
+  collapsed = false,
+  onToggleCollapse,
+}: {
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
+}) {
   const layers = useLayers();
+  const document = useDesignerDocument();
   const selection = useSelection();
   const dispatch = useDesignerAction();
   const mode = useDesignerMode();
@@ -14,7 +21,11 @@ export default function LayersPanel() {
   const ordered = [...layers]
     .map((layer, index) => ({ layer, index }))
     .reverse()
-    .filter(({ layer }) => isAdmin || layerIsSelectable(layer, mode));
+    .filter(
+      ({ layer }) =>
+        layerIsShown(layer, document.settings) &&
+        (isAdmin || layerIsSelectable(layer, mode, document.settings))
+    );
 
   const reorderById = (fromId: string, toId: string) => {
     if (fromId === toId) return;
@@ -26,10 +37,24 @@ export default function LayersPanel() {
 
   return (
     <aside
-      className={`chd-panel chd-layers-panel${isAdmin ? ' chd-layers-panel--admin' : ''}`}
+      className={`chd-panel chd-layers-panel${isAdmin ? ' chd-layers-panel--admin' : ''}${collapsed ? ' chd-panel--collapsed' : ''}`}
       aria-label="Layers"
     >
-      <div className="chd-panel-header">{isAdmin ? 'Layers' : 'Editable layers'}</div>
+      <div className="chd-panel-header">
+        {collapsed ? <span className="chd-panel-rail-label">{isAdmin ? 'Layers' : 'Editable'}</span> : <span>{isAdmin ? 'Layers' : 'Editable layers'}</span>}
+        {onToggleCollapse ? (
+          <button
+            type="button"
+            className="chd-panel-toggle"
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? 'Expand layers' : 'Collapse layers'}
+            onClick={onToggleCollapse}
+          >
+            {collapsed ? '›' : '‹'}
+          </button>
+        ) : null}
+      </div>
+      {collapsed ? null : (
       <ul className="chd-layer-list">
         {ordered.length === 0 ? (
           <li className="chd-panel-empty">No editable layers</li>
@@ -138,6 +163,7 @@ export default function LayersPanel() {
           })
         )}
       </ul>
+      )}
     </aside>
   );
 }

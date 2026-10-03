@@ -22,14 +22,13 @@ function findArtboard(from: HTMLElement): HTMLElement {
   return artboard;
 }
 
-async function captureArtboard(from: HTMLElement): Promise<HTMLCanvasElement> {
-  const artboard = findArtboard(from);
+export async function captureElement(element: HTMLElement): Promise<HTMLCanvasElement> {
   const html2canvas = await loadHtml2Canvas();
-  artboard.classList.add('chd-artboard--capturing');
+  element.classList.add('chd-artboard--capturing');
   try {
-    const width = Math.max(1, Math.round(artboard.offsetWidth));
-    const height = Math.max(1, Math.round(artboard.offsetHeight));
-    return await html2canvas(artboard, {
+    const width = Math.max(1, Math.round(element.offsetWidth));
+    const height = Math.max(1, Math.round(element.offsetHeight));
+    return await html2canvas(element, {
       useCORS: true,
       backgroundColor: null,
       width,
@@ -40,8 +39,50 @@ async function captureArtboard(from: HTMLElement): Promise<HTMLCanvasElement> {
       logging: false,
     });
   } finally {
-    artboard.classList.remove('chd-artboard--capturing');
+    element.classList.remove('chd-artboard--capturing');
   }
+}
+
+async function captureArtboard(from: HTMLElement): Promise<HTMLCanvasElement> {
+  return captureElement(findArtboard(from));
+}
+
+function pageSizeMm(pageWidthPx: number, pageHeightPx: number) {
+  return {
+    widthMm: (pageWidthPx * 25.4) / CSS_PX_PER_INCH,
+    heightMm: (pageHeightPx * 25.4) / CSS_PX_PER_INCH,
+  };
+}
+
+export interface BatchPdf {
+  addPageImage: (canvas: HTMLCanvasElement, pageWidthPx: number, pageHeightPx: number) => void;
+  save: (filename: string) => void;
+}
+
+export async function createBatchPdf(): Promise<BatchPdf> {
+  const JsPDF = await loadJsPdf();
+  let pdf: InstanceType<typeof JsPDF> | null = null;
+  return {
+    addPageImage(canvas, pageWidthPx, pageHeightPx) {
+      const { widthMm, heightMm } = pageSizeMm(pageWidthPx, pageHeightPx);
+      const orientation = widthMm >= heightMm ? 'landscape' : 'portrait';
+      if (!pdf) {
+        pdf = new JsPDF({
+          orientation,
+          unit: 'mm',
+          format: [widthMm, heightMm],
+          compress: true,
+        });
+      } else {
+        pdf.addPage([widthMm, heightMm], orientation);
+      }
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
+    },
+    save(filename: string) {
+      if (!pdf) throw new Error('There are no pages to download.');
+      pdf.save(filename);
+    },
+  };
 }
 
 async function exportPng(canvas: HTMLCanvasElement, filename: string) {
@@ -60,16 +101,8 @@ async function exportPdf(
   pageWidthPx: number,
   pageHeightPx: number
 ) {
-  const JsPDF = await loadJsPdf();
-  const widthMm = (pageWidthPx * 25.4) / CSS_PX_PER_INCH;
-  const heightMm = (pageHeightPx * 25.4) / CSS_PX_PER_INCH;
-  const pdf = new JsPDF({
-    orientation: widthMm >= heightMm ? 'landscape' : 'portrait',
-    unit: 'mm',
-    format: [widthMm, heightMm],
-    compress: true,
-  });
-  pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, widthMm, heightMm);
+  const pdf = await createBatchPdf();
+  pdf.addPageImage(canvas, pageWidthPx, pageHeightPx);
   pdf.save(filename);
 }
 

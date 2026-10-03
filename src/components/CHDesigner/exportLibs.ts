@@ -3,7 +3,7 @@
   options?: Record<string, unknown>
 ) => Promise<HTMLCanvasElement>;
 
-type JsPdfInstance = {
+export type JsPdfInstance = {
   addImage: (
     imageData: string,
     format: string,
@@ -12,6 +12,7 @@ type JsPdfInstance = {
     width: number,
     height: number
   ) => void;
+  addPage: (format?: [number, number], orientation?: 'portrait' | 'landscape') => void;
   save: (filename: string) => void;
 };
 

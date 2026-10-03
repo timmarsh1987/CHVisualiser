@@ -2,6 +2,10 @@ export type LayerType = 'frame' | 'rect' | 'text' | 'image';
 
 export type DesignerMode = 'admin' | 'endUser';
 
+export type LayerRole = 'static' | 'text' | 'brand' | 'picker' | 'hidden';
+
+export type LayerSlot = 'lhs' | 'rhs' | 'image' | 'logo' | 'partnerLogo';
+
 export interface Layer {
   id: string;
   type: LayerType;
@@ -20,7 +24,18 @@ export interface Layer {
   editableContent?: boolean;
   fill?: string;
   text?: string;
+  /**
+   * Portion of `text` drawn in this frame when the story continues on another page.
+   * The start frame keeps the full story in `text`.
+   */
+  flowText?: string;
+  /** Overflow from this frame continues on the next page. */
+  flowOverflow?: boolean;
+  /** Start frame that owns the full story, when this frame is a continuation. */
+  continuesFrom?: string;
   fontSize?: number;
+  /** Font size scales when the box width or height changes. */
+  dynamicSize?: boolean;
   color?: string;
   src?: string;
   /** Pin to canvas edges so page-size changes keep insets. Undefined = infer until any pin is set. */
@@ -37,6 +52,38 @@ export interface Layer {
   pageLayouts?: Record<string, LayerPageLayout>;
   /** How an image fills its box after the page size changes. */
   objectFit?: 'cover' | 'contain';
+  /** InDesign layer this item was imported from. */
+  sourceLayerId?: string;
+  sourceLayerName?: string;
+  role?: LayerRole;
+  /** Brand side or picker kind, when role is brand or picker. */
+  slot?: LayerSlot;
+  /** Brand name for a brand-slot layer, such as Hampton. */
+  option?: string;
+  direction?: 'ltr' | 'rtl';
+  /** Magic-string field whose value replaces this frame’s story on an output. */
+  fieldId?: string;
+}
+
+export interface DesignerField {
+  id: string;
+  /** Magic string body, without braces. `dish_name` is shown as `{{dish_name}}`. */
+  key: string;
+  /** Name shown when someone fills the field. */
+  label: string;
+}
+
+export interface DesignerTemplatePage {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  layers: Layer[];
+}
+
+export interface DesignerSettings {
+  /** Selected brand option id, keyed by slot (`lhs`, `rhs`). */
+  brands: Record<string, string>;
 }
 
 export interface LayerPageLayout {
@@ -64,7 +111,14 @@ export interface DesignerCanvasSize {
 export interface DesignerDocument {
   version: 1;
   canvas: DesignerCanvasSize;
+  /** Layers of the active template page. */
   layers: Layer[];
+  /** Every page imported from a template. Absent on hand-built documents. */
+  pages?: DesignerTemplatePage[];
+  activePageId?: string;
+  settings?: DesignerSettings;
+  /** Magic-string catalog. Sample copy stays on each layer. */
+  fields?: DesignerField[];
 }
 
 export type LayerOverride = {
@@ -82,12 +136,16 @@ export interface DesignerInstanceDocument {
   version: 1;
   templateId: string;
   overrides: Record<string, LayerOverride>;
+  /** Entered values keyed by field id. An empty or missing value keeps the sample. */
+  fields?: Record<string, string>;
 }
 
 export interface ViewportState {
   zoom: number;
   panX: number;
   panY: number;
+  /** Bumped to ask the canvas to fit the page into the stage. */
+  fitNonce: number;
 }
 
 export type DesignerAction =
@@ -103,17 +161,26 @@ export type DesignerAction =
   | { type: 'ZOOM_SET'; zoom: number }
   | { type: 'ZOOM_RESET' }
   | { type: 'PAN_SET'; panX: number; panY: number }
+  | { type: 'VIEWPORT_SET'; zoom: number; panX: number; panY: number }
   | { type: 'UNDO' }
   | { type: 'REDO' }
   | { type: 'LOAD_DOCUMENT'; document: DesignerDocument }
   | { type: 'SET_CANVAS_SIZE'; width: number; height: number; presetId?: string }
+  | { type: 'SET_TEMPLATE_PAGE'; pageId: string }
+  | { type: 'ADD_TEMPLATE_PAGE' }
+  | { type: 'REMOVE_TEMPLATE_PAGE' }
+  | { type: 'SET_BRAND_OPTION'; slot: string; option: string }
   | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
+  | { type: 'SET_FIELD_VALUE'; fieldId: string; value: string }
+  | { type: 'SET_FIELD_LABEL'; fieldId: string; label: string }
+  | { type: 'SET_LAYER_FIELD'; layerId: string; fieldId: string | null }
+  | { type: 'ADD_MAGIC_STRINGS' }
   | { type: 'COMMIT' };
 
 export const MIN_LAYER_SIZE = 24;
 export const DEFAULT_ZOOM = 1;
-export const MIN_ZOOM = 0.25;
-export const MAX_ZOOM = 3;
+export const MIN_ZOOM = 0.05;
+export const MAX_ZOOM = 8;
 
 export const CONTENT_OVERRIDE_KEYS = ['text', 'fill', 'color', 'src'] as const;
 export const TRANSFORM_OVERRIDE_KEYS = ['x', 'y', 'width', 'height'] as const;

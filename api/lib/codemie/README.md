@@ -1,6 +1,6 @@
 # CodeMie integration
 
-Server-side CodeMie client used by `CHBrandCompliance` and `CHFineArtTagging` embed API routes.
+Server-side CodeMie client used by `CHBrandCompliance`, `CHFineArtTagging`, and `CHImageDetection` embed API routes.
 
 Implementation mirrors Signal-Monitor:
 
@@ -83,7 +83,9 @@ No username or password. Get client ID/secret from your CodeMie/EPAM admin.
 
 Set one of:
 
-- `CODEMIE_BRAND_COMPLIANCE_ASSISTANT_ID` — preferred for this project
+- `CODEMIE_BRAND_COMPLIANCE_ASSISTANT_ID` — brand compliance
+- `CODEMIE_FINE_ART_TAGGING_ASSISTANT_ID` — fine-art tagging
+- `CODEMIE_IMAGE_DETECTION_ASSISTANT_ID` — image detection (`CHImageDetection`)
 - `CODEMIE_MY_AGENT_ASSISTANT_ID` — generic fallback
 
 Copy the UUID from the CodeMie UI → open your assistant → copy ID.

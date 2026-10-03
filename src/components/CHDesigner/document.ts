@@ -1,6 +1,16 @@
 import epamBlack from '../CHImageComposer/logos/epam-black.png';
 import { SOK_THEME } from './brand';
-import type { DesignerDocument, Layer, LayerPageLayout, LayerType } from './types';
+import type {
+  DesignerDocument,
+  DesignerField,
+  DesignerSettings,
+  DesignerTemplatePage,
+  Layer,
+  LayerPageLayout,
+  LayerRole,
+  LayerSlot,
+  LayerType,
+} from './types';
 
 function readOptionalBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
@@ -91,6 +101,7 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         height: 48,
         visible: true,
         text: 'Double-click to edit',
+        flowOverflow: true,
         fontSize: 20,
         color: '#1a1a1a',
         locked: false,
@@ -148,6 +159,124 @@ export function cloneDocument(doc: DesignerDocument): DesignerDocument {
   return JSON.parse(JSON.stringify(doc)) as DesignerDocument;
 }
 
+const LAYER_ROLES = new Set<LayerRole>(['static', 'text', 'brand', 'picker', 'hidden']);
+const LAYER_SLOTS = new Set<LayerSlot>(['lhs', 'rhs', 'image', 'logo', 'partnerLogo']);
+
+function parseLayer(item: unknown): Layer | null {
+  if (!item || typeof item !== 'object') return null;
+  const layer = item as Record<string, unknown>;
+  const type = layer.type;
+  if (type !== 'frame' && type !== 'rect' && type !== 'text' && type !== 'image') return null;
+  const id = typeof layer.id === 'string' ? layer.id : createLayerId();
+  const name = typeof layer.name === 'string' ? layer.name : type;
+  const x = Number(layer.x);
+  const y = Number(layer.y);
+  const w = Number(layer.width);
+  const h = Number(layer.height);
+  if (![x, y, w, h].every(Number.isFinite)) return null;
+
+  const parsed: Layer = {
+    id,
+    type,
+    name,
+    x,
+    y,
+    width: w,
+    height: h,
+    rotation: typeof layer.rotation === 'number' ? layer.rotation : undefined,
+    visible: layer.visible !== false,
+    locked: Boolean(layer.locked),
+    allowTransform: Boolean(layer.allowTransform),
+    fill: typeof layer.fill === 'string' ? layer.fill : undefined,
+    text: typeof layer.text === 'string' ? layer.text : undefined,
+    flowText: typeof layer.flowText === 'string' ? layer.flowText : undefined,
+    flowOverflow: readOptionalBoolean(layer.flowOverflow),
+    continuesFrom: typeof layer.continuesFrom === 'string' ? layer.continuesFrom : undefined,
+    fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
+    dynamicSize: readOptionalBoolean(layer.dynamicSize),
+    color: typeof layer.color === 'string' ? layer.color : undefined,
+    src: typeof layer.src === 'string' ? layer.src : undefined,
+    pinLeft: readOptionalBoolean(layer.pinLeft),
+    pinRight: readOptionalBoolean(layer.pinRight),
+    pinTop: readOptionalBoolean(layer.pinTop),
+    pinBottom: readOptionalBoolean(layer.pinBottom),
+    marginTop: readOptionalNumber(layer.marginTop),
+    marginRight: readOptionalNumber(layer.marginRight),
+    marginBottom: readOptionalNumber(layer.marginBottom),
+    marginLeft: readOptionalNumber(layer.marginLeft),
+    pageLayouts: parsePageLayouts(layer.pageLayouts),
+    objectFit: layer.objectFit === 'contain' || layer.objectFit === 'cover' ? layer.objectFit : undefined,
+    sourceLayerId: typeof layer.sourceLayerId === 'string' ? layer.sourceLayerId : undefined,
+    sourceLayerName: typeof layer.sourceLayerName === 'string' ? layer.sourceLayerName : undefined,
+    role: typeof layer.role === 'string' && LAYER_ROLES.has(layer.role as LayerRole) ? (layer.role as LayerRole) : undefined,
+    slot: typeof layer.slot === 'string' && LAYER_SLOTS.has(layer.slot as LayerSlot) ? (layer.slot as LayerSlot) : undefined,
+    option: typeof layer.option === 'string' ? layer.option : undefined,
+    direction: layer.direction === 'rtl' || layer.direction === 'ltr' ? layer.direction : undefined,
+    fieldId: typeof layer.fieldId === 'string' && layer.fieldId ? layer.fieldId : undefined,
+  };
+
+  if (typeof layer.editableContent === 'boolean') {
+    parsed.editableContent = layer.editableContent;
+  } else {
+    parsed.editableContent = type === 'text' || type === 'image';
+  }
+
+  return parsed;
+}
+
+function parseLayers(raw: unknown): Layer[] {
+  if (!Array.isArray(raw)) return [];
+  const layers: Layer[] = [];
+  for (const item of raw) {
+    const layer = parseLayer(item);
+    if (layer) layers.push(layer);
+  }
+  return layers;
+}
+
+function parseTemplatePages(raw: unknown): DesignerTemplatePage[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const pages: DesignerTemplatePage[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const page = item as Record<string, unknown>;
+    const width = Number(page.width);
+    const height = Number(page.height);
+    if (!Number.isFinite(width) || !Number.isFinite(height)) continue;
+    const id = typeof page.id === 'string' && page.id ? page.id : createLayerId();
+    const name = typeof page.name === 'string' && page.name ? page.name : `Page ${pages.length + 1}`;
+    pages.push({ id, name, width, height, layers: parseLayers(page.layers) });
+  }
+  return pages.length > 0 ? pages : undefined;
+}
+
+function parseSettings(raw: unknown): DesignerSettings | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const brandsRaw = (raw as Record<string, unknown>).brands;
+  if (!brandsRaw || typeof brandsRaw !== 'object' || Array.isArray(brandsRaw)) return undefined;
+  const brands: Record<string, string> = {};
+  for (const [slot, option] of Object.entries(brandsRaw as Record<string, unknown>)) {
+    if (typeof option === 'string' && option) brands[slot] = option;
+  }
+  return Object.keys(brands).length > 0 ? { brands } : undefined;
+}
+
+function parseFields(raw: unknown): DesignerField[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const fields: DesignerField[] = [];
+  const keys = new Set<string>();
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const field = item as Record<string, unknown>;
+    if (typeof field.id !== 'string' || !field.id) continue;
+    if (typeof field.key !== 'string' || !field.key || keys.has(field.key)) continue;
+    if (typeof field.label !== 'string' || !field.label) continue;
+    keys.add(field.key);
+    fields.push({ id: field.id, key: field.key, label: field.label });
+  }
+  return fields.length > 0 ? fields : undefined;
+}
+
 export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
   if (!raw || typeof raw !== 'object') return null;
   const record = raw as Record<string, unknown>;
@@ -156,63 +285,30 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
   if (!Array.isArray(record.layers)) return null;
 
   const canvas = record.canvas as Record<string, unknown>;
-  const width = Number(canvas.width);
-  const height = Number(canvas.height);
+  let width = Number(canvas.width);
+  let height = Number(canvas.height);
   if (!Number.isFinite(width) || !Number.isFinite(height)) return null;
 
-  const layers: Layer[] = [];
-  for (const item of record.layers) {
-    if (!item || typeof item !== 'object') continue;
-    const layer = item as Record<string, unknown>;
-    const type = layer.type;
-    if (type !== 'frame' && type !== 'rect' && type !== 'text' && type !== 'image') continue;
-    const id = typeof layer.id === 'string' ? layer.id : createLayerId();
-    const name = typeof layer.name === 'string' ? layer.name : type;
-    const x = Number(layer.x);
-    const y = Number(layer.y);
-    const w = Number(layer.width);
-    const h = Number(layer.height);
-    if (![x, y, w, h].every(Number.isFinite)) continue;
-
-    const parsed: Layer = {
-      id,
-      type,
-      name,
-      x,
-      y,
-      width: w,
-      height: h,
-      rotation: typeof layer.rotation === 'number' ? layer.rotation : undefined,
-      visible: layer.visible !== false,
-      locked: Boolean(layer.locked),
-      allowTransform: Boolean(layer.allowTransform),
-      fill: typeof layer.fill === 'string' ? layer.fill : undefined,
-      text: typeof layer.text === 'string' ? layer.text : undefined,
-      fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
-      color: typeof layer.color === 'string' ? layer.color : undefined,
-      src: typeof layer.src === 'string' ? layer.src : undefined,
-      pinLeft: readOptionalBoolean(layer.pinLeft),
-      pinRight: readOptionalBoolean(layer.pinRight),
-      pinTop: readOptionalBoolean(layer.pinTop),
-      pinBottom: readOptionalBoolean(layer.pinBottom),
-      marginTop: readOptionalNumber(layer.marginTop),
-      marginRight: readOptionalNumber(layer.marginRight),
-      marginBottom: readOptionalNumber(layer.marginBottom),
-      marginLeft: readOptionalNumber(layer.marginLeft),
-      pageLayouts: parsePageLayouts(layer.pageLayouts),
-      objectFit: layer.objectFit === 'contain' || layer.objectFit === 'cover' ? layer.objectFit : undefined,
-    };
-
-    if (typeof layer.editableContent === 'boolean') {
-      parsed.editableContent = layer.editableContent;
-    } else {
-      parsed.editableContent = type === 'text' || type === 'image';
+  const layers = parseLayers(record.layers);
+  const pages = parseTemplatePages(record.pages);
+  let activePageId = typeof record.activePageId === 'string' ? record.activePageId : undefined;
+  if (pages?.length) {
+    if (!activePageId || !pages.some((page) => page.id === activePageId)) {
+      activePageId = pages[0].id;
     }
-
-    layers.push(parsed);
+    const active = pages.find((page) => page.id === activePageId);
+    if (active && layers.length > 0) {
+      active.layers = layers;
+      active.width = width;
+      active.height = height;
+    } else if (active && layers.length === 0 && active.layers.length > 0) {
+      layers.push(...active.layers);
+      width = active.width;
+      height = active.height;
+    }
   }
 
-  return {
+  const document: DesignerDocument = {
     version: 1,
     canvas: {
       width,
@@ -222,4 +318,13 @@ export function parseDesignerDocument(raw: unknown): DesignerDocument | null {
     },
     layers,
   };
+  if (pages) {
+    document.pages = pages;
+    document.activePageId = activePageId;
+  }
+  const settings = parseSettings(record.settings);
+  if (settings) document.settings = settings;
+  const fields = parseFields(record.fields);
+  if (fields) document.fields = fields;
+  return document;
 }

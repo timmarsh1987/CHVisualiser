@@ -17,6 +17,7 @@ const COMPONENTS = [
   "CHFineArtTagging",
   "AIGovernancePanel",
   "CHImageTransform",
+  "CHImageDetection",
   "CHC2PAProvenance",
   "CHImageComposer",
 ];

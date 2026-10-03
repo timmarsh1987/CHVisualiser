@@ -1,7 +1,9 @@
 import React, { useRef } from 'react';
 import epamWhite from '../CHImageComposer/logos/epam-white.png';
 import { fillLayerToCanvas } from './constraints';
+import { importIdmlFile } from './idmlImport';
 import { pinLayerInPlace } from './pageLayout';
+import BatchMenu from './BatchMenu';
 import GenerateMenu from './GenerateMenu';
 import {
   CANVAS_PRESET_GROUPS,
@@ -10,6 +12,7 @@ import {
   resolveCanvasPresetId,
 } from './printPresets';
 import { useDesignerAction, useDesignerApi, useDesignerDocument, useSelection, useViewport } from './store';
+import { brandChoices } from './templateSettings';
 import type { LayerType } from './types';
 
 const ADDABLE: { type: LayerType; label: string }[] = [
@@ -26,12 +29,16 @@ export default function Toolbar() {
   const canvasDocument = useDesignerDocument();
   const { mode, canUndo, canRedo, exportDocument, importDocumentJson } = useDesignerApi();
   const fileRef = useRef<HTMLInputElement>(null);
+  const idmlRef = useRef<HTMLInputElement>(null);
   const isAdmin = mode === 'admin';
   const presetId = resolveCanvasPresetId(
     canvasDocument.canvas.width,
     canvasDocument.canvas.height,
     canvasDocument.canvas.presetId
   );
+  const templatePages = canvasDocument.pages ?? [];
+  const brands = brandChoices(canvasDocument);
+  const showTemplateSettings = templatePages.length > 1 || brands.length > 0;
 
   const handleExport = () => {
     const doc = exportDocument();
@@ -50,6 +57,30 @@ export default function Toolbar() {
     const ok = importDocumentJson(text);
     if (!ok) {
       window.alert('Could not import document. Expected CHDesigner JSON (version 1).');
+    }
+  };
+
+  const handleImportIndesign = async (file: File | null) => {
+    if (!file) return;
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.indd')) {
+      window.alert(
+        'InDesign’s native .indd file can’t be read here. In InDesign, choose File → Save As and pick InDesign CS4 or later (IDML), then import that file.'
+      );
+      return;
+    }
+    if (!name.endsWith('.idml')) {
+      window.alert('Could not read this IDML file.');
+      return;
+    }
+    try {
+      const result = await importIdmlFile(await file.arrayBuffer());
+      const ok = importDocumentJson(JSON.stringify(result.document));
+      if (!ok) {
+        window.alert('Could not read this IDML file.');
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not read this IDML file.');
     }
   };
 
@@ -95,6 +126,51 @@ export default function Toolbar() {
         <span className="chd-toolbar-mode">{isAdmin ? 'Admin' : 'Edit'}</span>
       </div>
 
+      {showTemplateSettings ? (
+        <div className="chd-toolbar-group">
+          {templatePages.length > 1 ? (
+            <label className="chd-toolbar-field">
+              <span>Page</span>
+              <select
+                className="chd-toolbar-select"
+                value={canvasDocument.activePageId || templatePages[0].id}
+                onChange={(event) =>
+                  dispatch({ type: 'SET_TEMPLATE_PAGE', pageId: event.target.value })
+                }
+              >
+                {templatePages.map((page) => (
+                  <option key={page.id} value={page.id}>
+                    {page.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          {brands.map((brand) => (
+            <label key={brand.slot} className="chd-toolbar-field">
+              <span>{brand.label}</span>
+              <select
+                className="chd-toolbar-select"
+                value={canvasDocument.settings?.brands?.[brand.slot] || brand.options[0]}
+                onChange={(event) =>
+                  dispatch({
+                    type: 'SET_BRAND_OPTION',
+                    slot: brand.slot,
+                    option: event.target.value,
+                  })
+                }
+              >
+                {brand.options.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      ) : null}
+
       {isAdmin ? (
         <div className="chd-toolbar-group">
           {ADDABLE.map((item) => (
@@ -113,7 +189,7 @@ export default function Toolbar() {
       {isAdmin ? (
         <div className="chd-toolbar-group">
           <label className="chd-toolbar-field">
-            <span>Page</span>
+            <span>{templatePages.length > 1 ? 'Size' : 'Page'}</span>
             <select
               className="chd-toolbar-select"
               value={presetId}
@@ -134,6 +210,17 @@ export default function Toolbar() {
           <span className="chd-toolbar-size">
             {Math.round(canvasDocument.canvas.width)} × {Math.round(canvasDocument.canvas.height)}
           </span>
+          <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ADD_TEMPLATE_PAGE' })}>
+            Add page
+          </button>
+          <button
+            type="button"
+            className="chd-btn"
+            disabled={templatePages.length < 2}
+            onClick={() => dispatch({ type: 'REMOVE_TEMPLATE_PAGE' })}
+          >
+            Remove page
+          </button>
           <button
             type="button"
             className="chd-btn"
@@ -203,7 +290,13 @@ export default function Toolbar() {
 
       <div className="chd-toolbar-group">
         <GenerateMenu />
-        <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ZOOM_RESET' })}>
+        <BatchMenu />
+        <button
+          type="button"
+          className="chd-btn"
+          title="Fit page"
+          onClick={() => dispatch({ type: 'ZOOM_RESET' })}
+        >
           {Math.round(viewport.zoom * 100)}%
         </button>
         {isAdmin ? (
@@ -214,6 +307,12 @@ export default function Toolbar() {
             <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
               Import
             </button>
+            <button type="button" className="chd-btn" onClick={() => idmlRef.current?.click()}>
+              Import InDesign
+            </button>
+            <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ADD_MAGIC_STRINGS' })}>
+              Add magic strings
+            </button>
             <input
               ref={fileRef}
               type="file"
@@ -221,6 +320,16 @@ export default function Toolbar() {
               className="chd-file-input"
               onChange={(e) => {
                 void handleImportFile(e.target.files?.[0] ?? null);
+                e.target.value = '';
+              }}
+            />
+            <input
+              ref={idmlRef}
+              type="file"
+              accept=".idml,.indd"
+              className="chd-file-input"
+              onChange={(e) => {
+                void handleImportIndesign(e.target.files?.[0] ?? null);
                 e.target.value = '';
               }}
             />

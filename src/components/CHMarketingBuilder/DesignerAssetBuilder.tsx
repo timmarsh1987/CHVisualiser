@@ -124,6 +124,7 @@ export default function DesignerAssetBuilder({
         document={merged}
         templateDocument={templateDoc}
         templateId={template.id}
+        fieldValues={instance.fields}
         onInstanceChange={setInstance}
       />
     </div>

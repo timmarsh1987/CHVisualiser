@@ -1,4 +1,5 @@
 import React from 'react';
+import { displayedText } from './textFlow';
 import type { Layer } from './types';
 
 interface LayerNodeProps {
@@ -7,6 +8,8 @@ interface LayerNodeProps {
   onSelect: (e: React.PointerEvent) => void;
   onMoveStart: (e: React.PointerEvent) => void;
   onUnlock?: () => void;
+  /** Static render for page thumbnails. */
+  preview?: boolean;
 }
 
 export default function LayerNode({
@@ -15,6 +18,7 @@ export default function LayerNode({
   onSelect,
   onMoveStart,
   onUnlock,
+  preview = false,
 }: LayerNodeProps) {
   if (!layer.visible) return null;
 
@@ -48,13 +52,14 @@ export default function LayerNode({
     case 'text':
       body = (
         <div
-          className="chd-layer-text"
+          className={`chd-layer-text${layer.direction === 'rtl' ? ' chd-layer-text--rtl' : ''}`}
           style={{
             color: layer.color || '#1a1a1a',
             fontSize: layer.fontSize || 16,
+            direction: layer.direction === 'rtl' ? 'rtl' : undefined,
           }}
         >
-          {layer.text || ''}
+          {displayedText(layer)}
         </div>
       );
       break;
@@ -73,6 +78,14 @@ export default function LayerNode({
         </div>
       );
       break;
+  }
+
+  if (preview) {
+    return (
+      <div className="chd-layer" style={style} data-layer-id={layer.id}>
+        {body}
+      </div>
+    );
   }
 
   return (

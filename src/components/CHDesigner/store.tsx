@@ -8,7 +8,11 @@ import React, {
   useState,
 } from 'react';
 import { persistCurrentPageLayout, pushLayerToAllPages, switchDocumentPage } from './pageLayout';
+import { resolveCanvasPresetId } from './printPresets';
 import { cloneDocument, createSeedDocument, defaultLayerForType, parseDesignerDocument } from './document';
+import { assignMagicStrings, resolveFieldText } from './fields';
+import { addTemplatePage, removeActiveTemplatePage, syncActiveTemplatePage } from './templateSettings';
+import { reflowTextStory, scaleFontWithBox } from './textFlow';
 import {
   diffInstanceOverrides,
   filterEndUserPatch,
@@ -39,6 +43,8 @@ export interface DesignerProviderProps {
   templateDocument?: DesignerDocument;
   /** Template id used when emitting instance overrides in endUser mode. */
   templateId?: string;
+  /** Entered magic-string values for end-user mode. */
+  initialFieldValues?: Record<string, string>;
   onDocumentChange?: (document: DesignerDocument) => void;
   onInstanceChange?: (instance: DesignerInstanceDocument) => void;
 }
@@ -47,6 +53,9 @@ interface DesignerStoreValue {
   mode: DesignerMode;
   templateId?: string;
   document: DesignerDocument;
+  /** Document with field values applied. Admin mode returns the stored document. */
+  outputDocument: DesignerDocument;
+  fieldValues: Record<string, string>;
   selection: string[];
   viewport: ViewportState;
   canUndo: boolean;
@@ -105,6 +114,7 @@ export function DesignerProvider({
   initialDocument,
   templateDocument,
   templateId,
+  initialFieldValues,
   onDocumentChange,
   onInstanceChange,
 }: DesignerProviderProps) {
@@ -120,11 +130,14 @@ export function DesignerProvider({
   modeRef.current = mode;
 
   const [document, setDocument] = useState<DesignerDocument>(() => cloneDocument(seedRef.current!));
+  const [fieldValues, setFieldValues] = useState<Record<string, string>>(() => ({ ...(initialFieldValues ?? {}) }));
+  const [viewPageId, setViewPageId] = useState<string | null>(null);
   const [selection, setSelection] = useState<string[]>([]);
   const [viewport, setViewport] = useState<ViewportState>({
     zoom: DEFAULT_ZOOM,
     panX: 40,
     panY: 40,
+    fitNonce: 0,
   });
   const historyRef = useRef<DesignerDocument[]>([cloneDocument(seedRef.current)]);
   const historyIndexRef = useRef(0);
@@ -133,6 +146,8 @@ export function DesignerProvider({
   selectionRef.current = selection;
   const documentRef = useRef(document);
   documentRef.current = document;
+  const fieldValuesRef = useRef(fieldValues);
+  fieldValuesRef.current = fieldValues;
 
   const onDocumentChangeRef = useRef(onDocumentChange);
   onDocumentChangeRef.current = onDocumentChange;
@@ -144,11 +159,11 @@ export function DesignerProvider({
   const bumpHistoryUi = useCallback(() => setHistoryTick((n) => n + 1), []);
 
   const emitChanges = useCallback((nextDoc: DesignerDocument) => {
-    onDocumentChangeRef.current?.(cloneDocument(nextDoc));
+    onDocumentChangeRef.current?.(cloneDocument(syncActiveTemplatePage(nextDoc)));
     if (modeRef.current === 'endUser') {
       const id = templateIdRef.current ?? '';
       onInstanceChangeRef.current?.(
-        diffInstanceOverrides(templateBaselineRef.current, nextDoc, id)
+        diffInstanceOverrides(templateBaselineRef.current, nextDoc, id, fieldValuesRef.current)
       );
     }
   }, []);
@@ -188,7 +203,10 @@ export function DesignerProvider({
           if (isEndUser) return;
           const layer = defaultLayerForType(action.layerType, action.at);
           setDocument((prev) => {
-            const next = { ...prev, layers: [...prev.layers, layer] };
+            let next: DesignerDocument = { ...prev, layers: [...prev.layers, layer] };
+            if (layer.type === 'text' && layer.flowOverflow) {
+              next = reflowTextStory(next, layer.id);
+            }
             pushHistory(next);
             emitChanges(next);
             return next;
@@ -199,22 +217,40 @@ export function DesignerProvider({
         case 'UPDATE_LAYER': {
           const push = action.pushHistory !== false;
           setDocument((prev) => {
-            const next: DesignerDocument = {
-              ...prev,
-              layers: prev.layers.map((layer) => {
-                if (layer.id !== action.id) return layer;
-                const patch = isEndUser ? filterEndUserPatch(layer, action.patch) : action.patch;
-                if (Object.keys(patch).length === 0) return layer;
-                const patched: Layer = { ...layer, ...patch };
-                if (typeof patched.width === 'number') {
-                  patched.width = Math.max(MIN_LAYER_SIZE, patched.width);
-                }
-                if (typeof patched.height === 'number') {
-                  patched.height = Math.max(MIN_LAYER_SIZE, patched.height);
-                }
-                return isEndUser ? patched : persistCurrentPageLayout(patched, prev.canvas);
-              }),
+            const applyPatch = (layer: Layer, persistLayout: boolean): Layer => {
+              if (layer.id !== action.id) return layer;
+              const patch = isEndUser ? filterEndUserPatch(layer, action.patch) : action.patch;
+              if (Object.keys(patch).length === 0) return layer;
+              const patched: Layer = { ...layer, ...patch };
+              if (typeof patched.width === 'number') {
+                patched.width = Math.max(MIN_LAYER_SIZE, patched.width);
+              }
+              if (typeof patched.height === 'number') {
+                patched.height = Math.max(MIN_LAYER_SIZE, patched.height);
+              }
+              const scaled = scaleFontWithBox(layer, patched, action.patch);
+              return isEndUser || !persistLayout ? scaled : persistCurrentPageLayout(scaled, prev.canvas);
             };
+            const layers = prev.layers.map((layer) => applyPatch(layer, true));
+            const pages = prev.pages?.map((page) => ({
+              ...page,
+              layers:
+                page.id === prev.activePageId
+                  ? layers
+                  : page.layers.map((layer) => applyPatch(layer, false)),
+            }));
+            let next: DesignerDocument = pages ? { ...prev, layers, pages } : { ...prev, layers };
+            const touched =
+              layers.find((layer) => layer.id === action.id) ||
+              pages?.flatMap((page) => page.layers).find((layer) => layer.id === action.id);
+            const shouldFlow =
+              touched?.type === 'text' &&
+              (Boolean(touched.flowOverflow) ||
+                Boolean(touched.continuesFrom) ||
+                action.patch.flowOverflow === false);
+            if (shouldFlow && touched) {
+              next = reflowTextStory(next, touched.continuesFrom || touched.id);
+            }
             if (push) pushHistory(next);
             emitChanges(next);
             return next;
@@ -226,10 +262,24 @@ export function DesignerProvider({
           const ids = new Set(action.ids ?? selectionRef.current);
           if (ids.size === 0) return;
           setDocument((prev) => {
-            const next = {
-              ...prev,
-              layers: prev.layers.filter((layer) => !ids.has(layer.id)),
-            };
+            const synced = syncActiveTemplatePage(prev);
+            const drop = new Set(ids);
+            const pool = synced.pages?.flatMap((page) => page.layers) ?? synced.layers;
+            for (const layer of pool) {
+              if (layer.continuesFrom && drop.has(layer.continuesFrom)) drop.add(layer.id);
+            }
+            const keep = (layer: Layer) => !drop.has(layer.id);
+            const layers = synced.layers.filter(keep);
+            const next: DesignerDocument = synced.pages
+              ? {
+                  ...synced,
+                  layers,
+                  pages: synced.pages.map((page) => ({
+                    ...page,
+                    layers: page.id === synced.activePageId ? layers : page.layers.filter(keep),
+                  })),
+                }
+              : { ...synced, layers };
             pushHistory(next);
             emitChanges(next);
             return next;
@@ -241,7 +291,9 @@ export function DesignerProvider({
           setSelection((prev) => {
             const allowed = action.ids.filter((id) => {
               const layer = documentRef.current.layers.find((l) => l.id === id);
-              return layer ? layerIsSelectable(layer, modeRef.current) : false;
+              return layer
+                ? layerIsSelectable(layer, modeRef.current, documentRef.current.settings)
+                : false;
             });
             if (action.additive) {
               const set = new Set(prev);
@@ -317,7 +369,16 @@ export function DesignerProvider({
           break;
         }
         case 'ZOOM_RESET': {
-          setViewport({ zoom: DEFAULT_ZOOM, panX: 40, panY: 40 });
+          setViewport((prev) => ({ ...prev, fitNonce: prev.fitNonce + 1 }));
+          break;
+        }
+        case 'VIEWPORT_SET': {
+          setViewport((prev) => ({
+            ...prev,
+            zoom: clamp(action.zoom, MIN_ZOOM, MAX_ZOOM),
+            panX: action.panX,
+            panY: action.panY,
+          }));
           break;
         }
         case 'PAN_SET': {
@@ -366,6 +427,75 @@ export function DesignerProvider({
           });
           break;
         }
+        case 'SET_TEMPLATE_PAGE': {
+          const synced = syncActiveTemplatePage(documentRef.current);
+          const target = synced.pages?.find((page) => page.id === action.pageId);
+          if (!target) {
+            setViewPageId(action.pageId);
+            setSelection([]);
+            break;
+          }
+          setViewPageId(null);
+          setDocument((prev) => {
+            const current = syncActiveTemplatePage(prev);
+            const page = current.pages?.find((item) => item.id === action.pageId);
+            if (!page || page.id === prev.activePageId) return prev;
+            const next: DesignerDocument = {
+              ...current,
+              activePageId: page.id,
+              canvas: {
+                ...current.canvas,
+                width: page.width,
+                height: page.height,
+                presetId: resolveCanvasPresetId(page.width, page.height),
+              },
+              layers: page.layers.map((layer) => ({ ...layer })),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection([]);
+          break;
+        }
+        case 'ADD_TEMPLATE_PAGE': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const next = addTemplatePage(prev);
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection([]);
+          break;
+        }
+        case 'REMOVE_TEMPLATE_PAGE': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const next = removeActiveTemplatePage(prev);
+            if (!next) return prev;
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection([]);
+          break;
+        }
+        case 'SET_BRAND_OPTION': {
+          setDocument((prev) => {
+            const next: DesignerDocument = {
+              ...prev,
+              settings: {
+                brands: { ...prev.settings?.brands, [action.slot]: action.option },
+              },
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection([]);
+          break;
+        }
         case 'PUSH_LAYER_TO_ALL_PAGES': {
           if (isEndUser) return;
           setDocument((prev) => {
@@ -376,6 +506,74 @@ export function DesignerProvider({
                 return { ...layer, ...pushLayerToAllPages(layer, prev.canvas) };
               }),
             };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_FIELD_VALUE': {
+          if (!isEndUser) return;
+          const nextValues = { ...fieldValuesRef.current };
+          if (action.value.trim()) nextValues[action.fieldId] = action.value;
+          else delete nextValues[action.fieldId];
+          fieldValuesRef.current = nextValues;
+          setFieldValues(nextValues);
+          emitChanges(documentRef.current);
+          break;
+        }
+        case 'SET_FIELD_LABEL': {
+          if (isEndUser) return;
+          if (!action.label.trim()) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const next: DesignerDocument = {
+              ...prev,
+              fields: prev.fields.map((field) =>
+                field.id === action.fieldId ? { ...field, label: action.label } : field
+              ),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_LAYER_FIELD': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            if (action.fieldId && !prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const apply = (layer: Layer): Layer => {
+              if (layer.id !== action.layerId || layer.continuesFrom) return layer;
+              if (!action.fieldId) {
+                const cleared = { ...layer };
+                delete cleared.fieldId;
+                return cleared;
+              }
+              return { ...layer, fieldId: action.fieldId };
+            };
+            const layers = prev.layers.map(apply);
+            const next: DesignerDocument = prev.pages
+              ? {
+                  ...prev,
+                  layers,
+                  pages: prev.pages.map((page) => ({
+                    ...page,
+                    layers: page.id === prev.activePageId ? layers : page.layers.map(apply),
+                  })),
+                }
+              : { ...prev, layers };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'ADD_MAGIC_STRINGS': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const next = assignMagicStrings(prev);
+            if (next === prev) return prev;
             pushHistory(next);
             emitChanges(next);
             return next;
@@ -397,7 +595,10 @@ export function DesignerProvider({
     [applyDocument, bumpHistoryUi, emitChanges, pushHistory]
   );
 
-  const exportDocument = useCallback(() => cloneDocument(document), [document]);
+  const exportDocument = useCallback(
+    () => cloneDocument(syncActiveTemplatePage(document)),
+    [document]
+  );
 
   const importDocumentJson = useCallback(
     (json: string) => {
@@ -426,11 +627,26 @@ export function DesignerProvider({
     }
   }, [initialDocument, templateDocument, mode]);
 
+  const outputDocument = useMemo(() => {
+    const resolved = mode === 'endUser' ? resolveFieldText(document, fieldValues) : document;
+    if (mode !== 'endUser' || !viewPageId || !resolved.pages) return resolved;
+    const page = resolved.pages.find((item) => item.id === viewPageId);
+    if (!page) return resolved;
+    return {
+      ...resolved,
+      activePageId: page.id,
+      layers: page.layers,
+      canvas: { ...resolved.canvas, width: page.width, height: page.height },
+    };
+  }, [mode, document, fieldValues, viewPageId]);
+
   const value = useMemo<DesignerStoreValue>(
     () => ({
       mode,
       templateId,
       document,
+      outputDocument,
+      fieldValues,
       selection,
       viewport,
       canUndo: historyIndexRef.current > 0,
@@ -439,7 +655,19 @@ export function DesignerProvider({
       exportDocument,
       importDocumentJson,
     }),
-    [mode, templateId, document, selection, viewport, dispatch, exportDocument, importDocumentJson, historyTick]
+    [
+      mode,
+      templateId,
+      document,
+      outputDocument,
+      fieldValues,
+      selection,
+      viewport,
+      dispatch,
+      exportDocument,
+      importDocumentJson,
+      historyTick,
+    ]
   );
 
   return (
@@ -461,6 +689,14 @@ export function useDesignerMode(): DesignerMode {
 
 export function useDesignerDocument(): DesignerDocument {
   return useDesignerStore().document;
+}
+
+export function useOutputDocument(): DesignerDocument {
+  return useDesignerStore().outputDocument;
+}
+
+export function useFieldValues(): Record<string, string> {
+  return useDesignerStore().fieldValues;
 }
 
 export function useLayers(): Layer[] {

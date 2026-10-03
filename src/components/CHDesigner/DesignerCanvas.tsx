@@ -1,11 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { clamp, screenDeltaToCanvas } from './coords';
+import { clamp, fitPageInView, revealBoxInView, screenDeltaToCanvas, type ViewBox } from './coords';
 import LayerNode from './LayerNode';
-import { layerAllowsTransform, layerIsSelectable } from './policy';
+import { layerAllowsTransform, layerIsSelectable, layerIsShown } from './policy';
 import {
   useDesignerAction,
-  useDesignerDocument,
   useDesignerMode,
+  useOutputDocument,
   useSelection,
   useViewport,
 } from './store';
@@ -43,7 +43,7 @@ type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
 const HANDLES: ResizeHandle[] = ['nw', 'ne', 'sw', 'se'];
 
 export default function DesignerCanvas() {
-  const document = useDesignerDocument();
+  const document = useOutputDocument();
   const selection = useSelection();
   const viewport = useViewport();
   const dispatch = useDesignerAction();
@@ -54,6 +54,61 @@ export default function DesignerCanvas() {
   viewportStateRef.current = viewport;
   const modeRef = useRef(mode);
   modeRef.current = mode;
+  const viewportElRef = useRef<HTMLDivElement>(null);
+  const interactionRef = useRef<Interaction | null>(null);
+  interactionRef.current = interaction;
+  const didFitRef = useRef(false);
+
+  const applyView = (next: { zoom: number; panX: number; panY: number }) => {
+    const current = viewportStateRef.current;
+    if (
+      Math.abs(current.zoom - next.zoom) < 0.001 &&
+      Math.abs(current.panX - next.panX) < 0.5 &&
+      Math.abs(current.panY - next.panY) < 0.5
+    ) {
+      return;
+    }
+    dispatch({ type: 'VIEWPORT_SET', ...next });
+  };
+
+  useEffect(() => {
+    const el = viewportElRef.current;
+    if (!el) return;
+    const fit = () => {
+      if (interactionRef.current) return;
+      const rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return;
+      applyView(fitPageInView(document.canvas.width, document.canvas.height, rect.width, rect.height));
+    };
+    didFitRef.current = true;
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(el);
+    return () => observer.disconnect();
+    // applyView reads the latest viewport from a ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [document.canvas.width, document.canvas.height, document.activePageId, viewport.fitNonce, dispatch]);
+
+  const selectionKey = selection.join('\n');
+  useEffect(() => {
+    const justFitted = didFitRef.current;
+    didFitRef.current = false;
+    if (interactionRef.current || selection.length === 0) return;
+    const el = viewportElRef.current;
+    if (!el) return;
+    const chosen = document.layers.filter(
+      (layer) => selection.includes(layer.id) && layerIsShown(layer, document.settings)
+    );
+    if (chosen.length === 0) return;
+    const rect = el.getBoundingClientRect();
+    if (rect.width < 8 || rect.height < 8) return;
+    const base = justFitted
+      ? fitPageInView(document.canvas.width, document.canvas.height, rect.width, rect.height)
+      : viewportStateRef.current;
+    applyView(revealBoxInView(unionBox(chosen), base, rect.width, rect.height));
+    // A page fit in this same commit wins unless the chosen box sits outside that fitted page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectionKey]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -196,7 +251,7 @@ export default function DesignerCanvas() {
   };
 
   const handleLayerSelect = (layer: Layer, e: React.PointerEvent) => {
-    if (!layerIsSelectable(layer, mode)) return;
+    if (!layerIsSelectable(layer, mode, document.settings)) return;
     dispatch({
       type: 'SELECT',
       ids: [layer.id],
@@ -249,12 +304,15 @@ export default function DesignerCanvas() {
     });
   };
 
-  const selectedLayers = document.layers.filter((l) => selection.includes(l.id) && l.visible);
+  const selectedLayers = document.layers.filter(
+    (l) => selection.includes(l.id) && layerIsShown(l, document.settings)
+  );
   const primary = selectedLayers.length === 1 ? selectedLayers[0] : null;
   const showHandles = primary ? canTransformLayer(primary) : false;
 
   return (
     <div
+      ref={viewportElRef}
       className={`chd-viewport${spaceDown ? ' chd-viewport--panning' : ''}`}
       onWheel={onWheel}
       onPointerDown={handleViewportPointerDown}
@@ -280,7 +338,7 @@ export default function DesignerCanvas() {
           }}
         >
           <div className="chd-artboard-page" />
-          {document.layers.map((layer) => (
+          {document.layers.filter((layer) => layerIsShown(layer, document.settings)).map((layer) => (
             <LayerNode
               key={layer.id}
               layer={layer}
@@ -347,4 +405,18 @@ export default function DesignerCanvas() {
       </div>
     </div>
   );
+}
+
+function unionBox(layers: Layer[]): ViewBox {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const layer of layers) {
+    x0 = Math.min(x0, layer.x);
+    y0 = Math.min(y0, layer.y);
+    x1 = Math.max(x1, layer.x + layer.width);
+    y1 = Math.max(y1, layer.y + layer.height);
+  }
+  return { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) };
 }

@@ -83,6 +83,11 @@ export function GovernancePanelInner({
                 record={record}
                 addEvidence={addEvidence}
                 assetSource={assetSource}
+                c2paRequest={{
+                  entityId: entity.id,
+                  client,
+                  entity,
+                }}
               />
             )}
             {activeTab === 'compliance' && (
