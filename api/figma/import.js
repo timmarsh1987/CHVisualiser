@@ -1,5 +1,5 @@
-import { applyCors } from '../lib/cors.js';
-import { getBearerToken, getEmbedApiSecret } from '../lib/embedAuth.js';
+import { applyCors } from '../../lib/cors.js';
+import { getBearerToken, getEmbedApiSecret } from '../../lib/embedAuth.js';
 
 /**
  * @param {unknown} value

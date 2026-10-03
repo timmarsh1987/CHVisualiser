@@ -1,8 +1,8 @@
-import { callCodeMieAssistant, uploadCodeMieFile } from '../lib/codemie/client.js';
-import { downloadPreviewImage } from '../lib/codemie/downloadPreview.js';
-import { parseJsonFromGenerated } from '../lib/codemie/parseJson.js';
-import { applyCors } from '../lib/cors.js';
-import { verifyEmbedAuth } from '../lib/embedAuth.js';
+import { callCodeMieAssistant, uploadCodeMieFile } from '../../lib/codemie/client.js';
+import { downloadPreviewImage } from '../../lib/codemie/downloadPreview.js';
+import { parseJsonFromGenerated } from '../../lib/codemie/parseJson.js';
+import { applyCors } from '../../lib/cors.js';
+import { verifyEmbedAuth } from '../../lib/embedAuth.js';
 
 export const config = {
   maxDuration: 60,
