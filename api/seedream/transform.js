@@ -1,5 +1,5 @@
-import { applyCors } from '../lib/cors.js';
-import { FalError, transformWithSeedream, wantsTransparentCutout } from '../lib/fal/client.js';
+import { applyCors } from '../../lib/cors.js';
+import { FalError, transformWithSeedream, wantsTransparentCutout } from '../../lib/fal/client.js';
 
 export const config = {
   maxDuration: 180,
