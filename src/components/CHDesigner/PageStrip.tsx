@@ -1,6 +1,6 @@
 import React from 'react';
 import LayerNode from './LayerNode';
-import { layerIsShown } from './policy';
+import { layerIsDrawn } from './policy';
 import { useDesignerAction, useOutputDocument } from './store';
 import type { DesignerDocument, DesignerTemplatePage, Layer } from './types';
 
@@ -42,7 +42,7 @@ function PageThumb({
 }) {
   const document = useOutputDocument();
   const scale = Math.min(THUMB_MAX_WIDTH / page.width, THUMB_MAX_HEIGHT / page.height);
-  const shown = page.layers.filter((layer) => layerIsShown(layer, document.settings));
+  const shown = page.layers.filter((layer) => layerIsDrawn(layer, document.settings));
 
   return (
     <button

@@ -266,12 +266,13 @@ function layerFromItem(
 
   if (element.localName === 'TextFrame') {
     const story = stories.get(element.getAttribute('ParentStory') || '');
-    const content = story ? readStory(story, colors) : { text: '', fontSize: undefined, color: undefined };
+    const content = story ? readStory(story, colors) : { text: '', fontSize: undefined, color: undefined, align: undefined };
     const layer = baseLayer('text', box);
     layer.name = textName(content.text);
     layer.text = content.text;
     layer.fontSize = content.fontSize ? Math.max(1, Math.round(content.fontSize * POINTS_TO_PX)) : 16;
     layer.color = content.color || '#000000';
+    if (content.align) layer.align = content.align;
     return layer;
   }
 
@@ -378,14 +379,19 @@ function graphicChild(element: Element): Element | undefined {
   return undefined;
 }
 
-function readStory(story: Element, colors: Map<string, string>): { text: string; fontSize?: number; color?: string } {
+function readStory(
+  story: Element,
+  colors: Map<string, string>
+): { text: string; fontSize?: number; color?: string; align?: 'left' | 'middle' | 'right' } {
   const paragraphs = childElements(story, 'ParagraphStyleRange');
   const blocks = paragraphs.length > 0 ? paragraphs : [story];
   let text = '';
   let fontSize: number | undefined;
   let color: string | undefined;
+  let align: 'left' | 'middle' | 'right' | undefined;
 
   blocks.forEach((block, index) => {
+    if (align == null) align = readParagraphAlign(block.getAttribute('Justification'));
     if (index > 0) text += '\n';
     for (const node of elementChildren(block)) {
       if (node.localName === 'Br') {
@@ -407,7 +413,15 @@ function readStory(story: Element, colors: Map<string, string>): { text: string;
     }
   });
 
-  return { text: text.replace(/\u2028/g, '\n'), fontSize, color };
+  return { text: text.replace(/\u2028/g, '\n'), fontSize, color, align };
+}
+
+function readParagraphAlign(value: string | null): 'left' | 'middle' | 'right' | undefined {
+  const justification = (value || '').toLowerCase();
+  if (justification.includes('center') || justification.includes('middle')) return 'middle';
+  if (justification.includes('right')) return 'right';
+  if (justification.includes('left')) return 'left';
+  return undefined;
 }
 
 function textName(text: string): string {

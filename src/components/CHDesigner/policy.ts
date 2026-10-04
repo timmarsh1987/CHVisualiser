@@ -7,9 +7,9 @@ import type {
   LayerOverride,
 } from './types';
 import { cloneDocument } from './document';
-import { layerIsShown, syncActiveTemplatePage } from './templateSettings';
+import { layerIsDrawn, layerIsShown, syncActiveTemplatePage } from './templateSettings';
 
-export { layerIsShown };
+export { layerIsDrawn, layerIsShown };
 
 export function defaultEditableContent(layer: Pick<Layer, 'type' | 'editableContent'>): boolean {
   if (typeof layer.editableContent === 'boolean') return layer.editableContent;

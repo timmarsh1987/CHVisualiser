@@ -1,9 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import epamWhite from '../CHImageComposer/logos/epam-white.png';
 import { fillLayerToCanvas } from './constraints';
 import { importIdmlFile } from './idmlImport';
 import { pinLayerInPlace } from './pageLayout';
 import BatchMenu from './BatchMenu';
+import CopyMenu from './CopyMenu';
 import GenerateMenu from './GenerateMenu';
 import {
   CANVAS_PRESET_GROUPS,
@@ -13,7 +14,7 @@ import {
 } from './printPresets';
 import { useDesignerAction, useDesignerApi, useDesignerDocument, useSelection, useViewport } from './store';
 import { brandChoices } from './templateSettings';
-import type { LayerType } from './types';
+import { MAX_ZOOM, MIN_ZOOM, type LayerType } from './types';
 
 const ADDABLE: { type: LayerType; label: string }[] = [
   { type: 'frame', label: 'Frame' },
@@ -30,6 +31,8 @@ export default function Toolbar() {
   const { mode, canUndo, canRedo, exportDocument, importDocumentJson } = useDesignerApi();
   const fileRef = useRef<HTMLInputElement>(null);
   const idmlRef = useRef<HTMLInputElement>(null);
+  const transferRef = useRef<HTMLDivElement>(null);
+  const [transferOpen, setTransferOpen] = useState(false);
   const isAdmin = mode === 'admin';
   const presetId = resolveCanvasPresetId(
     canvasDocument.canvas.width,
@@ -40,7 +43,19 @@ export default function Toolbar() {
   const brands = brandChoices(canvasDocument);
   const showTemplateSettings = templatePages.length > 1 || brands.length > 0;
 
+  useEffect(() => {
+    if (!transferOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (transferRef.current && !transferRef.current.contains(event.target as Node)) {
+        setTransferOpen(false);
+      }
+    };
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => window.removeEventListener('pointerdown', onPointerDown);
+  }, [transferOpen]);
+
   const handleExport = () => {
+    setTransferOpen(false);
     const doc = exportDocument();
     const blob = new Blob([JSON.stringify(doc, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -242,30 +257,7 @@ export default function Toolbar() {
 
       {isAdmin ? (
         <div className="chd-toolbar-group">
-          <button
-            type="button"
-            className="chd-btn"
-            disabled={selection.length === 0}
-            onClick={() => dispatch({ type: 'DELETE_LAYERS' })}
-          >
-            Delete
-          </button>
-          <button
-            type="button"
-            className="chd-btn"
-            disabled={selection.length === 0}
-            onClick={() => dispatch({ type: 'BRING_FORWARD' })}
-          >
-            Forward
-          </button>
-          <button
-            type="button"
-            className="chd-btn"
-            disabled={selection.length === 0}
-            onClick={() => dispatch({ type: 'SEND_BACKWARD' })}
-          >
-            Back
-          </button>
+          <CopyMenu />
         </div>
       ) : null}
 
@@ -291,25 +283,81 @@ export default function Toolbar() {
       <div className="chd-toolbar-group">
         <GenerateMenu />
         <BatchMenu />
-        <button
-          type="button"
-          className="chd-btn"
-          title="Fit page"
-          onClick={() => dispatch({ type: 'ZOOM_RESET' })}
-        >
-          {Math.round(viewport.zoom * 100)}%
-        </button>
+        <div className="chd-zoom-controls">
+          <button
+            type="button"
+            className="chd-btn chd-zoom-btn"
+            title="Zoom out"
+            aria-label="Zoom out"
+            disabled={viewport.zoom <= MIN_ZOOM + 0.001}
+            onClick={() => dispatch({ type: 'ZOOM_BY', factor: 1 / 1.2 })}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            className="chd-btn chd-zoom-label"
+            title="Fit page to the screen"
+            onClick={() => dispatch({ type: 'ZOOM_RESET' })}
+          >
+            {Math.round(viewport.zoom * 100)}%
+          </button>
+          <button
+            type="button"
+            className="chd-btn chd-zoom-btn"
+            title="Zoom in"
+            aria-label="Zoom in"
+            disabled={viewport.zoom >= MAX_ZOOM - 0.001}
+            onClick={() => dispatch({ type: 'ZOOM_BY', factor: 1.2 })}
+          >
+            +
+          </button>
+        </div>
         {isAdmin ? (
           <>
-            <button type="button" className="chd-btn" onClick={handleExport}>
-              Export JSON
-            </button>
-            <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
-              Import
-            </button>
-            <button type="button" className="chd-btn" onClick={() => idmlRef.current?.click()}>
-              Import InDesign
-            </button>
+            <div className="chd-generate" ref={transferRef}>
+              <button
+                type="button"
+                className="chd-btn"
+                aria-expanded={transferOpen}
+                aria-haspopup="menu"
+                onClick={() => setTransferOpen((current) => !current)}
+              >
+                Import/Export
+              </button>
+              {transferOpen ? (
+                <div className="chd-generate-menu" role="menu">
+                  <button type="button" role="menuitem" className="chd-generate-option" onClick={handleExport}>
+                    <strong>Export JSON</strong>
+                    <span>Download this document</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chd-generate-option"
+                    onClick={() => {
+                      setTransferOpen(false);
+                      fileRef.current?.click();
+                    }}
+                  >
+                    <strong>Import</strong>
+                    <span>CHDesigner JSON</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="chd-generate-option"
+                    onClick={() => {
+                      setTransferOpen(false);
+                      idmlRef.current?.click();
+                    }}
+                  >
+                    <strong>Import InDesign</strong>
+                    <span>IDML file</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
             <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ADD_MAGIC_STRINGS' })}>
               Add magic strings
             </button>

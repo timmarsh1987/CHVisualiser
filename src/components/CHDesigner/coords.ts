@@ -20,6 +20,24 @@ export function screenToCanvas(
   };
 }
 
+/** Keep the canvas point under a screen anchor fixed while zoom changes. */
+export function zoomAroundPoint(
+  viewport: Pick<ViewportState, 'zoom' | 'panX' | 'panY'>,
+  nextZoom: number,
+  anchorX: number,
+  anchorY: number
+): Pick<ViewportState, 'zoom' | 'panX' | 'panY'> {
+  const zoom = clamp(nextZoom, MIN_ZOOM, MAX_ZOOM);
+  const safeZoom = viewport.zoom > 0 ? viewport.zoom : 1;
+  const canvasX = (anchorX - viewport.panX) / safeZoom;
+  const canvasY = (anchorY - viewport.panY) / safeZoom;
+  return {
+    zoom,
+    panX: anchorX - canvasX * zoom,
+    panY: anchorY - canvasY * zoom,
+  };
+}
+
 /** Scale a screen-space delta into canvas units. */
 export function screenDeltaToCanvas(
   dx: number,

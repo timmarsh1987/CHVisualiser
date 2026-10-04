@@ -1,4 +1,6 @@
-export type LayerType = 'frame' | 'rect' | 'text' | 'image';
+export type LayerType = 'frame' | 'rect' | 'text' | 'image' | 'group';
+
+export type TextAlign = 'left' | 'middle' | 'right';
 
 export type DesignerMode = 'admin' | 'endUser';
 
@@ -34,7 +36,9 @@ export interface Layer {
   /** Start frame that owns the full story, when this frame is a continuation. */
   continuesFrom?: string;
   fontSize?: number;
-  /** Font size scales when the box width or height changes. */
+  /** Horizontal alignment inside the frame. Defaults to left, or right for RTL. */
+  align?: TextAlign;
+  /** Font size fits the box, and refits when the box or the text changes. */
   dynamicSize?: boolean;
   color?: string;
   src?: string;
@@ -63,6 +67,8 @@ export interface Layer {
   direction?: 'ltr' | 'rtl';
   /** Magic-string field whose value replaces this frame’s story on an output. */
   fieldId?: string;
+  /** Group this layer sits inside. Groups are folders in the layers panel, not drawn on the page. */
+  parentId?: string;
 }
 
 export interface DesignerField {
@@ -146,6 +152,9 @@ export interface ViewportState {
   panY: number;
   /** Bumped to ask the canvas to fit the page into the stage. */
   fitNonce: number;
+  /** Stage size in screen pixels, used to zoom around the center. */
+  stageWidth: number;
+  stageHeight: number;
 }
 
 export type DesignerAction =
@@ -156,10 +165,20 @@ export type DesignerAction =
   | { type: 'UNSELECT_ALL' }
   | { type: 'REORDER'; fromIndex: number; toIndex: number }
   | { type: 'SET_VISIBILITY'; id: string; visible: boolean }
+  | { type: 'SET_BRANCH'; id: string; visible?: boolean; locked?: boolean }
+  | { type: 'ADD_GROUP' }
+  | { type: 'PLACE_LAYER'; id: string; parentId: string | null; toIndex: number }
+  | { type: 'COPY_SELECTION' }
+  | { type: 'COPY_ALL_LAYERS' }
+  | { type: 'PASTE' }
+  | { type: 'PASTE_ITEM' }
+  | { type: 'PASTE_ITEMS' }
   | { type: 'BRING_FORWARD' }
   | { type: 'SEND_BACKWARD' }
   | { type: 'ZOOM_SET'; zoom: number }
+  | { type: 'ZOOM_BY'; factor: number }
   | { type: 'ZOOM_RESET' }
+  | { type: 'STAGE_SIZE'; width: number; height: number }
   | { type: 'PAN_SET'; panX: number; panY: number }
   | { type: 'VIEWPORT_SET'; zoom: number; panX: number; panY: number }
   | { type: 'UNDO' }

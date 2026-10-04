@@ -4,6 +4,13 @@ export type GenerateFormat = 'pdf' | 'png';
 
 const CSS_PX_PER_INCH = 96;
 
+function layoutPixels(element: HTMLElement, axis: 'width' | 'height'): number {
+  const styled = Number.parseFloat(element.style[axis]);
+  if (Number.isFinite(styled) && styled > 0) return Math.round(styled);
+  const measured = axis === 'width' ? element.offsetWidth : element.offsetHeight;
+  return Math.max(1, Math.round(measured));
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = window.document.createElement('a');
@@ -26,8 +33,8 @@ export async function captureElement(element: HTMLElement): Promise<HTMLCanvasEl
   const html2canvas = await loadHtml2Canvas();
   element.classList.add('chd-artboard--capturing');
   try {
-    const width = Math.max(1, Math.round(element.offsetWidth));
-    const height = Math.max(1, Math.round(element.offsetHeight));
+    const width = layoutPixels(element, 'width');
+    const height = layoutPixels(element, 'height');
     return await html2canvas(element, {
       useCORS: true,
       backgroundColor: null,

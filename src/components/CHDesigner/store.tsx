@@ -9,7 +9,15 @@ import React, {
 } from 'react';
 import { persistCurrentPageLayout, pushLayerToAllPages, switchDocumentPage } from './pageLayout';
 import { resolveCanvasPresetId } from './printPresets';
-import { cloneDocument, createSeedDocument, defaultLayerForType, parseDesignerDocument } from './document';
+import {
+  cloneDocument,
+  createSeedDocument,
+  defaultLayerForType,
+  duplicateLayers,
+  layerBranchIds,
+  nextGroupName,
+  parseDesignerDocument,
+} from './document';
 import { assignMagicStrings, resolveFieldText } from './fields';
 import { addTemplatePage, removeActiveTemplatePage, syncActiveTemplatePage } from './templateSettings';
 import { reflowTextStory, scaleFontWithBox } from './textFlow';
@@ -30,9 +38,15 @@ import {
   type Layer,
   type ViewportState,
 } from './types';
-import { clamp } from './coords';
+import { clamp, zoomAroundPoint } from './coords';
 
 const MAX_HISTORY = 50;
+
+interface ClipboardSlot {
+  layers: Layer[];
+  sourcePageId: string | null;
+  pastes: number;
+}
 
 export interface DesignerProviderProps {
   children: React.ReactNode;
@@ -60,6 +74,7 @@ interface DesignerStoreValue {
   viewport: ViewportState;
   canUndo: boolean;
   canRedo: boolean;
+  canPaste: boolean;
   dispatch: (action: DesignerAction) => void;
   exportDocument: () => DesignerDocument;
   importDocumentJson: (json: string) => boolean;
@@ -138,7 +153,11 @@ export function DesignerProvider({
     panX: 40,
     panY: 40,
     fitNonce: 0,
+    stageWidth: 0,
+    stageHeight: 0,
   });
+  const [clipboard, setClipboard] = useState<ClipboardSlot | null>(null);
+  const clipboardRef = useRef<ClipboardSlot | null>(null);
   const historyRef = useRef<DesignerDocument[]>([cloneDocument(seedRef.current)]);
   const historyIndexRef = useRef(0);
   const [historyTick, setHistoryTick] = useState(0);
@@ -269,14 +288,23 @@ export function DesignerProvider({
               if (layer.continuesFrom && drop.has(layer.continuesFrom)) drop.add(layer.id);
             }
             const keep = (layer: Layer) => !drop.has(layer.id);
-            const layers = synced.layers.filter(keep);
+            const release = (layer: Layer): Layer => {
+              if (!layer.parentId || !drop.has(layer.parentId)) return layer;
+              const next = { ...layer };
+              delete next.parentId;
+              return next;
+            };
+            const layers = synced.layers.filter(keep).map(release);
             const next: DesignerDocument = synced.pages
               ? {
                   ...synced,
                   layers,
                   pages: synced.pages.map((page) => ({
                     ...page,
-                    layers: page.id === synced.activePageId ? layers : page.layers.filter(keep),
+                    layers:
+                      page.id === synced.activePageId
+                        ? layers
+                        : page.layers.filter(keep).map(release),
                   })),
                 }
               : { ...synced, layers };
@@ -324,15 +352,146 @@ export function DesignerProvider({
           });
           break;
         }
+        case 'COPY_SELECTION': {
+          if (isEndUser) return;
+          const ids = new Set(selectionRef.current);
+          for (const id of [...ids]) {
+            for (const branchId of layerBranchIds(documentRef.current.layers, id)) ids.add(branchId);
+          }
+          const layers = documentRef.current.layers.filter((layer) => ids.has(layer.id));
+          if (layers.length === 0) return;
+          const slot: ClipboardSlot = {
+            layers: JSON.parse(JSON.stringify(layers)) as Layer[],
+            sourcePageId: documentRef.current.activePageId ?? null,
+            pastes: 0,
+          };
+          clipboardRef.current = slot;
+          setClipboard(slot);
+          break;
+        }
+        case 'COPY_ALL_LAYERS': {
+          if (isEndUser) return;
+          const layers = documentRef.current.layers;
+          if (layers.length === 0) return;
+          const slot: ClipboardSlot = {
+            layers: JSON.parse(JSON.stringify(layers)) as Layer[],
+            sourcePageId: documentRef.current.activePageId ?? null,
+            pastes: 0,
+          };
+          clipboardRef.current = slot;
+          setClipboard(slot);
+          break;
+        }
+        case 'PASTE':
+        case 'PASTE_ITEM':
+        case 'PASTE_ITEMS': {
+          if (isEndUser) return;
+          const copied = clipboardRef.current;
+          if (!copied || copied.layers.length === 0) return;
+          const pageId = documentRef.current.activePageId ?? null;
+          const samePage = copied.sourcePageId === pageId;
+          const pastes = samePage ? copied.pastes + 1 : copied.pastes;
+          const copies = duplicateLayers(copied.layers, samePage ? 16 * pastes : 0);
+          const nextSlot = { ...copied, pastes };
+          clipboardRef.current = nextSlot;
+          setClipboard(nextSlot);
+          setDocument((prev) => {
+            const synced = syncActiveTemplatePage(prev);
+            const layers = [...synced.layers, ...copies];
+            const next: DesignerDocument =
+              synced.pages?.length && synced.activePageId
+                ? {
+                    ...synced,
+                    layers,
+                    pages: synced.pages.map((page) =>
+                      page.id === synced.activePageId ? { ...page, layers } : page
+                    ),
+                  }
+                : { ...synced, layers };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection(copies.map((layer) => layer.id));
+          break;
+        }
         case 'SET_VISIBILITY': {
           if (isEndUser) return;
           setDocument((prev) => {
-            const next = {
+            if (!prev.layers.some((layer) => layer.id === action.id)) return prev;
+            const ids = new Set(layerBranchIds(prev.layers, action.id));
+            const layers = prev.layers.map((layer) =>
+              ids.has(layer.id) ? { ...layer, visible: action.visible } : layer
+            );
+            const next = syncActiveTemplatePage({ ...prev, layers });
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_BRANCH': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            if (!prev.layers.some((layer) => layer.id === action.id)) return prev;
+            const ids = new Set(layerBranchIds(prev.layers, action.id));
+            const layers = prev.layers.map((layer) => {
+              if (!ids.has(layer.id)) return layer;
+              return {
+                ...layer,
+                ...(action.visible !== undefined ? { visible: action.visible } : {}),
+                ...(action.locked !== undefined ? { locked: action.locked } : {}),
+              };
+            });
+            const next = syncActiveTemplatePage({ ...prev, layers });
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'ADD_GROUP': {
+          if (isEndUser) return;
+          const group = defaultLayerForType('group');
+          group.name = nextGroupName(documentRef.current.layers);
+          const selected = new Set(selectionRef.current);
+          setDocument((prev) => {
+            if (prev.layers.some((layer) => layer.id === group.id)) return prev;
+            const layers = prev.layers.map((layer) =>
+              selected.has(layer.id) && layer.type !== 'group' ? { ...layer, parentId: group.id } : layer
+            );
+            layers.push(group);
+            const next = syncActiveTemplatePage({ ...prev, layers });
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection([group.id]);
+          break;
+        }
+        case 'PLACE_LAYER': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const moving = prev.layers.find((layer) => layer.id === action.id);
+            if (!moving || action.parentId === moving.id) return prev;
+            if (moving.type === 'group' && action.parentId) return prev;
+            if (action.parentId) {
+              const parent = prev.layers.find((layer) => layer.id === action.parentId);
+              if (!parent || parent.type !== 'group') return prev;
+            }
+            const layers = prev.layers.map((layer) => {
+              if (layer.id !== action.id) return layer;
+              const next = { ...layer };
+              if (action.parentId) next.parentId = action.parentId;
+              else delete next.parentId;
+              return next;
+            });
+            const fromIndex = layers.findIndex((layer) => layer.id === action.id);
+            const toIndex = Math.max(0, Math.min(action.toIndex, layers.length - 1));
+            const next = syncActiveTemplatePage({
               ...prev,
-              layers: prev.layers.map((layer) =>
-                layer.id === action.id ? { ...layer, visible: action.visible } : layer
-              ),
-            };
+              layers: moveLayerInList(layers, fromIndex, toIndex),
+            });
             pushHistory(next);
             emitChanges(next);
             return next;
@@ -366,6 +525,24 @@ export function DesignerProvider({
             ...prev,
             zoom: clamp(action.zoom, MIN_ZOOM, MAX_ZOOM),
           }));
+          break;
+        }
+        case 'ZOOM_BY': {
+          setViewport((prev) => {
+            const nextZoom = clamp(prev.zoom * action.factor, MIN_ZOOM, MAX_ZOOM);
+            const anchorX = prev.stageWidth > 0 ? prev.stageWidth / 2 : 0;
+            const anchorY = prev.stageHeight > 0 ? prev.stageHeight / 2 : 0;
+            return { ...prev, ...zoomAroundPoint(prev, nextZoom, anchorX, anchorY) };
+          });
+          break;
+        }
+        case 'STAGE_SIZE': {
+          const width = Math.max(0, Math.round(action.width));
+          const height = Math.max(0, Math.round(action.height));
+          setViewport((prev) => {
+            if (prev.stageWidth === width && prev.stageHeight === height) return prev;
+            return { ...prev, stageWidth: width, stageHeight: height };
+          });
           break;
         }
         case 'ZOOM_RESET': {
@@ -651,6 +828,7 @@ export function DesignerProvider({
       viewport,
       canUndo: historyIndexRef.current > 0,
       canRedo: historyIndexRef.current < historyRef.current.length - 1,
+      canPaste: Boolean(clipboard?.layers.length),
       dispatch,
       exportDocument,
       importDocumentJson,
@@ -663,6 +841,7 @@ export function DesignerProvider({
       fieldValues,
       selection,
       viewport,
+      clipboard,
       dispatch,
       exportDocument,
       importDocumentJson,
@@ -721,6 +900,7 @@ export function useDesignerApi() {
     mode: store.mode,
     canUndo: store.canUndo,
     canRedo: store.canRedo,
+    canPaste: store.canPaste,
     exportDocument: store.exportDocument,
     importDocumentJson: store.importDocumentJson,
     dispatch: store.dispatch,

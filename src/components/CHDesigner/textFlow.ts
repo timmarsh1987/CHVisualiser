@@ -1,6 +1,6 @@
 import { createLayerId } from './document';
 import { appendBlankTemplatePage, syncActiveTemplatePage } from './templateSettings';
-import type { DesignerDocument, DesignerTemplatePage, Layer } from './types';
+import type { DesignerDocument, DesignerTemplatePage, Layer, TextAlign } from './types';
 
 const MAX_CONTINUATIONS = 12;
 
@@ -17,9 +17,24 @@ export function storySource(doc: DesignerDocument, layer: Layer): Layer {
 export function scaleFontWithBox(before: Layer, after: Layer, patch: Partial<Layer>): Layer {
   if (after.type !== 'text' || !after.dynamicSize || after.continuesFrom) return after;
   if (typeof patch.fontSize === 'number') return after;
+  const enabling = !before.dynamicSize;
   const widthChanged = Math.abs(after.width - before.width) > 0.5;
   const heightChanged = Math.abs(after.height - before.height) > 0.5;
-  if (!widthChanged && !heightChanged) return after;
+  const textChanged = patch.text !== undefined && patch.text !== before.text;
+  if (!enabling && !widthChanged && !heightChanged && !textChanged) return after;
+
+  const fitted = fitFontSize(after);
+  if (fitted == null) {
+    if (!widthChanged && !heightChanged) return after;
+    return scaleFontProportionally(before, after);
+  }
+  if (fitted === after.fontSize) return after;
+  return { ...after, fontSize: fitted };
+}
+
+function scaleFontProportionally(before: Layer, after: Layer): Layer {
+  const widthChanged = Math.abs(after.width - before.width) > 0.5;
+  const heightChanged = Math.abs(after.height - before.height) > 0.5;
   const widthScale = before.width > 0 ? after.width / before.width : 1;
   const heightScale = before.height > 0 ? after.height / before.height : 1;
   const scale =
@@ -28,6 +43,17 @@ export function scaleFontWithBox(before: Layer, after: Layer, patch: Partial<Lay
     ...after,
     fontSize: Math.max(1, Math.round((before.fontSize || 16) * scale)),
   };
+}
+
+export function layerTextAlign(layer: Pick<Layer, 'align' | 'direction'>): TextAlign {
+  const stored = layer.align as TextAlign | 'center' | undefined;
+  if (stored === 'middle' || stored === 'center') return 'middle';
+  if (stored === 'left' || stored === 'right') return stored;
+  return layer.direction === 'rtl' ? 'right' : 'left';
+}
+
+export function cssTextAlign(align: TextAlign): 'left' | 'center' | 'right' {
+  return align === 'middle' ? 'center' : align;
 }
 
 export function displayedText(layer: Layer): string {
@@ -85,6 +111,7 @@ export function reflowTextStory(doc: DesignerDocument, layerId: string): Designe
       if (!found) page.layers = [...page.layers, continuation];
       continuation.fontSize = start.fontSize;
       continuation.color = start.color;
+      continuation.align = start.align;
       continuation.direction = start.direction;
       let piece = fitText(probe, rest, continuation);
       if (!piece.fit && continuation.height < page.height - 48) {
@@ -194,10 +221,43 @@ function createContinuation(start: Layer, page: DesignerTemplatePage): Layer {
     flowText: '',
     fontSize: start.fontSize,
     color: start.color,
+    align: start.align,
     direction: start.direction,
     continuesFrom: start.id,
     role: start.role === 'text' ? 'text' : undefined,
   };
+}
+
+/** Largest whole-pixel font that keeps `text` inside the frame, including its padding. */
+function fitFontSize(layer: Layer): number | null {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') return null;
+  const text = displayedText(layer);
+  if (!text.trim()) return null;
+
+  const probe = createProbe();
+  try {
+    probe.style.width = `${Math.max(1, layer.width)}px`;
+    probe.style.direction = layer.direction === 'rtl' ? 'rtl' : 'ltr';
+    probe.style.textAlign = cssTextAlign(layerTextAlign(layer));
+    probe.textContent = text;
+    const limit = Math.max(1, layer.height);
+    let low = 1;
+    let high = Math.max(8, Math.ceil(limit));
+    let best = 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      probe.style.fontSize = `${mid}px`;
+      if (probe.scrollHeight <= limit + 1 && probe.scrollWidth <= layer.width + 1) {
+        best = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+    return best;
+  } finally {
+    probe.remove();
+  }
 }
 
 function createProbe(): HTMLDivElement {
@@ -221,11 +281,12 @@ function createProbe(): HTMLDivElement {
 function fitText(
   probe: HTMLDivElement,
   text: string,
-  frame: Pick<Layer, 'width' | 'height' | 'fontSize' | 'direction'>
+  frame: Pick<Layer, 'width' | 'height' | 'fontSize' | 'direction' | 'align'>
 ): { fit: string; rest: string } {
   probe.style.width = `${Math.max(1, frame.width)}px`;
   probe.style.fontSize = `${frame.fontSize || 16}px`;
   probe.style.direction = frame.direction === 'rtl' ? 'rtl' : 'ltr';
+  probe.style.textAlign = cssTextAlign(layerTextAlign(frame));
   if (!text) return { fit: '', rest: '' };
 
   let low = 0;

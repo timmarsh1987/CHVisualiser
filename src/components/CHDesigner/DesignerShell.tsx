@@ -77,7 +77,7 @@ export default function DesignerShell({
 }: DesignerShellProps) {
   const [layersOpen, setLayersOpen] = useState(true);
   const [propertiesOpen, setPropertiesOpen] = useState(true);
-  const [layersWidth, setLayersWidth] = useState(220);
+  const [layersWidth, setLayersWidth] = useState(300);
   const [propertiesWidth, setPropertiesWidth] = useState(260);
   const providerProps: Omit<DesignerProviderProps, 'children'> = {
     mode,

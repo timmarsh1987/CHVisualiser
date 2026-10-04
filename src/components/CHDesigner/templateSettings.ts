@@ -88,6 +88,11 @@ export function applySourceLayer(
   }
 }
 
+/** Groups are panel folders. Everything else uses the same show rules as the canvas. */
+export function layerIsDrawn(layer: Layer, settings?: DesignerSettings): boolean {
+  return layer.type !== 'group' && layerIsShown(layer, settings);
+}
+
 /** Notes, FPO, and brand options that are not selected stay in the file but are not drawn. */
 export function layerIsShown(layer: Layer, settings?: DesignerSettings): boolean {
   if (layer.visible === false) return false;

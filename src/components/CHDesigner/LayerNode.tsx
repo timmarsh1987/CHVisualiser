@@ -1,5 +1,5 @@
 import React from 'react';
-import { displayedText } from './textFlow';
+import { cssTextAlign, displayedText, layerTextAlign } from './textFlow';
 import type { Layer } from './types';
 
 interface LayerNodeProps {
@@ -56,6 +56,7 @@ export default function LayerNode({
           style={{
             color: layer.color || '#1a1a1a',
             fontSize: layer.fontSize || 16,
+            textAlign: cssTextAlign(layerTextAlign(layer)),
             direction: layer.direction === 'rtl' ? 'rtl' : undefined,
           }}
         >

@@ -125,7 +125,41 @@ export function defaultLayerForType(type: LayerType, at?: { x: number; y: number
         editableContent: true,
         objectFit: 'cover',
       };
+    case 'group':
+      return {
+        id: createLayerId(),
+        type,
+        name: 'Group',
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+        visible: true,
+        locked: false,
+      };
   }
+}
+
+export function nextGroupName(layers: Layer[]): string {
+  const names = new Set(layers.map((layer) => layer.name));
+  if (!names.has('Group')) return 'Group';
+  let index = 2;
+  while (names.has(`Group ${index}`)) index += 1;
+  return `Group ${index}`;
+}
+
+/** The layer and every item nested inside it. */
+export function layerBranchIds(layers: Layer[], rootId: string): string[] {
+  const ids = [rootId];
+  const walk = (parentId: string) => {
+    for (const layer of layers) {
+      if (layer.parentId !== parentId) continue;
+      ids.push(layer.id);
+      if (layer.type === 'group') walk(layer.id);
+    }
+  };
+  walk(rootId);
+  return ids;
 }
 
 export function createSeedDocument(): DesignerDocument {
@@ -159,6 +193,38 @@ export function cloneDocument(doc: DesignerDocument): DesignerDocument {
   return JSON.parse(JSON.stringify(doc)) as DesignerDocument;
 }
 
+/** New ids for a paste. Text continuations stay linked only inside the copied set. */
+export function duplicateLayers(layers: Layer[], offset = 0): Layer[] {
+  const clones = JSON.parse(JSON.stringify(layers)) as Layer[];
+  const idMap = new Map<string, string>();
+  for (const layer of clones) {
+    const nextId = createLayerId();
+    idMap.set(layer.id, nextId);
+    layer.id = nextId;
+    if (!offset) continue;
+    layer.x += offset;
+    layer.y += offset;
+    if (!layer.pageLayouts) continue;
+    for (const layout of Object.values(layer.pageLayouts)) {
+      layout.x += offset;
+      layout.y += offset;
+    }
+  }
+  for (const layer of clones) {
+    if (layer.continuesFrom) {
+      const mapped = idMap.get(layer.continuesFrom);
+      if (mapped) layer.continuesFrom = mapped;
+      else delete layer.continuesFrom;
+    }
+    if (layer.parentId) {
+      const mapped = idMap.get(layer.parentId);
+      if (mapped) layer.parentId = mapped;
+      else delete layer.parentId;
+    }
+  }
+  return clones;
+}
+
 const LAYER_ROLES = new Set<LayerRole>(['static', 'text', 'brand', 'picker', 'hidden']);
 const LAYER_SLOTS = new Set<LayerSlot>(['lhs', 'rhs', 'image', 'logo', 'partnerLogo']);
 
@@ -166,23 +232,26 @@ function parseLayer(item: unknown): Layer | null {
   if (!item || typeof item !== 'object') return null;
   const layer = item as Record<string, unknown>;
   const type = layer.type;
-  if (type !== 'frame' && type !== 'rect' && type !== 'text' && type !== 'image') return null;
+  if (type !== 'frame' && type !== 'rect' && type !== 'text' && type !== 'image' && type !== 'group') {
+    return null;
+  }
+  const isGroup = type === 'group';
   const id = typeof layer.id === 'string' ? layer.id : createLayerId();
   const name = typeof layer.name === 'string' ? layer.name : type;
   const x = Number(layer.x);
   const y = Number(layer.y);
   const w = Number(layer.width);
   const h = Number(layer.height);
-  if (![x, y, w, h].every(Number.isFinite)) return null;
+  if (!isGroup && ![x, y, w, h].every(Number.isFinite)) return null;
 
   const parsed: Layer = {
     id,
     type,
     name,
-    x,
-    y,
-    width: w,
-    height: h,
+    x: isGroup ? 0 : x,
+    y: isGroup ? 0 : y,
+    width: isGroup ? 1 : w,
+    height: isGroup ? 1 : h,
     rotation: typeof layer.rotation === 'number' ? layer.rotation : undefined,
     visible: layer.visible !== false,
     locked: Boolean(layer.locked),
@@ -193,6 +262,12 @@ function parseLayer(item: unknown): Layer | null {
     flowOverflow: readOptionalBoolean(layer.flowOverflow),
     continuesFrom: typeof layer.continuesFrom === 'string' ? layer.continuesFrom : undefined,
     fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
+    align:
+      layer.align === 'left' || layer.align === 'middle' || layer.align === 'right'
+        ? layer.align
+        : layer.align === 'center'
+          ? 'middle'
+          : undefined,
     dynamicSize: readOptionalBoolean(layer.dynamicSize),
     color: typeof layer.color === 'string' ? layer.color : undefined,
     src: typeof layer.src === 'string' ? layer.src : undefined,
@@ -213,6 +288,10 @@ function parseLayer(item: unknown): Layer | null {
     option: typeof layer.option === 'string' ? layer.option : undefined,
     direction: layer.direction === 'rtl' || layer.direction === 'ltr' ? layer.direction : undefined,
     fieldId: typeof layer.fieldId === 'string' && layer.fieldId ? layer.fieldId : undefined,
+    parentId:
+      typeof layer.parentId === 'string' && layer.parentId && layer.parentId !== id
+        ? layer.parentId
+        : undefined,
   };
 
   if (typeof layer.editableContent === 'boolean') {

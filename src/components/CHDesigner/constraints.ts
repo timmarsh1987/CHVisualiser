@@ -99,6 +99,72 @@ export function applyEdgePins(
   return { x, y, width, height };
 }
 
+export interface PlacedBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+type PinMargins = Pick<
+  Layer,
+  'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom' | 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft'
+>;
+
+/** Keep a box from crossing a pinned page edge. Opposite pins lock that axis to the margins. */
+export function clampBoxToPins(
+  box: PlacedBox,
+  layer: PinMargins,
+  canvasWidth: number,
+  canvasHeight: number,
+  mode: 'move' | 'resize'
+): PlacedBox {
+  const left = layer.pinLeft === true;
+  const right = layer.pinRight === true;
+  const top = layer.pinTop === true;
+  const bottom = layer.pinBottom === true;
+  const marginLeft = readMargin(layer, 'marginLeft');
+  const marginRight = readMargin(layer, 'marginRight');
+  const marginTop = readMargin(layer, 'marginTop');
+  const marginBottom = readMargin(layer, 'marginBottom');
+
+  let { x, y, width, height } = box;
+
+  if (left && right) {
+    x = marginLeft;
+    width = Math.max(MIN_LAYER_SIZE, canvasWidth - marginLeft - marginRight);
+  } else if (mode === 'move') {
+    if (left) x = Math.max(marginLeft, x);
+    if (right) x = Math.min(x, canvasWidth - marginRight - width);
+  } else {
+    if (left && x < marginLeft) {
+      width = Math.max(MIN_LAYER_SIZE, width - (marginLeft - x));
+      x = marginLeft;
+    }
+    if (right && x + width > canvasWidth - marginRight) {
+      width = Math.max(MIN_LAYER_SIZE, canvasWidth - marginRight - x);
+    }
+  }
+
+  if (top && bottom) {
+    y = marginTop;
+    height = Math.max(MIN_LAYER_SIZE, canvasHeight - marginTop - marginBottom);
+  } else if (mode === 'move') {
+    if (top) y = Math.max(marginTop, y);
+    if (bottom) y = Math.min(y, canvasHeight - marginBottom - height);
+  } else {
+    if (top && y < marginTop) {
+      height = Math.max(MIN_LAYER_SIZE, height - (marginTop - y));
+      y = marginTop;
+    }
+    if (bottom && y + height > canvasHeight - marginBottom) {
+      height = Math.max(MIN_LAYER_SIZE, canvasHeight - marginBottom - y);
+    }
+  }
+
+  return { x, y, width, height };
+}
+
 export function isFullBleed(
   layer: Pick<Layer, 'x' | 'y' | 'width' | 'height' | 'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom'>,
   canvasWidth: number,

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import DesignerShell from './src/components/CHDesigner/DesignerShell';
+import { createSeedDocument } from './src/components/CHDesigner/document';
 import { importIdmlFile } from './src/components/CHDesigner/idmlImport';
 import type { DesignerDocument } from './src/components/CHDesigner/types';
 import './src/components/CHDesigner/index.css';
@@ -11,7 +12,13 @@ function Preview() {
 
   useEffect(() => {
     let cancelled = false;
-    const file = new URLSearchParams(window.location.search).get('file') || 'tmp-menu.idml';
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('seed') === '1') {
+      setDocument(createSeedDocument());
+      setStatus('Seed document');
+      return;
+    }
+    const file = params.get('file') || 'tmp-menu.idml';
     void fetch(`/${file}`)
       .then((response) => response.arrayBuffer())
       .then((buffer) => importIdmlFile(buffer))

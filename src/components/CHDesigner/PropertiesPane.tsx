@@ -1,6 +1,6 @@
 import React from 'react';
 import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
-import { fillLayerToCanvas } from './constraints';
+import { clampBoxToPins, fillLayerToCanvas } from './constraints';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
 import { magicStringFor } from './fields';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
@@ -12,8 +12,8 @@ import {
   useLayers,
   useSelection,
 } from './store';
-import { storySource } from './textFlow';
-import type { Layer } from './types';
+import { layerTextAlign, storySource } from './textFlow';
+import type { Layer, TextAlign } from './types';
 
 function NumberField({
   label,
@@ -36,6 +36,43 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </label>
+  );
+}
+
+const ALIGNMENTS: { id: TextAlign; label: string }[] = [
+  { id: 'left', label: 'Left' },
+  { id: 'middle', label: 'Middle' },
+  { id: 'right', label: 'Right' },
+];
+
+function ChoiceField<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: { id: T; label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="chd-field">
+      <span>{label}</span>
+      <div className="chd-align" role="group" aria-label={label}>
+        {options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={`chd-align-btn${value === option.id ? ' chd-align-btn--active' : ''}`}
+            aria-pressed={value === option.id}
+            onClick={() => onChange(option.id)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -138,7 +175,7 @@ export default function PropertiesPane({
                   />
                   <span>Dynamic size</span>
                 </label>
-                <p className="chd-field-hint">Type grows and shrinks when this box is scaled.</p>
+                <p className="chd-field-hint">Type fits this box, and grows or shrinks when the box is scaled.</p>
               </>
             ) : null}
             {isAdmin ? (
@@ -146,26 +183,59 @@ export default function PropertiesPane({
                 <input
                   type="checkbox"
                   checked={Boolean(layer.locked)}
-                  onChange={(e) => patch({ locked: e.target.checked })}
+                  onChange={(e) => {
+                    if (layer.type === 'group') {
+                      dispatch({ type: 'SET_BRANCH', id: layer.id, locked: e.target.checked });
+                      return;
+                    }
+                    patch({ locked: e.target.checked });
+                  }}
                 />
                 <span>Locked</span>
               </label>
             ) : null}
+            {layer.type === 'group' ? (
+              <p className="chd-field-hint">
+                Show, hide, and lock on this group apply to every item inside it.
+              </p>
+            ) : null}
           </Section>
 
+          {layer.type === 'group' ? null : (
+          <>
           <Section title="Placement">
             <div className="chd-field-row">
               <NumberField
                 label="X"
                 value={Math.round(layer.x)}
                 disabled={!canTransform}
-                onChange={(x) => patch({ x })}
+                onChange={(x) =>
+                  patch(
+                    clampBoxToPins(
+                      { x, y: layer.y, width: layer.width, height: layer.height },
+                      layer,
+                      document.canvas.width,
+                      document.canvas.height,
+                      'move'
+                    )
+                  )
+                }
               />
               <NumberField
                 label="Y"
                 value={Math.round(layer.y)}
                 disabled={!canTransform}
-                onChange={(y) => patch({ y })}
+                onChange={(y) =>
+                  patch(
+                    clampBoxToPins(
+                      { x: layer.x, y, width: layer.width, height: layer.height },
+                      layer,
+                      document.canvas.width,
+                      document.canvas.height,
+                      'move'
+                    )
+                  )
+                }
               />
             </div>
           </Section>
@@ -176,13 +246,33 @@ export default function PropertiesPane({
                 label="W"
                 value={Math.round(layer.width)}
                 disabled={!canTransform}
-                onChange={(width) => patch({ width })}
+                onChange={(width) =>
+                  patch(
+                    clampBoxToPins(
+                      { x: layer.x, y: layer.y, width, height: layer.height },
+                      layer,
+                      document.canvas.width,
+                      document.canvas.height,
+                      'resize'
+                    )
+                  )
+                }
               />
               <NumberField
                 label="H"
                 value={Math.round(layer.height)}
                 disabled={!canTransform}
-                onChange={(height) => patch({ height })}
+                onChange={(height) =>
+                  patch(
+                    clampBoxToPins(
+                      { x: layer.x, y: layer.y, width: layer.width, height },
+                      layer,
+                      document.canvas.width,
+                      document.canvas.height,
+                      'resize'
+                    )
+                  )
+                }
               />
             </div>
           </Section>
@@ -217,6 +307,18 @@ export default function PropertiesPane({
                   }
                 />
               </label>
+              <ChoiceField
+                label="Align"
+                value={layerTextAlign(story || layer)}
+                options={ALIGNMENTS}
+                onChange={(align) =>
+                  dispatch({
+                    type: 'UPDATE_LAYER',
+                    id: story?.id || layer.id,
+                    patch: { align },
+                  })
+                }
+              />
               <label className="chd-field chd-field-checkbox">
                 <input
                   type="checkbox"
@@ -438,8 +540,9 @@ export default function PropertiesPane({
                   })}
                 </div>
                 <p className="chd-field-hint">
-                  Pinning a side moves this block to that edge using the margin. Pin left and right
-                  together to stretch width; pin top and bottom to stretch height.
+                  A pinned side stays inside the page. Dragging stops at that edge, and the margin is
+                  the gap kept from it. Pin left and right together to stretch the width; pin top and
+                  bottom to stretch the height.
                 </p>
               </div>
               <div className="chd-field">
@@ -522,6 +625,8 @@ export default function PropertiesPane({
             </Section>
             </>
           ) : null}
+          </>
+          )}
         </div>
       )}
     </aside>

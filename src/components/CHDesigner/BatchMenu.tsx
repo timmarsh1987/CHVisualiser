@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { captureElement, createBatchPdf, type BatchPdf } from './exportArtboard';
 import { parseBatchCsv, resolveFieldText } from './fields';
 import LayerNode from './LayerNode';
-import { layerIsShown } from './policy';
+import { layerIsDrawn } from './policy';
 import { useDesignerDocument } from './store';
 import type { DesignerDocument, DesignerTemplatePage } from './types';
 
@@ -185,7 +185,7 @@ export default function BatchMenu() {
             }}
           >
             {shot.layers
-              .filter((layer) => layerIsShown(layer, source.settings))
+              .filter((layer) => layerIsDrawn(layer, source.settings))
               .map((layer) => (
                 <LayerNode
                   key={layer.id}

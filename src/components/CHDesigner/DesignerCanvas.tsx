@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { clamp, fitPageInView, revealBoxInView, screenDeltaToCanvas, type ViewBox } from './coords';
+import { clampBoxToPins } from './constraints';
+import { clamp, fitPageInView, revealBoxInView, screenDeltaToCanvas, zoomAroundPoint, type ViewBox } from './coords';
 import LayerNode from './LayerNode';
-import { layerAllowsTransform, layerIsSelectable, layerIsShown } from './policy';
+import { layerAllowsTransform, layerIsDrawn, layerIsSelectable } from './policy';
 import {
   useDesignerAction,
   useDesignerMode,
@@ -18,23 +19,31 @@ type Interaction =
       startY: number;
       origPanX: number;
       origPanY: number;
+      /** A click with no drag clears the selection. A drag pans immediately when false. */
+      clearOnClick: boolean;
+      immediate: boolean;
     }
   | {
       kind: 'move';
       ids: string[];
       startX: number;
       startY: number;
-      origins: Record<string, { x: number; y: number }>;
+      origins: Record<string, Layer>;
+      canvasWidth: number;
+      canvasHeight: number;
     }
   | {
       kind: 'resize';
       id: string;
+      layer: Layer;
       startX: number;
       startY: number;
       origX: number;
       origY: number;
       origW: number;
       origH: number;
+      canvasWidth: number;
+      canvasHeight: number;
       handle: ResizeHandle;
     };
 
@@ -58,6 +67,8 @@ export default function DesignerCanvas() {
   const interactionRef = useRef<Interaction | null>(null);
   interactionRef.current = interaction;
   const didFitRef = useRef(false);
+  const panMovedRef = useRef(false);
+  const onWheelRef = useRef<(event: WheelEvent) => void>(() => undefined);
 
   const applyView = (next: { zoom: number; panX: number; panY: number }) => {
     const current = viewportStateRef.current;
@@ -75,9 +86,10 @@ export default function DesignerCanvas() {
     const el = viewportElRef.current;
     if (!el) return;
     const fit = () => {
-      if (interactionRef.current) return;
       const rect = el.getBoundingClientRect();
       if (rect.width < 8 || rect.height < 8) return;
+      dispatch({ type: 'STAGE_SIZE', width: rect.width, height: rect.height });
+      if (interactionRef.current) return;
       applyView(fitPageInView(document.canvas.width, document.canvas.height, rect.width, rect.height));
     };
     didFitRef.current = true;
@@ -97,7 +109,7 @@ export default function DesignerCanvas() {
     const el = viewportElRef.current;
     if (!el) return;
     const chosen = document.layers.filter(
-      (layer) => selection.includes(layer.id) && layerIsShown(layer, document.settings)
+      (layer) => selection.includes(layer.id) && layerIsDrawn(layer, document.settings)
     );
     if (chosen.length === 0) return;
     const rect = el.getBoundingClientRect();
@@ -152,10 +164,14 @@ export default function DesignerCanvas() {
     const onMove = (e: PointerEvent) => {
       const zoom = viewportStateRef.current.zoom;
       if (interaction.kind === 'pan') {
+        const dx = e.clientX - interaction.startX;
+        const dy = e.clientY - interaction.startY;
+        if (!interaction.immediate && !panMovedRef.current && Math.hypot(dx, dy) <= 3) return;
+        panMovedRef.current = true;
         dispatch({
           type: 'PAN_SET',
-          panX: interaction.origPanX + (e.clientX - interaction.startX),
-          panY: interaction.origPanY + (e.clientY - interaction.startY),
+          panX: interaction.origPanX + dx,
+          panY: interaction.origPanY + dy,
         });
         return;
       }
@@ -170,10 +186,17 @@ export default function DesignerCanvas() {
         for (const id of interaction.ids) {
           const origin = interaction.origins[id];
           if (!origin) continue;
+          const next = clampBoxToPins(
+            { x: origin.x + dx, y: origin.y + dy, width: origin.width, height: origin.height },
+            origin,
+            interaction.canvasWidth,
+            interaction.canvasHeight,
+            'move'
+          );
           dispatch({
             type: 'UPDATE_LAYER',
             id,
-            patch: { x: origin.x + dx, y: origin.y + dy },
+            patch: next,
             pushHistory: false,
           });
         }
@@ -201,16 +224,26 @@ export default function DesignerCanvas() {
         nextY = interaction.origY + (interaction.origH - nextH);
       }
 
+      const resized = clampBoxToPins(
+        { x: nextX, y: nextY, width: nextW, height: nextH },
+        interaction.layer,
+        interaction.canvasWidth,
+        interaction.canvasHeight,
+        'resize'
+      );
+
       dispatch({
         type: 'UPDATE_LAYER',
         id: interaction.id,
-        patch: { x: nextX, y: nextY, width: nextW, height: nextH },
+        patch: resized,
         pushHistory: false,
       });
     };
 
     const onUp = () => {
-      if (interaction.kind === 'move' || interaction.kind === 'resize') {
+      if (interaction.kind === 'pan' && interaction.clearOnClick && !panMovedRef.current) {
+        dispatch({ type: 'UNSELECT_ALL' });
+      } else if (interaction.kind === 'move' || interaction.kind === 'resize') {
         dispatch({ type: 'COMMIT' });
       }
       setInteraction(null);
@@ -224,30 +257,49 @@ export default function DesignerCanvas() {
     };
   }, [interaction, dispatch]);
 
-  const onWheel = (e: React.WheelEvent) => {
-    e.preventDefault();
-    const nextZoom = clamp(viewport.zoom * (e.deltaY < 0 ? 1.08 : 0.92), MIN_ZOOM, MAX_ZOOM);
-    dispatch({ type: 'ZOOM_SET', zoom: nextZoom });
+  onWheelRef.current = (event: WheelEvent) => {
+    const el = viewportElRef.current;
+    if (!el) return;
+    const current = viewportStateRef.current;
+    const rect = el.getBoundingClientRect();
+    const nextZoom = clamp(current.zoom * (event.deltaY < 0 ? 1.08 : 0.92), MIN_ZOOM, MAX_ZOOM);
+    applyView(
+      zoomAroundPoint(current, nextZoom, event.clientX - rect.left, event.clientY - rect.top)
+    );
   };
 
-  const beginPan = (e: React.PointerEvent) => {
+  useEffect(() => {
+    const el = viewportElRef.current;
+    if (!el) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      onWheelRef.current(event);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const beginPan = (e: React.PointerEvent, clearOnClick: boolean, immediate: boolean) => {
+    panMovedRef.current = immediate;
     setInteraction({
       kind: 'pan',
       startX: e.clientX,
       startY: e.clientY,
       origPanX: viewport.panX,
       origPanY: viewport.panY,
+      clearOnClick,
+      immediate,
     });
   };
 
   const handleViewportPointerDown = (e: React.PointerEvent) => {
     if (e.button === 1 || (e.button === 0 && spaceDown)) {
       e.preventDefault();
-      beginPan(e);
+      beginPan(e, false, true);
       return;
     }
     if (e.button !== 0) return;
-    dispatch({ type: 'UNSELECT_ALL' });
+    beginPan(e, true, false);
   };
 
   const handleLayerSelect = (layer: Layer, e: React.PointerEvent) => {
@@ -265,16 +317,20 @@ export default function DesignerCanvas() {
   };
 
   const handleMoveStart = (layer: Layer, e: React.PointerEvent) => {
-    if (!canTransformLayer(layer) || spaceDown) return;
+    if (spaceDown) {
+      beginPan(e, false, true);
+      return;
+    }
+    if (!canTransformLayer(layer)) return;
     const ids = selection.includes(layer.id) ? selection : [layer.id];
     if (!selection.includes(layer.id)) {
       dispatch({ type: 'SELECT', ids: [layer.id] });
     }
-    const origins: Record<string, { x: number; y: number }> = {};
+    const origins: Record<string, Layer> = {};
     for (const id of ids) {
       const found = document.layers.find((l) => l.id === id);
       if (found && canTransformLayer(found)) {
-        origins[id] = { x: found.x, y: found.y };
+        origins[id] = found;
       }
     }
     if (Object.keys(origins).length === 0) return;
@@ -284,6 +340,8 @@ export default function DesignerCanvas() {
       startX: e.clientX,
       startY: e.clientY,
       origins,
+      canvasWidth: document.canvas.width,
+      canvasHeight: document.canvas.height,
     });
   };
 
@@ -294,18 +352,21 @@ export default function DesignerCanvas() {
     setInteraction({
       kind: 'resize',
       id: layer.id,
+      layer,
       startX: e.clientX,
       startY: e.clientY,
       origX: layer.x,
       origY: layer.y,
       origW: layer.width,
       origH: layer.height,
+      canvasWidth: document.canvas.width,
+      canvasHeight: document.canvas.height,
       handle,
     });
   };
 
   const selectedLayers = document.layers.filter(
-    (l) => selection.includes(l.id) && layerIsShown(l, document.settings)
+    (l) => selection.includes(l.id) && layerIsDrawn(l, document.settings)
   );
   const primary = selectedLayers.length === 1 ? selectedLayers[0] : null;
   const showHandles = primary ? canTransformLayer(primary) : false;
@@ -313,16 +374,14 @@ export default function DesignerCanvas() {
   return (
     <div
       ref={viewportElRef}
-      className={`chd-viewport${spaceDown ? ' chd-viewport--panning' : ''}`}
-      onWheel={onWheel}
+      className={`chd-viewport${interaction?.kind === 'pan' ? ' chd-viewport--panning' : ''}`}
       onPointerDown={handleViewportPointerDown}
     >
       <div
         className="chd-world"
-        style={{
-          transform: `translate(${viewport.panX}px, ${viewport.panY}px) scale(${viewport.zoom})`,
-        }}
+        style={{ transform: `translate(${viewport.panX}px, ${viewport.panY}px)` }}
       >
+        <div className="chd-world-zoom" style={{ zoom: viewport.zoom }}>
         <div
           className="chd-artboard"
           data-chd-artboard="true"
@@ -332,13 +391,14 @@ export default function DesignerCanvas() {
             background: document.canvas.background || '#eceae4',
           }}
           onPointerDown={(e) => {
-            if (e.button !== 0 || spaceDown) return;
+            if (e.button === 1 || (e.button === 0 && spaceDown)) return;
+            if (e.button !== 0) return;
             e.stopPropagation();
-            dispatch({ type: 'UNSELECT_ALL' });
+            beginPan(e, true, false);
           }}
         >
           <div className="chd-artboard-page" />
-          {document.layers.filter((layer) => layerIsShown(layer, document.settings)).map((layer) => (
+          {document.layers.filter((layer) => layerIsDrawn(layer, document.settings)).map((layer) => (
             <LayerNode
               key={layer.id}
               layer={layer}
@@ -398,10 +458,11 @@ export default function DesignerCanvas() {
               ))
             : null}
         </div>
+        </div>
       </div>
 
       <div className="chd-viewport-hint">
-        Scroll to zoom · Space+drag to pan · Shift+click multi-select
+        Drag the page to move · Scroll or +/− to zoom · Shift+click multi-select
       </div>
     </div>
   );

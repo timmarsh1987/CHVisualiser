@@ -1,3 +1,10 @@
+.marketing-builder:has(.chd-root) {
+  height: 100dvh;
+  max-height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .marketing-builder {
   --mb-primary: #00a651;
   --mb-primary-hover: #1db86a;
@@ -23,6 +30,7 @@
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
+  max-height: none;
 }
 
 .marketing-builder-status {
@@ -2077,6 +2085,7 @@
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
+  max-height: none;
 }
 
 .designer-asset-builder-actions {
