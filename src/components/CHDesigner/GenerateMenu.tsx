@@ -3,8 +3,8 @@ import { generateDesignerOutput, type GenerateFormat } from './exportArtboard';
 import { useOutputDocument } from './store';
 
 const OPTIONS: { format: GenerateFormat; label: string; hint: string }[] = [
-  { format: 'pdf', label: 'PDF', hint: 'Print-ready page' },
-  { format: 'png', label: 'PNG', hint: 'Image of the page' },
+  { format: 'pdf', label: 'PDF', hint: 'Every page at print size' },
+  { format: 'png', label: 'PNG', hint: 'Image of this page' },
 ];
 
 export default function GenerateMenu() {
@@ -32,10 +32,7 @@ export default function GenerateMenu() {
     setBusy(true);
     setError(null);
     try {
-      await generateDesignerOutput(host, format, {
-        width: canvasDocument.canvas.width,
-        height: canvasDocument.canvas.height,
-      });
+      await generateDesignerOutput(canvasDocument, format);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Generate failed.');
     } finally {

@@ -1,4 +1,11 @@
+import { createElement } from 'react';
+import { flushSync } from 'react-dom';
+import { createRoot } from 'react-dom/client';
 import { loadHtml2Canvas, loadJsPdf } from './exportLibs';
+import LayerNode from './LayerNode';
+import { layerIsDrawn } from './policy';
+import { syncActiveTemplatePage } from './templateSettings';
+import type { DesignerDocument, DesignerSettings, DesignerTemplatePage, Layer } from './types';
 
 export type GenerateFormat = 'pdf' | 'png';
 
@@ -20,15 +27,6 @@ function downloadBlob(blob: Blob, filename: string) {
   URL.revokeObjectURL(url);
 }
 
-function findArtboard(from: HTMLElement): HTMLElement {
-  const root = from.closest('.chd-root');
-  const artboard = root?.querySelector<HTMLElement>('[data-chd-artboard]');
-  if (!artboard) {
-    throw new Error('Could not find the designer page to export.');
-  }
-  return artboard;
-}
-
 export async function captureElement(element: HTMLElement): Promise<HTMLCanvasElement> {
   const html2canvas = await loadHtml2Canvas();
   element.classList.add('chd-artboard--capturing');
@@ -37,11 +35,9 @@ export async function captureElement(element: HTMLElement): Promise<HTMLCanvasEl
     const height = layoutPixels(element, 'height');
     return await html2canvas(element, {
       useCORS: true,
-      backgroundColor: null,
+      backgroundColor: element.style.backgroundColor || '#ffffff',
       width,
       height,
-      windowWidth: width,
-      windowHeight: height,
       scale: 2,
       logging: false,
     });
@@ -50,8 +46,81 @@ export async function captureElement(element: HTMLElement): Promise<HTMLCanvasEl
   }
 }
 
-async function captureArtboard(from: HTMLElement): Promise<HTMLCanvasElement> {
-  return captureElement(findArtboard(from));
+function pagesFromDocument(document: DesignerDocument): DesignerTemplatePage[] {
+  const synced = syncActiveTemplatePage(document);
+  if (synced.pages?.length) return synced.pages;
+  return [
+    {
+      id: synced.activePageId || 'page',
+      name: 'Page 1',
+      width: synced.canvas.width,
+      height: synced.canvas.height,
+      layers: synced.layers,
+    },
+  ];
+}
+
+function waitForImages(root: HTMLElement): Promise<void> {
+  const images = [...root.querySelectorAll('img')];
+  return Promise.all(
+    images.map(
+      (img) =>
+        new Promise<void>((resolve) => {
+          if (img.complete) {
+            resolve();
+            return;
+          }
+          img.addEventListener('load', () => resolve(), { once: true });
+          img.addEventListener('error', () => resolve(), { once: true });
+        })
+    )
+  ).then(() => undefined);
+}
+
+/** Draw a page at its real size, outside the zoomed canvas, then photograph it. */
+async function capturePage(
+  page: DesignerTemplatePage,
+  settings: DesignerSettings | undefined,
+  background: string
+): Promise<HTMLCanvasElement> {
+  const host = window.document.createElement('div');
+  host.className = 'chd-batch-stage';
+  host.setAttribute('aria-hidden', 'true');
+  const board = window.document.createElement('div');
+  board.className = 'chd-artboard';
+  board.dataset.chdArtboard = 'true';
+  board.style.width = `${page.width}px`;
+  board.style.height = `${page.height}px`;
+  board.style.backgroundColor = background;
+  host.appendChild(board);
+  window.document.body.appendChild(host);
+  const root = createRoot(board);
+  const drawn = page.layers.filter((layer) => layerIsDrawn(layer, settings));
+  try {
+    flushSync(() => {
+      root.render(
+        drawn.map((layer: Layer) =>
+          createElement(LayerNode, {
+            key: layer.id,
+            layer,
+            selected: false,
+            preview: true,
+            onSelect: () => undefined,
+            onMoveStart: () => undefined,
+          })
+        )
+      );
+    });
+    if (window.document.fonts?.ready) await window.document.fonts.ready;
+    await waitForImages(board);
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => resolve()));
+    });
+    return await captureElement(board);
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }
 
 function pageSizeMm(pageWidthPx: number, pageHeightPx: number) {
@@ -102,26 +171,28 @@ async function exportPng(canvas: HTMLCanvasElement, filename: string) {
   downloadBlob(blob, filename);
 }
 
-async function exportPdf(
-  canvas: HTMLCanvasElement,
-  filename: string,
-  pageWidthPx: number,
-  pageHeightPx: number
-) {
-  const pdf = await createBatchPdf();
-  pdf.addPageImage(canvas, pageWidthPx, pageHeightPx);
-  pdf.save(filename);
-}
-
 export async function generateDesignerOutput(
-  from: HTMLElement,
-  format: GenerateFormat,
-  page: { width: number; height: number }
+  document: DesignerDocument,
+  format: GenerateFormat
 ): Promise<void> {
-  const canvas = await captureArtboard(from);
+  const synced = syncActiveTemplatePage(document);
+  const pages = pagesFromDocument(synced);
+  const background = synced.canvas.background || '#ffffff';
+  if (pages.length === 0) {
+    throw new Error('There are no pages to generate.');
+  }
+
   if (format === 'png') {
+    const page = pages.find((item) => item.id === synced.activePageId) ?? pages[0];
+    const canvas = await capturePage(page, synced.settings, background);
     await exportPng(canvas, 'design.png');
     return;
   }
-  await exportPdf(canvas, 'design.pdf', page.width, page.height);
+
+  const pdf = await createBatchPdf();
+  for (const page of pages) {
+    const canvas = await capturePage(page, synced.settings, background);
+    pdf.addPageImage(canvas, page.width, page.height);
+  }
+  pdf.save('design.pdf');
 }
