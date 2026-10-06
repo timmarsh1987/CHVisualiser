@@ -107,9 +107,7 @@ export default function ImageTransformPanel({ client, entity, options }: Props) 
         resolvedOptions,
         mode
       );
-      if (mode === 'version' && !generated.isCutout) {
-        window.location.reload();
-      } else if (generated.isCutout && resolvedOptions.cutoutOutputMode === 'newVersion') {
+      if (mode === 'version') {
         window.location.reload();
       } else {
         window.location.assign(`/en-us/asset/${uploadedAssetId}`);

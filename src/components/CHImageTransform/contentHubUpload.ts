@@ -30,6 +30,7 @@ type ContentHubClient = {
       isSuccessStatusCode?: boolean;
       statusCode?: number;
       content?: T;
+      responseHeaders?: Record<string, unknown>;
     }>;
     postAsync?: <T>(url: string, body: unknown) => Promise<{
       isSuccessStatusCode?: boolean;
@@ -62,31 +63,153 @@ function timestampForFileName(date = new Date()): string {
   return `${day}${months[date.getMonth()]}${date.getFullYear()}-${hours}${minutes}`;
 }
 
-function createdAssetId(content: unknown): number | null {
+function asRecord(content: unknown): Record<string, unknown> | null {
   let value = content;
   if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
     try {
-      value = JSON.parse(value);
+      value = JSON.parse(trimmed);
     } catch {
       return null;
     }
   }
-  if (!value || typeof value !== 'object') return null;
-  const record = value as Record<string, unknown>;
-  const id = Number(record.asset_id ?? record.assetId ?? record.id);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  return value as Record<string, unknown>;
+}
+
+function uploadRecord(content: unknown): Record<string, unknown> | null {
+  const record = asRecord(content);
+  if (!record) return null;
+  const hasUploadFields =
+    'asset_id' in record ||
+    'assetId' in record ||
+    'AssetId' in record ||
+    'asset_identifier' in record ||
+    'assetIdentifier' in record ||
+    'AssetIdentifier' in record ||
+    'success' in record;
+  if (hasUploadFields) return record;
+  return asRecord(record.content ?? record.Content) ?? record;
+}
+
+function positiveId(value: unknown): number | null {
+  if (typeof value === 'string') {
+    const fromHref = value.match(/\/api\/entities\/(\d+)/i);
+    if (fromHref) return positiveId(fromHref[1]);
+  }
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return positiveId(record.id ?? record.Id ?? record.href ?? record.Href);
+  }
+  const id = typeof value === 'number' ? value : Number(value);
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-function assetIdFromLocation(headers: Record<string, unknown> | undefined): number | null {
-  if (!headers) return null;
-  const locationEntry = Object.entries(headers).find(
-    ([name]) => name.toLowerCase() === 'location'
+function createdAssetId(content: unknown): number | null {
+  const record = uploadRecord(content);
+  if (!record) return null;
+  return (
+    positiveId(record.asset_id) ??
+    positiveId(record.assetId) ??
+    positiveId(record.AssetId) ??
+    positiveId(record.id) ??
+    positiveId(record.Id)
   );
-  const location = String(locationEntry?.[1] ?? '');
-  const match = location.match(/\/api\/entities\/(\d+)/i);
+}
+
+function createdAssetIdentifier(content: unknown): string | null {
+  const record = uploadRecord(content);
+  if (!record) return null;
+  const value =
+    record.asset_identifier ??
+    record.assetIdentifier ??
+    record.AssetIdentifier ??
+    record.identifier ??
+    record.Identifier;
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed || null;
+}
+
+function uploadFailureMessage(content: unknown): string | null {
+  const record = uploadRecord(content);
+  if (!record || record.success !== false) return null;
+  return typeof record.message === 'string' && record.message.trim()
+    ? record.message.trim()
+    : 'Content Hub reported that the upload failed.';
+}
+
+function headerText(headers: unknown, name: string): string {
+  if (!headers) return '';
+  const wanted = name.toLowerCase();
+  if (typeof (headers as { get?: unknown }).get === 'function') {
+    const value = (headers as { get: (key: string) => unknown }).get(name);
+    return value == null ? '' : String(value);
+  }
+  if (headers instanceof Map) {
+    for (const [key, value] of headers.entries()) {
+      if (String(key).toLowerCase() === wanted) return value == null ? '' : String(value);
+    }
+    return '';
+  }
+  if (typeof headers !== 'object') return '';
+  const entry = Object.entries(headers as Record<string, unknown>).find(
+    ([key]) => key.toLowerCase() === wanted
+  );
+  const raw = entry?.[1];
+  if (Array.isArray(raw)) return raw[0] == null ? '' : String(raw[0]);
+  return raw == null ? '' : String(raw);
+}
+
+function assetIdFromLocation(headers: unknown): number | null {
+  return positiveId(headerText(headers, 'location'));
+}
+
+function identifierFromLocation(headers: unknown): string | null {
+  const location = headerText(headers, 'location');
+  const match = location.match(/\/api\/entities\/identifier\/([^/?#]+)/i);
   if (!match) return null;
-  const id = Number(match[1]);
-  return Number.isSafeInteger(id) && id > 0 ? id : null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
+async function assetIdFromIdentifier(
+  client: ContentHubClient,
+  identifier: string
+): Promise<number | null> {
+  if (!client.raw?.getAsync) return null;
+  const response = await client.raw.getAsync(
+    `/api/entities/identifier/${encodeURIComponent(identifier)}`
+  );
+  if (response?.isSuccessStatusCode === false) return null;
+  return createdAssetId(response?.content) ?? assetIdFromLocation(response?.responseHeaders);
+}
+
+async function resolveCreatedAssetId(
+  client: ContentHubClient,
+  response: UploadResponse
+): Promise<number> {
+  const direct =
+    createdAssetId(response?.content) ??
+    assetIdFromLocation(response?.responseHeaders);
+  if (direct) return direct;
+
+  const identifier =
+    createdAssetIdentifier(response?.content) ??
+    identifierFromLocation(response?.responseHeaders);
+  if (identifier) {
+    const resolved = await assetIdFromIdentifier(client, identifier);
+    if (resolved) return resolved;
+    throw new Error(
+      `Content Hub created the asset (${identifier}) but did not return its numeric asset ID.`
+    );
+  }
+
+  throw new Error('Content Hub created the asset but did not return its Content Hub ID.');
 }
 
 function shouldPreserveTargetProperty(name: string): boolean {
@@ -94,6 +217,8 @@ function shouldPreserveTargetProperty(name: string): boolean {
   return (
     normalized.startsWith('file') ||
     normalized.includes('mimetype') ||
+    normalized.includes('identifier') ||
+    normalized.includes('contenthubid') ||
     ['width', 'height', 'imagewidth', 'imageheight', 'dimensions'].includes(normalized)
   );
 }
@@ -277,22 +402,6 @@ async function copyNumericProperties(
   }
 }
 
-function determineCutoutUploadMode(
-  generated: GeneratedImage,
-  options: ImageTransformOptions,
-  requestedMode: ImageUploadMode
-): { uploadMode: ImageUploadMode; shouldTagAsCutout: boolean } {
-  if (!generated.isCutout) {
-    return { uploadMode: requestedMode, shouldTagAsCutout: false };
-  }
-
-  const cutoutMode = options.cutoutOutputMode ?? 'newAsset';
-  if (cutoutMode === 'newVersion') {
-    return { uploadMode: 'version', shouldTagAsCutout: true };
-  }
-  return { uploadMode: 'new-asset', shouldTagAsCutout: true };
-}
-
 export async function uploadGeneratedImage(
   client: ContentHubClient | undefined,
   asset: ImageAssetContext,
@@ -309,7 +418,8 @@ export async function uploadGeneratedImage(
     throw new Error('Content Hub returned an invalid numeric asset ID.');
   }
 
-  const { uploadMode, shouldTagAsCutout } = determineCutoutUploadMode(generated, options, mode);
+  const uploadMode = mode;
+  const shouldTagAsCutout = Boolean(generated.isCutout);
 
   const pngBlob =
     generated.blob.type === 'image/png'
@@ -330,14 +440,15 @@ export async function uploadGeneratedImage(
     configurationName:
       options.uploadConfiguration || 'AssetUploadConfiguration',
     actionName: uploadMode === 'version' ? 'NewMainFile' : 'NewAsset',
-    actionParameters: uploadMode === 'version' ? { AssetId: assetId } : {},
+    actionParameters: uploadMode === 'version' ? { AssetId: String(assetId) } : {},
   };
 
   const response = await client.uploads.uploadAsync(request);
-  if (response?.isSuccessStatusCode === false) {
+  const failure = uploadFailureMessage(response?.content);
+  if (response?.isSuccessStatusCode === false || failure) {
     throw new Error(
       `Content Hub could not ${uploadMode === 'version' ? 'create the new version' : 'create the new asset'} ` +
-      `(HTTP ${response.statusCode ?? 'unknown'}).`
+      `(HTTP ${response?.statusCode ?? 'unknown'}${failure ? `: ${failure}` : ''}).`
     );
   }
 
@@ -348,12 +459,7 @@ export async function uploadGeneratedImage(
     return assetId;
   }
 
-  const newAssetId =
-    createdAssetId(response?.content) ||
-    assetIdFromLocation(response?.responseHeaders);
-  if (!newAssetId) {
-    throw new Error('Content Hub created the asset but did not return its asset ID.');
-  }
+  const newAssetId = await resolveCreatedAssetId(client, response);
 
   await copyAssetMetadata(client, assetId, newAssetId);
 
