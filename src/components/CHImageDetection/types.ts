@@ -2,9 +2,15 @@ export type DetectionCheckId =
   | 'minors'
   | 'animals'
   | 'culturalSensitive'
-  | 'firearmsOffensive';
+  | 'firearmsOffensive'
+  | 'whatYouSee'
+  | 'medical'
+  | 'logos'
+  | 'nudityGraphic';
 
 export type DetectionStatus = 'clear' | 'flagged';
+
+export type DetectionCheckKind = 'flag' | 'describe';
 
 export type DetectionCheckDefinition = {
   id: DetectionCheckId;
@@ -13,8 +19,14 @@ export type DetectionCheckDefinition = {
     | 'detectMinors'
     | 'detectAnimals'
     | 'detectCulturalSensitive'
-    | 'detectFirearmsOffensive';
+    | 'detectFirearmsOffensive'
+    | 'detectWhatYouSee'
+    | 'detectMedical'
+    | 'detectLogos'
+    | 'detectNudityGraphic';
   description: string;
+  /** Flag checks can mark the report flagged. Describe checks are informational. */
+  kind: DetectionCheckKind;
 };
 
 export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
@@ -23,12 +35,14 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
     label: 'Children / minors',
     optionKey: 'detectMinors',
     description: 'Flag if people who appear to be minors are visible.',
+    kind: 'flag',
   },
   {
     id: 'animals',
     label: 'Animals',
     optionKey: 'detectAnimals',
     description: 'Flag if any animal is visible.',
+    kind: 'flag',
   },
   {
     id: 'culturalSensitive',
@@ -36,12 +50,42 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
     optionKey: 'detectCulturalSensitive',
     description:
       'Flag religious, cultural, memorial, or politically sensitive scenes for review.',
+    kind: 'flag',
   },
   {
     id: 'firearmsOffensive',
     label: 'Firearms or offensive items',
     optionKey: 'detectFirearmsOffensive',
     description: 'Flag firearms, other weapons, hate symbols, or graphic violence.',
+    kind: 'flag',
+  },
+  {
+    id: 'whatYouSee',
+    label: 'Tell me what you see',
+    optionKey: 'detectWhatYouSee',
+    description: 'Describe the subject, setting, and notable objects. This does not flag the image.',
+    kind: 'describe',
+  },
+  {
+    id: 'medical',
+    label: 'Medical or pharmaceuticals',
+    optionKey: 'detectMedical',
+    description: 'Flag medicines, devices, pharmaceutical packaging, or a clinical setting.',
+    kind: 'flag',
+  },
+  {
+    id: 'logos',
+    label: 'Logo detection',
+    optionKey: 'detectLogos',
+    description: 'Flag a logo, brand mark, or wordmark, and name it when recognized.',
+    kind: 'flag',
+  },
+  {
+    id: 'nudityGraphic',
+    label: 'Nudity or graphic content',
+    optionKey: 'detectNudityGraphic',
+    description: 'Flag nudity or graphic content such as gore. The reason stays non-graphic.',
+    kind: 'flag',
   },
 ];
 
@@ -92,6 +136,10 @@ export type ImageDetectionOptions = {
   detectAnimals?: boolean;
   detectCulturalSensitive?: boolean;
   detectFirearmsOffensive?: boolean;
+  detectWhatYouSee?: boolean;
+  detectMedical?: boolean;
+  detectLogos?: boolean;
+  detectNudityGraphic?: boolean;
   nameProperty?: string;
   fileNameProperty?: string;
   descriptionProperty?: string;

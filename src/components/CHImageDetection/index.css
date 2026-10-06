@@ -243,6 +243,11 @@
   color: #ab091e;
 }
 
+.ch-image-detection__status--reviewed {
+  background: #e0e7ff;
+  color: #334e68;
+}
+
 .ch-image-detection__report-summary {
   margin: 0;
   font-size: 13px;
@@ -286,6 +291,11 @@
 .ch-image-detection__finding--clear {
   border-color: #b7ebc1;
   background: #f3fbf5;
+}
+
+.ch-image-detection__finding--describe {
+  border-color: #d9e2ec;
+  background: #f8fbff;
 }
 
 .ch-image-detection__finding-header {

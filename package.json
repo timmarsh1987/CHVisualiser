@@ -23,6 +23,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^5.11.13",
     "@sitecore/sc-contenthub-webclient-sdk": "^1.2.8",
+    "ag-psd": "^31.0.2",
     "c2pa-node": "0.5.26",
     "dompurify": "^3.4.11",
     "leaflet": "^1.9.4",

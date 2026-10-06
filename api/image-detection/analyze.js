@@ -12,26 +12,58 @@ const CHECKS = [
   {
     id: 'minors',
     label: 'Children / minors',
+    affectsStatus: true,
     instructions:
       'Report whether any person who appears to be a child or minor is visible. Set detected true only when a minor appears to be present. summary must be a short non-graphic reason, such as "a child is visible in the foreground". Do not estimate an exact age. Do not describe bodies. Do not assess or describe sexual content.',
   },
   {
     id: 'animals',
     label: 'Animals',
+    affectsStatus: true,
     instructions:
       'Report whether any animal is visible, including pets, wildlife, livestock, birds, and insects.',
   },
   {
     id: 'culturalSensitive',
     label: 'Cultural or sensitive imagery',
+    affectsStatus: true,
     instructions:
       'Report whether the image contains religious or sacred imagery, cultural ceremonies, culturally significant dress or artifacts, memorials, or politically sensitive scenes. This is a review flag, not a moral judgment.',
   },
   {
     id: 'firearmsOffensive',
     label: 'Firearms or offensive items',
+    affectsStatus: true,
     instructions:
       'Report whether the image contains firearms, other weapons, hate symbols, or graphic violence.',
+  },
+  {
+    id: 'whatYouSee',
+    label: 'Tell me what you see',
+    affectsStatus: false,
+    instructions:
+      'Describe what is visible in a few sentences: subject, setting, and notable objects. Put that description in summary. Set detected to true when you can describe the image. This is a description, not a problem flag.',
+  },
+  {
+    id: 'medical',
+    label: 'Medical or pharmaceuticals',
+    affectsStatus: true,
+    instructions:
+      'Report whether medicines, pills, syringes, medical devices, pharmaceutical packaging or branding, or a clinical setting are visible.',
+  },
+  {
+    id: 'logos',
+    label: 'Logo detection',
+    affectsStatus: true,
+    instructions:
+      'Report whether a logo, brand mark, or wordmark is visible. If you recognize it, name it in the summary. If a mark is visible but not identifiable, say a logo is visible but not identified.',
+  },
+  {
+    id: 'nudityGraphic',
+    label: 'Nudity or graphic content',
+    affectsStatus: true,
+    instructions:
+      'Report whether nudity or graphic content such as gore or severe injury is visible. summary must be a short non-graphic reason, such as "nudity is visible" or "a severe injury is visible". Do not describe sexual acts or graphic detail.',
   },
 ];
 
@@ -162,6 +194,7 @@ Rules:
 - confidence is an integer from 0 to 100.
 - summary on each finding is one short sentence.
 - Prefer visual evidence. Do not invent content that is not in the image.
+- whatYouSee is a description. Include it when requested. It does not mean the image is a problem.
 
 Asset:
 ${assetLines.join('\n')}`;
@@ -197,7 +230,14 @@ function normalizeReport(payload, checks) {
     };
   });
 
-  const flagged = findings.some((finding) => finding.detected);
+  const flagged = findings.some((finding) => {
+    const definition = CHECKS.find((check) => check.id === finding.id);
+    return definition?.affectsStatus !== false && finding.detected;
+  });
+  const descriptionOnly = findings.every((finding) => {
+    const definition = CHECKS.find((check) => check.id === finding.id);
+    return definition?.affectsStatus === false;
+  });
 
   return {
     status: flagged ? 'flagged' : 'clear',
@@ -205,7 +245,9 @@ function normalizeReport(payload, checks) {
       asString(record.summary) ||
       (flagged
         ? 'One or more selected checks were detected in the image.'
-        : 'None of the selected checks were detected in the image.'),
+        : descriptionOnly
+          ? 'Image description completed.'
+          : 'None of the selected checks were detected in the image.'),
     findings,
     checksRun: checks,
     analyzedAt: new Date().toISOString(),

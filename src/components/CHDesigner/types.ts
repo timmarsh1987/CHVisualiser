@@ -36,6 +36,11 @@ export interface Layer {
   /** Start frame that owns the full story, when this frame is a continuation. */
   continuesFrom?: string;
   fontSize?: number;
+  /** CSS family. A loaded font is matched by this PostScript or family name. */
+  fontFamily?: string;
+  /** Used when the face was added as a weight of a shared family. */
+  fontWeight?: number;
+  fontStyle?: 'normal' | 'italic';
   /** Horizontal alignment inside the frame. Defaults to left, or right for RTL. */
   align?: TextAlign;
   /** Font size fits the box, and refits when the box or the text changes. */
@@ -87,9 +92,21 @@ export interface DesignerTemplatePage {
   layers: Layer[];
 }
 
+export interface DesignerFont {
+  id: string;
+  family: string;
+  postScriptName: string;
+  weight: number;
+  style: 'normal' | 'italic';
+  /** File bytes, so a saved document still has the face. */
+  dataUrl: string;
+}
+
 export interface DesignerSettings {
   /** Selected brand option id, keyed by slot (`lhs`, `rhs`). */
   brands: Record<string, string>;
+  /** Customer OTF and TTF faces for text layers. */
+  fonts?: DesignerFont[];
 }
 
 export interface LayerPageLayout {
@@ -189,6 +206,8 @@ export type DesignerAction =
   | { type: 'ADD_TEMPLATE_PAGE' }
   | { type: 'REMOVE_TEMPLATE_PAGE' }
   | { type: 'SET_BRAND_OPTION'; slot: string; option: string }
+  | { type: 'ADD_FONTS'; fonts: DesignerFont[] }
+  | { type: 'REMOVE_FONT'; id: string }
   | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
   | { type: 'SET_FIELD_VALUE'; fieldId: string; value: string }
   | { type: 'SET_FIELD_LABEL'; fieldId: string; label: string }

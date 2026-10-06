@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { resolveAssetContext } from './assetContext';
 import { analyzeImageDetection } from './api';
-import { readSavedDetectionReport, saveDetectionReportToEntity } from './entityDetection';
+import { loadSavedDetectionReport, saveDetectionReportToEntity } from './entityDetection';
 import { LoadingState } from './LoadingState';
 import {
   defaultDetectionSelection,
@@ -47,6 +47,10 @@ function resolveOptions(
     detectAnimals: options?.detectAnimals,
     detectCulturalSensitive: options?.detectCulturalSensitive,
     detectFirearmsOffensive: options?.detectFirearmsOffensive,
+    detectWhatYouSee: options?.detectWhatYouSee,
+    detectMedical: options?.detectMedical,
+    detectLogos: options?.detectLogos,
+    detectNudityGraphic: options?.detectNudityGraphic,
     nameProperty: options?.nameProperty?.trim(),
     fileNameProperty: options?.fileNameProperty?.trim(),
     descriptionProperty: options?.descriptionProperty?.trim(),
@@ -65,11 +69,45 @@ function formatDate(value: string) {
   });
 }
 
-function statusLabel(status: ImageDetectionReport['status']) {
-  return status === 'flagged' ? 'Flagged' : 'Clear';
+function isDescribeFinding(finding: DetectionFinding) {
+  return DETECTION_CHECKS.find((check) => check.id === finding.id)?.kind === 'describe';
+}
+
+function reportHasFlagCheck(report: ImageDetectionReport) {
+  return report.findings.some((finding) => !isDescribeFinding(finding));
+}
+
+function statusLabel(report: ImageDetectionReport) {
+  if (!reportHasFlagCheck(report)) {
+    return 'Reviewed';
+  }
+  return report.status === 'flagged' ? 'Flagged' : 'Clear';
+}
+
+function statusClass(report: ImageDetectionReport) {
+  if (!reportHasFlagCheck(report)) {
+    return 'reviewed';
+  }
+  return report.status;
 }
 
 function FindingCard({ finding }: { finding: DetectionFinding }) {
+  if (isDescribeFinding(finding)) {
+    return (
+      <article className="ch-image-detection__finding ch-image-detection__finding--describe">
+        <div className="ch-image-detection__finding-header">
+          <h4 className="ch-image-detection__finding-title">{finding.label}</h4>
+          <span className="ch-image-detection__badge ch-image-detection__badge--muted">
+            Description
+          </span>
+        </div>
+        {finding.summary ? (
+          <p className="ch-image-detection__finding-copy">{finding.summary}</p>
+        ) : null}
+      </article>
+    );
+  }
+
   return (
     <article
       className={`ch-image-detection__finding ch-image-detection__finding--${
@@ -112,23 +150,13 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
     defaultDetectionSelection(options)
   );
 
-  const detectMinors = resolvedOptions?.detectMinors ?? options?.detectMinors;
-  const detectAnimals = resolvedOptions?.detectAnimals ?? options?.detectAnimals;
-  const detectCulturalSensitive =
-    resolvedOptions?.detectCulturalSensitive ?? options?.detectCulturalSensitive;
-  const detectFirearmsOffensive =
-    resolvedOptions?.detectFirearmsOffensive ?? options?.detectFirearmsOffensive;
+  const defaultSelectionKey = DETECTION_CHECKS.map(
+    (check) => `${check.id}:${String((resolvedOptions ?? options)?.[check.optionKey])}`
+  ).join('|');
 
   useEffect(() => {
-    setSelection(
-      defaultDetectionSelection({
-        detectMinors,
-        detectAnimals,
-        detectCulturalSensitive,
-        detectFirearmsOffensive,
-      })
-    );
-  }, [detectMinors, detectAnimals, detectCulturalSensitive, detectFirearmsOffensive]);
+    setSelection(defaultDetectionSelection(resolvedOptions ?? options));
+  }, [defaultSelectionKey]);
 
   useEffect(() => {
     if (!resolvedOptions) {
@@ -160,14 +188,28 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
           return;
         }
 
-        const saved = readSavedDetectionReport(
+        const saved = await loadSavedDetectionReport(
+          client,
           entity,
           resolvedOptions.detectionReportProperty || DEFAULT_REPORT_PROPERTY
         );
 
+        if (cancelled) {
+          return;
+        }
+
         if (saved) {
           setReport(saved);
           setReportSource('saved');
+          if (saved.checksRun.length > 0) {
+            setSelection((current) => {
+              const next = { ...current };
+              for (const check of DETECTION_CHECKS) {
+                next[check.id] = saved.checksRun.includes(check.id);
+              }
+              return next;
+            });
+          }
         } else {
           setReport(null);
           setReportSource(null);
@@ -386,9 +428,9 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
             <div className="ch-image-detection__report">
               <div className="ch-image-detection__report-header">
                 <span
-                  className={`ch-image-detection__status ch-image-detection__status--${report.status}`}
+                  className={`ch-image-detection__status ch-image-detection__status--${statusClass(report)}`}
                 >
-                  {statusLabel(report.status)}
+                  {statusLabel(report)}
                 </span>
                 <p className="ch-image-detection__report-summary">{report.summary}</p>
                 <p className="ch-image-detection__report-meta">

@@ -1,4 +1,5 @@
 import React from 'react';
+import { fontFamilyStack } from './fontFiles';
 import { cssTextAlign, displayedText, layerTextAlign } from './textFlow';
 import type { Layer } from './types';
 
@@ -8,6 +9,8 @@ interface LayerNodeProps {
   onSelect: (e: React.PointerEvent) => void;
   onMoveStart: (e: React.PointerEvent) => void;
   onUnlock?: () => void;
+  /** The layer asks for a face that has not been added. */
+  missingFont?: boolean;
   /** Static render for page thumbnails. */
   preview?: boolean;
 }
@@ -18,6 +21,7 @@ export default function LayerNode({
   onSelect,
   onMoveStart,
   onUnlock,
+  missingFont = false,
   preview = false,
 }: LayerNodeProps) {
   if (!layer.visible) return null;
@@ -56,11 +60,14 @@ export default function LayerNode({
           style={{
             color: layer.color || '#1a1a1a',
             fontSize: layer.fontSize || 16,
+            fontFamily: fontFamilyStack(layer.fontFamily),
+            fontWeight: layer.fontWeight,
+            fontStyle: layer.fontStyle,
             textAlign: cssTextAlign(layerTextAlign(layer)),
             direction: layer.direction === 'rtl' ? 'rtl' : undefined,
           }}
         >
-          {displayedText(layer)}
+          <span>{displayedText(layer)}</span>
         </div>
       );
       break;
@@ -102,6 +109,15 @@ export default function LayerNode({
       }}
     >
       {body}
+      {missingFont && layer.type === 'text' ? (
+        <span
+          className="chd-layer-font-warning"
+          title={`Missing font: ${layer.fontFamily}`}
+          aria-label={`Missing font: ${layer.fontFamily}`}
+        >
+          !
+        </span>
+      ) : null}
       {layer.locked ? (
         <button
           type="button"

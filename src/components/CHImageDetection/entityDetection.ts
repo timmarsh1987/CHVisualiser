@@ -203,6 +203,59 @@ export function readSavedDetectionReport(
   return parseDetectionReport(readPropertyFromEntity(entity, propertyName));
 }
 
+function readPropertyFromRecord(
+  properties: Record<string, unknown> | undefined,
+  propertyName: string
+): unknown {
+  if (!properties || !propertyName.trim()) {
+    return undefined;
+  }
+
+  for (const [key, value] of Object.entries(properties)) {
+    if (key.toLowerCase() === propertyName.toLowerCase()) {
+      return value;
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Reads a saved report from the page entity, then from a full entity GET.
+ * Content Hub page context often omits custom JSON members until they are loaded.
+ */
+export async function loadSavedDetectionReport(
+  client: any,
+  entity: any,
+  propertyName: string
+): Promise<ImageDetectionReport | null> {
+  const fromPage = readSavedDetectionReport(entity, propertyName);
+  if (fromPage) {
+    return fromPage;
+  }
+
+  const entityId = String(entity?.systemProperties?.id ?? entity?.id ?? '').trim();
+  if (!entityId || !client?.raw?.getAsync) {
+    return null;
+  }
+
+  try {
+    const response = (await client.raw.getAsync(
+      `/api/entities/${entityId}`
+    )) as RawResponse<EntityPayload>;
+
+    if (!response.isSuccessStatusCode || !response.content) {
+      return null;
+    }
+
+    return parseDetectionReport(
+      readPropertyFromRecord(response.content.properties, propertyName)
+    );
+  } catch {
+    return null;
+  }
+}
+
 async function getEntityPayload(client: any, entityId: string): Promise<EntityPayload> {
   if (!client?.raw?.getAsync) {
     throw new Error('Content Hub client is not available.');

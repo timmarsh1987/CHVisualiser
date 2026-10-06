@@ -658,11 +658,51 @@ export function DesignerProvider({
           setSelection([]);
           break;
         }
+        case 'ADD_FONTS': {
+          if (isEndUser || action.fonts.length === 0) return;
+          setDocument((prev) => {
+            const current = prev.settings?.fonts ?? [];
+            const nextFonts = [...current];
+            for (const font of action.fonts) {
+              const index = nextFonts.findIndex((item) => item.postScriptName === font.postScriptName);
+              if (index >= 0) nextFonts[index] = font;
+              else nextFonts.push(font);
+            }
+            const next: DesignerDocument = {
+              ...prev,
+              settings: { ...prev.settings, brands: prev.settings?.brands ?? {}, fonts: nextFonts },
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'REMOVE_FONT': {
+          if (isEndUser) return;
+          setDocument((prev) => {
+            const current = prev.settings?.fonts ?? [];
+            if (!current.some((font) => font.id === action.id)) return prev;
+            const next: DesignerDocument = {
+              ...prev,
+              settings: {
+                ...prev.settings,
+                brands: prev.settings?.brands ?? {},
+                fonts: current.filter((font) => font.id !== action.id),
+              },
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
         case 'SET_BRAND_OPTION': {
           setDocument((prev) => {
             const next: DesignerDocument = {
               ...prev,
               settings: {
+                ...prev.settings,
                 brands: { ...prev.settings?.brands, [action.slot]: action.option },
               },
             };

@@ -266,12 +266,17 @@ function layerFromItem(
 
   if (element.localName === 'TextFrame') {
     const story = stories.get(element.getAttribute('ParentStory') || '');
-    const content = story ? readStory(story, colors) : { text: '', fontSize: undefined, color: undefined, align: undefined };
+    const content = story
+      ? readStory(story, colors)
+      : { text: '', fontSize: undefined, color: undefined, align: undefined, fontFamily: undefined, fontWeight: undefined, fontStyle: undefined };
     const layer = baseLayer('text', box);
     layer.name = textName(content.text);
     layer.text = content.text;
     layer.fontSize = content.fontSize ? Math.max(1, Math.round(content.fontSize * POINTS_TO_PX)) : 16;
     layer.color = content.color || '#000000';
+    if (content.fontFamily) layer.fontFamily = content.fontFamily;
+    if (content.fontWeight) layer.fontWeight = content.fontWeight;
+    if (content.fontStyle) layer.fontStyle = content.fontStyle;
     if (content.align) layer.align = content.align;
     return layer;
   }
@@ -382,13 +387,24 @@ function graphicChild(element: Element): Element | undefined {
 function readStory(
   story: Element,
   colors: Map<string, string>
-): { text: string; fontSize?: number; color?: string; align?: 'left' | 'middle' | 'right' } {
+): {
+  text: string;
+  fontSize?: number;
+  color?: string;
+  align?: 'left' | 'middle' | 'right';
+  fontFamily?: string;
+  fontWeight?: number;
+  fontStyle?: 'normal' | 'italic';
+} {
   const paragraphs = childElements(story, 'ParagraphStyleRange');
   const blocks = paragraphs.length > 0 ? paragraphs : [story];
   let text = '';
   let fontSize: number | undefined;
   let color: string | undefined;
   let align: 'left' | 'middle' | 'right' | undefined;
+  let fontFamily: string | undefined;
+  let fontWeight: number | undefined;
+  let fontStyle: 'normal' | 'italic' | undefined;
 
   blocks.forEach((block, index) => {
     if (align == null) align = readParagraphAlign(block.getAttribute('Justification'));
@@ -399,6 +415,15 @@ function readStory(
         continue;
       }
       if (node.localName !== 'CharacterStyleRange') continue;
+      if (!fontFamily) {
+        const applied = appliedFontName(node.getAttribute('AppliedFont'));
+        if (applied) {
+          fontFamily = applied;
+          const cut = fontCut(node.getAttribute('FontStyle'));
+          fontWeight = cut.weight;
+          fontStyle = cut.style;
+        }
+      }
       if (fontSize == null) {
         const size = Number(node.getAttribute('PointSize'));
         if (Number.isFinite(size) && size > 0) fontSize = size;
@@ -413,7 +438,26 @@ function readStory(
     }
   });
 
-  return { text: text.replace(/\u2028/g, '\n'), fontSize, color, align };
+  return { text: text.replace(/\u2028/g, '\n'), fontSize, color, align, fontFamily, fontWeight, fontStyle };
+}
+
+function appliedFontName(value: string | null): string | undefined {
+  const name = (value || '').replace(/^\$ID\//, '').trim();
+  return name || undefined;
+}
+
+function fontCut(value: string | null): { weight?: number; style?: 'normal' | 'italic' } {
+  const cut = (value || '').toLowerCase();
+  if (!cut) return {};
+  const style = /italic|oblique/.test(cut) ? 'italic' : 'normal';
+  if (/black|heavy/.test(cut)) return { weight: 900, style };
+  if (/semibold|semi-bold|demi/.test(cut)) return { weight: 600, style };
+  if (/bold/.test(cut)) return { weight: 700, style };
+  if (/medium/.test(cut)) return { weight: 500, style };
+  if (/light/.test(cut)) return { weight: 300, style };
+  if (/thin|hairline/.test(cut)) return { weight: 100, style };
+  if (/regular|normal|roman/.test(cut)) return { weight: 400, style };
+  return { style };
 }
 
 function readParagraphAlign(value: string | null): 'left' | 'middle' | 'right' | undefined {

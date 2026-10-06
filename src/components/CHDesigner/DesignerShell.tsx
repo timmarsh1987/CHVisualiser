@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import DesignerCanvas from './DesignerCanvas';
+import { registerDesignerFonts, unregisterDesignerFont } from './fontFiles';
 import LayersPanel from './LayersPanel';
 import PageStrip from './PageStrip';
 import PropertiesPane from './PropertiesPane';
-import { DesignerProvider, type DesignerProviderProps } from './store';
+import { DesignerProvider, useDesignerDocument, type DesignerProviderProps } from './store';
 import Toolbar from './Toolbar';
-import type { DesignerDocument, DesignerInstanceDocument, DesignerMode } from './types';
+import type { DesignerDocument, DesignerFont, DesignerInstanceDocument, DesignerMode } from './types';
 
 export interface DesignerShellProps {
   mode?: DesignerMode;
@@ -28,6 +29,20 @@ export interface DesignerShellProps {
 const COLLAPSED_PANEL = 36;
 const MIN_PANEL = 180;
 const MAX_PANEL = 480;
+
+function FontRegistry() {
+  const document = useDesignerDocument();
+  const fonts = document.settings?.fonts;
+  const previous = useRef<DesignerFont[]>([]);
+  useEffect(() => {
+    const list = fonts ?? [];
+    const removed = previous.current.filter((font) => !list.some((item) => item.id === font.id));
+    for (const font of removed) unregisterDesignerFont(font, list);
+    previous.current = list;
+    if (list.length > 0) void registerDesignerFonts(list);
+  }, [fonts]);
+  return null;
+}
 
 function clampPanel(width: number): number {
   return Math.min(MAX_PANEL, Math.max(MIN_PANEL, Math.round(width)));
@@ -91,6 +106,7 @@ export default function DesignerShell({
 
   return (
     <DesignerProvider {...providerProps}>
+      <FontRegistry />
       <div className={`chd-root${mode === 'endUser' ? ' chd-root--end-user' : ''}`}>
         <Toolbar />
         {statusSlot ? (

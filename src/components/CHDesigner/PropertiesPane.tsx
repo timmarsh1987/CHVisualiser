@@ -1,9 +1,11 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
 import { clampBoxToPins, fillLayerToCanvas } from './constraints';
+import { fontsFromFiles, layerFontIsLoaded, layerUsesFont } from './fontFiles';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
 import { magicStringFor } from './fields';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
+import { syncActiveTemplatePage } from './templateSettings';
 import {
   useDesignerAction,
   useDesignerDocument,
@@ -13,7 +15,63 @@ import {
   useSelection,
 } from './store';
 import { layerTextAlign, storySource } from './textFlow';
-import type { Layer, TextAlign } from './types';
+import type { DesignerDocument, DesignerFont, Layer, TextAlign } from './types';
+
+function FontField({
+  value,
+  weight,
+  style,
+  fonts,
+  disabled,
+  onChange,
+}: {
+  value?: string;
+  weight?: number;
+  style?: 'normal' | 'italic';
+  fonts: DesignerFont[];
+  disabled?: boolean;
+  onChange: (font: DesignerFont | null) => void;
+}) {
+  const match =
+    fonts.find((font) => font.postScriptName === value) ??
+    fonts.find((font) => font.family === value && font.weight === (weight || font.weight) && font.style === (style || 'normal')) ??
+    fonts.find((font) => font.family === value);
+  const known = Boolean(match) || fonts.some((font) => font.postScriptName === value || font.family === value);
+  return (
+    <label className="chd-field">
+      <span>Font</span>
+      <select
+        disabled={disabled}
+        value={match?.postScriptName || value || ''}
+        onChange={(event) => {
+          const next = event.target.value;
+          if (!next) {
+            onChange(null);
+            return;
+          }
+          onChange(
+            fonts.find((font) => font.postScriptName === next) ?? {
+              id: next,
+              family: next,
+              postScriptName: next,
+              weight: 400,
+              style: 'normal',
+              dataUrl: '',
+            }
+          );
+        }}
+      >
+        <option value="">Georgia</option>
+        {fonts.map((font) => (
+          <option key={font.id} value={font.postScriptName}>
+            {font.postScriptName === font.family ? font.family : `${font.family} (${font.postScriptName})`}
+          </option>
+        ))}
+        {value && !known ? <option value={value}>{value}</option> : null}
+      </select>
+    </label>
+  );
+}
 
 function NumberField({
   label,
@@ -76,6 +134,168 @@ function ChoiceField<T extends string>({
   );
 }
 
+function missingFonts(document: DesignerDocument): { name: string; layers: number; pages: number }[] {
+  const fonts = document.settings?.fonts ?? [];
+  const synced = syncActiveTemplatePage(document);
+  const pages = synced.pages?.length
+    ? synced.pages
+    : [{ id: synced.activePageId || 'page', layers: synced.layers }];
+  const counts = new Map<string, { layers: number; pages: number }>();
+  for (const page of pages) {
+    const seen = new Set<string>();
+    for (const layer of page.layers) {
+      if (layer.type !== 'text') continue;
+      const name = layer.fontFamily?.trim();
+      if (!name || layerFontIsLoaded(layer, fonts)) continue;
+      const current = counts.get(name) ?? { layers: 0, pages: 0 };
+      current.layers += 1;
+      if (!seen.has(name)) {
+        current.pages += 1;
+        seen.add(name);
+      }
+      counts.set(name, current);
+    }
+  }
+  return [...counts.entries()].map(([name, usage]) => ({ name, ...usage }));
+}
+
+function fontCut(font: DesignerFont): string {
+  const weight =
+    font.weight >= 800 ? 'Black' : font.weight >= 700 ? 'Bold' : font.weight >= 600 ? 'Semibold' : font.weight >= 500 ? 'Medium' : font.weight > 0 && font.weight <= 300 ? 'Light' : '';
+  return [weight, font.style === 'italic' ? 'Italic' : ''].filter(Boolean).join(' ');
+}
+
+function fontTitle(font: DesignerFont, fonts: DesignerFont[]): string {
+  const cut = fontCut(font);
+  const base = cut ? `${font.family} ${cut}` : font.family;
+  const twins = fonts.filter((item) => {
+    const itemCut = fontCut(item);
+    return (itemCut ? `${item.family} ${itemCut}` : item.family) === base;
+  });
+  return twins.length > 1 ? `${base} (${font.postScriptName})` : base;
+}
+
+function fontUsage(document: DesignerDocument, font: DesignerFont, fonts: DesignerFont[]): { layers: number; pages: number } {
+  const synced = syncActiveTemplatePage(document);
+  const pages = synced.pages?.length
+    ? synced.pages
+    : [{ id: synced.activePageId || 'page', layers: synced.layers }];
+  let layers = 0;
+  let pageCount = 0;
+  for (const page of pages) {
+    const onPage = page.layers.filter((layer) => layerUsesFont(layer, font, fonts)).length;
+    layers += onPage;
+    if (onPage > 0) pageCount += 1;
+  }
+  return { layers, pages: pageCount };
+}
+
+function usageLine(layers: number, pages: number): string {
+  return `${layers} ${layers === 1 ? 'usage' : 'usages'} on ${pages} ${pages === 1 ? 'page' : 'pages'}`;
+}
+
+function FontManager({ document }: { document: DesignerDocument }) {
+  const [open, setOpen] = useState(false);
+  const dispatch = useDesignerAction();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const fonts = document.settings?.fonts ?? [];
+  const missing = missingFonts(document);
+
+  const upload = async (list: FileList | null) => {
+    if (!list?.length) return;
+    try {
+      const next = await fontsFromFiles([...list]);
+      if (next.length === 0) {
+        window.alert('Choose an .otf or .ttf font file.');
+        return;
+      }
+      dispatch({ type: 'ADD_FONTS', fonts: next });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Could not read this font file.');
+    }
+  };
+
+  return (
+    <section className="chd-font-manager">
+      <button
+        type="button"
+        className="chd-font-manager-toggle"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <span className="chd-font-manager-heading">
+          <span>Fonts</span>
+          {!open && missing.length > 0 ? (
+            <span className="chd-font-missing-chip">
+              <span className="chd-missing-fonts-mark" aria-hidden="true">!</span>
+              Missing fonts
+            </span>
+          ) : null}
+        </span>
+        <span aria-hidden="true">{open ? '▾' : '▸'}</span>
+      </button>
+      {open ? (
+        <div className="chd-font-manager-body">
+          {missing.length > 0 ? (
+            <div className="chd-font-missing" role="status">
+              <p className="chd-font-missing-title">
+                <span className="chd-missing-fonts-mark" aria-hidden="true">!</span>
+                Missing fonts
+              </p>
+              <ul className="chd-font-missing-list">
+                {missing.map((item) => (
+                  <li key={item.name}>
+                    {item.name} - {usageLine(item.layers, item.pages)}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
+            Upload font
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".otf,.ttf,.woff,.woff2,font/otf,font/ttf,font/woff,font/woff2"
+            multiple
+            className="chd-file-input"
+            onChange={(event) => {
+              void upload(event.target.files);
+              event.target.value = '';
+            }}
+          />
+          {fonts.length === 0 ? (
+            <p className="chd-font-empty">No fonts added.</p>
+          ) : (
+            <ul className="chd-font-list">
+              {fonts.map((font) => {
+                const title = fontTitle(font, fonts);
+                const usage = fontUsage(document, font, fonts);
+                return (
+                  <li key={font.id} className="chd-font-row">
+                    <span className="chd-font-usage">
+                      {title} - {usageLine(usage.layers, usage.pages)}
+                    </span>
+                    <button
+                      type="button"
+                      className="chd-btn chd-font-remove"
+                      aria-label={`Remove ${title}`}
+                      onClick={() => dispatch({ type: 'REMOVE_FONT', id: font.id })}
+                    >
+                      Remove
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="chd-prop-section">
@@ -133,7 +353,9 @@ export default function PropertiesPane({
         ) : null}
       </div>
 
-      {collapsed ? null : !layer ? (
+      {collapsed ? null : (
+        <>
+      {!layer ? (
         <p className="chd-panel-empty">
           {selected.length > 1 ? `${selected.length} layers selected` : 'Select a layer'}
         </p>
@@ -165,6 +387,28 @@ export default function PropertiesPane({
                 />
               ) : null}
             </div>
+            {isAdmin && layer.type === 'text' ? (
+              <FontField
+                value={layer.fontFamily}
+                weight={layer.fontWeight}
+                style={layer.fontStyle}
+                fonts={document.settings?.fonts ?? []}
+                disabled={!canEditContent}
+                onChange={(font) =>
+                  patch({
+                    fontFamily: font?.postScriptName,
+                    fontWeight: font?.weight,
+                    fontStyle: font?.style,
+                  })
+                }
+              />
+            ) : null}
+            {isAdmin && layer.type === 'text' && !layerFontIsLoaded(layer, document.settings?.fonts ?? []) ? (
+              <p className="chd-field-hint chd-field-hint--warning">
+                <span className="chd-missing-fonts-mark" aria-hidden="true">!</span>
+                Missing fonts
+              </p>
+            ) : null}
             {isAdmin && layer.type === 'text' ? (
               <>
                 <label className="chd-field chd-field-checkbox">
@@ -628,6 +872,9 @@ export default function PropertiesPane({
           </>
           )}
         </div>
+      )}
+      {isAdmin ? <FontManager document={document} /> : null}
+        </>
       )}
     </aside>
   );

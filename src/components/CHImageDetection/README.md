@@ -8,6 +8,10 @@ Checks:
 - Animals
 - Cultural or sensitive imagery — a review flag, not a judgment
 - Firearms or offensive items — firearms, other weapons, hate symbols, or graphic violence
+- Tell me what you see — a description of the image. This does not flag the asset
+- Medical or pharmaceuticals
+- Logo detection — names a recognized logo when it can
+- Nudity or graphic content — a short non-graphic reason only
 
 ## Options
 
@@ -19,6 +23,10 @@ Checks:
 | `detectAnimals` | No | When `false`, Animals starts unchecked |
 | `detectCulturalSensitive` | No | When `false`, Cultural or sensitive imagery starts unchecked |
 | `detectFirearmsOffensive` | No | When `false`, Firearms or offensive items starts unchecked |
+| `detectWhatYouSee` | No | When `false`, Tell me what you see starts unchecked |
+| `detectMedical` | No | When `false`, Medical or pharmaceuticals starts unchecked |
+| `detectLogos` | No | When `false`, Logo detection starts unchecked |
+| `detectNudityGraphic` | No | When `false`, Nudity or graphic content starts unchecked |
 | `detectionReportProperty` | No | Asset property for the full report JSON (default: `ImageDetectionReport`) |
 | `detectionReportStorage` | No | `json` (default) or `string` |
 | `detectionStatusProperty` | No | Optional string property for `clear` / `flagged` |
@@ -56,7 +64,7 @@ If those members do not exist yet, the panel still shows the fresh result and re
 
 ### Behaviour
 
-1. On open, load `ImageDetectionReport` from the current asset and show the last result.
+1. On open, load `ImageDetectionReport` from the current asset. The page entity is checked first, then a full entity GET, because Content Hub often omits custom JSON members from the page context. The saved result is shown immediately, and the checkboxes match the checks from that run.
 2. The user picks checks (All selects or clears the four checks) and clicks **Analyze image**.
 3. The API downloads the preview rendition, uploads it to CodeMie, and asks only for the selected checks.
 4. The report is written back onto the asset. Re-open later and the saved result appears immediately.

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clampBoxToPins } from './constraints';
+import { layerFontIsLoaded, missingFontNames } from './fontFiles';
 import { clamp, fitPageInView, revealBoxInView, screenDeltaToCanvas, zoomAroundPoint, type ViewBox } from './coords';
 import LayerNode from './LayerNode';
 import { layerAllowsTransform, layerIsDrawn, layerIsSelectable } from './policy';
@@ -365,6 +366,8 @@ export default function DesignerCanvas() {
     });
   };
 
+  const loadedFonts = document.settings?.fonts ?? [];
+  const missingFonts = missingFontNames(document.layers, loadedFonts);
   const selectedLayers = document.layers.filter(
     (l) => selection.includes(l.id) && layerIsDrawn(l, document.settings)
   );
@@ -372,11 +375,18 @@ export default function DesignerCanvas() {
   const showHandles = primary ? canTransformLayer(primary) : false;
 
   return (
-    <div
-      ref={viewportElRef}
-      className={`chd-viewport${interaction?.kind === 'pan' ? ' chd-viewport--panning' : ''}`}
-      onPointerDown={handleViewportPointerDown}
-    >
+      <div
+        ref={viewportElRef}
+        className={`chd-viewport${interaction?.kind === 'pan' ? ' chd-viewport--panning' : ''}`}
+        onPointerDown={handleViewportPointerDown}
+      >
+      {missingFonts.length > 0 ? (
+        <div className="chd-missing-fonts" role="status">
+          <span className="chd-missing-fonts-mark" aria-hidden="true">!</span>
+          <span>Missing fonts</span>
+          <span className="chd-missing-fonts-names">{missingFonts.join(', ')}</span>
+        </div>
+      ) : null}
       <div
         className="chd-world"
         style={{ transform: `translate(${viewport.panX}px, ${viewport.panY}px)` }}
@@ -397,21 +407,24 @@ export default function DesignerCanvas() {
             beginPan(e, true, false);
           }}
         >
-          <div className="chd-artboard-page" />
-          {document.layers.filter((layer) => layerIsDrawn(layer, document.settings)).map((layer) => (
-            <LayerNode
-              key={layer.id}
-              layer={layer}
-              selected={selection.includes(layer.id)}
-              onSelect={(e) => handleLayerSelect(layer, e)}
-              onMoveStart={(e) => handleMoveStart(layer, e)}
-              onUnlock={
-                mode === 'admin'
-                  ? () => dispatch({ type: 'UPDATE_LAYER', id: layer.id, patch: { locked: false } })
-                  : undefined
-              }
-            />
-          ))}
+          <div className="chd-artboard-clip">
+            <div className="chd-artboard-page" />
+            {document.layers.filter((layer) => layerIsDrawn(layer, document.settings)).map((layer) => (
+              <LayerNode
+                key={layer.id}
+                layer={layer}
+                selected={selection.includes(layer.id)}
+                missingFont={!layerFontIsLoaded(layer, loadedFonts)}
+                onSelect={(e) => handleLayerSelect(layer, e)}
+                onMoveStart={(e) => handleMoveStart(layer, e)}
+                onUnlock={
+                  mode === 'admin'
+                    ? () => dispatch({ type: 'UPDATE_LAYER', id: layer.id, patch: { locked: false } })
+                    : undefined
+                }
+              />
+            ))}
+          </div>
 
           {showHandles && primary ? (
             <div

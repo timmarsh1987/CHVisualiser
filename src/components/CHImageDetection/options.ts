@@ -17,6 +17,10 @@ const BOOLEAN_OPTION_KEYS = [
   'detectAnimals',
   'detectCulturalSensitive',
   'detectFirearmsOffensive',
+  'detectWhatYouSee',
+  'detectMedical',
+  'detectLogos',
+  'detectNudityGraphic',
 ] as const;
 
 const NESTED_JSON_KEYS = ['config', 'settings', 'json', 'componentOptions'];

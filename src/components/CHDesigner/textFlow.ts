@@ -1,4 +1,5 @@
 import { createLayerId } from './document';
+import { fontFamilyStack } from './fontFiles';
 import { appendBlankTemplatePage, syncActiveTemplatePage } from './templateSettings';
 import type { DesignerDocument, DesignerTemplatePage, Layer, TextAlign } from './types';
 
@@ -272,8 +273,8 @@ function createProbe(): HTMLDivElement {
   probe.style.padding = '4px 6px';
   probe.style.whiteSpace = 'pre-wrap';
   probe.style.wordBreak = 'break-word';
-  probe.style.lineHeight = '1.25';
-  probe.style.fontFamily = "Georgia, 'Times New Roman', serif";
+  probe.style.lineHeight = '1.05';
+  probe.style.fontFamily = fontFamilyStack();
   document.body.appendChild(probe);
   return probe;
 }
@@ -281,10 +282,13 @@ function createProbe(): HTMLDivElement {
 function fitText(
   probe: HTMLDivElement,
   text: string,
-  frame: Pick<Layer, 'width' | 'height' | 'fontSize' | 'direction' | 'align'>
+  frame: Pick<Layer, 'width' | 'height' | 'fontSize' | 'direction' | 'align' | 'fontFamily' | 'fontWeight' | 'fontStyle'>
 ): { fit: string; rest: string } {
   probe.style.width = `${Math.max(1, frame.width)}px`;
   probe.style.fontSize = `${frame.fontSize || 16}px`;
+  probe.style.fontFamily = fontFamilyStack(frame.fontFamily);
+  probe.style.fontWeight = frame.fontWeight ? String(frame.fontWeight) : '400';
+  probe.style.fontStyle = frame.fontStyle || 'normal';
   probe.style.direction = frame.direction === 'rtl' ? 'rtl' : 'ltr';
   probe.style.textAlign = cssTextAlign(layerTextAlign(frame));
   if (!text) return { fit: '', rest: '' };

@@ -3,6 +3,7 @@ import { SOK_THEME } from './brand';
 import type {
   DesignerDocument,
   DesignerField,
+  DesignerFont,
   DesignerSettings,
   DesignerTemplatePage,
   Layer,
@@ -262,6 +263,9 @@ function parseLayer(item: unknown): Layer | null {
     flowOverflow: readOptionalBoolean(layer.flowOverflow),
     continuesFrom: typeof layer.continuesFrom === 'string' ? layer.continuesFrom : undefined,
     fontSize: typeof layer.fontSize === 'number' ? layer.fontSize : undefined,
+    fontFamily: typeof layer.fontFamily === 'string' && layer.fontFamily.trim() ? layer.fontFamily : undefined,
+    fontWeight: readOptionalNumber(layer.fontWeight),
+    fontStyle: layer.fontStyle === 'italic' || layer.fontStyle === 'normal' ? layer.fontStyle : undefined,
     align:
       layer.align === 'left' || layer.align === 'middle' || layer.align === 'right'
         ? layer.align
@@ -329,15 +333,40 @@ function parseTemplatePages(raw: unknown): DesignerTemplatePage[] | undefined {
   return pages.length > 0 ? pages : undefined;
 }
 
+function parseFont(item: unknown): DesignerFont | null {
+  if (!item || typeof item !== 'object') return null;
+  const font = item as Record<string, unknown>;
+  const family = typeof font.family === 'string' ? font.family.trim() : '';
+  const postScriptName = typeof font.postScriptName === 'string' ? font.postScriptName.trim() : '';
+  const dataUrl = typeof font.dataUrl === 'string' ? font.dataUrl : '';
+  if (!family || !postScriptName || !dataUrl.startsWith('data:')) return null;
+  const weight = Number(font.weight);
+  return {
+    id: typeof font.id === 'string' && font.id ? font.id : `font-${family}`,
+    family,
+    postScriptName,
+    weight: Number.isFinite(weight) && weight >= 1 && weight <= 1000 ? weight : 400,
+    style: font.style === 'italic' ? 'italic' : 'normal',
+    dataUrl,
+  };
+}
+
 function parseSettings(raw: unknown): DesignerSettings | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const brandsRaw = (raw as Record<string, unknown>).brands;
-  if (!brandsRaw || typeof brandsRaw !== 'object' || Array.isArray(brandsRaw)) return undefined;
+  const record = raw as Record<string, unknown>;
   const brands: Record<string, string> = {};
-  for (const [slot, option] of Object.entries(brandsRaw as Record<string, unknown>)) {
-    if (typeof option === 'string' && option) brands[slot] = option;
+  if (record.brands && typeof record.brands === 'object' && !Array.isArray(record.brands)) {
+    for (const [slot, option] of Object.entries(record.brands as Record<string, unknown>)) {
+      if (typeof option === 'string' && option) brands[slot] = option;
+    }
   }
-  return Object.keys(brands).length > 0 ? { brands } : undefined;
+  const fonts = Array.isArray(record.fonts)
+    ? record.fonts.map(parseFont).filter((font): font is DesignerFont => font != null)
+    : [];
+  if (Object.keys(brands).length === 0 && fonts.length === 0) return undefined;
+  const settings: DesignerSettings = { brands };
+  if (fonts.length > 0) settings.fonts = fonts;
+  return settings;
 }
 
 function parseFields(raw: unknown): DesignerField[] | undefined {
