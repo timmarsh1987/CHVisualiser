@@ -25,6 +25,7 @@ import {
   diffInstanceOverrides,
   filterEndUserPatch,
   layerIsSelectable,
+  modeUsesTemplatePolicy,
 } from './policy';
 import {
   DEFAULT_ZOOM,
@@ -179,10 +180,16 @@ export function DesignerProvider({
 
   const emitChanges = useCallback((nextDoc: DesignerDocument) => {
     onDocumentChangeRef.current?.(cloneDocument(syncActiveTemplatePage(nextDoc)));
-    if (modeRef.current === 'endUser') {
+    if (modeUsesTemplatePolicy(modeRef.current)) {
       const id = templateIdRef.current ?? '';
       onInstanceChangeRef.current?.(
-        diffInstanceOverrides(templateBaselineRef.current, nextDoc, id, fieldValuesRef.current)
+        diffInstanceOverrides(
+          templateBaselineRef.current,
+          nextDoc,
+          id,
+          fieldValuesRef.current,
+          modeRef.current
+        )
       );
     }
   }, []);
@@ -215,11 +222,11 @@ export function DesignerProvider({
 
   const dispatch = useCallback(
     (action: DesignerAction) => {
-      const isEndUser = modeRef.current === 'endUser';
+      const constrained = modeUsesTemplatePolicy(modeRef.current);
 
       switch (action.type) {
         case 'ADD_LAYER': {
-          if (isEndUser) return;
+          if (constrained) return;
           const layer = defaultLayerForType(action.layerType, action.at);
           setDocument((prev) => {
             let next: DesignerDocument = { ...prev, layers: [...prev.layers, layer] };
@@ -238,7 +245,9 @@ export function DesignerProvider({
           setDocument((prev) => {
             const applyPatch = (layer: Layer, persistLayout: boolean): Layer => {
               if (layer.id !== action.id) return layer;
-              const patch = isEndUser ? filterEndUserPatch(layer, action.patch) : action.patch;
+              const patch = constrained
+                ? filterEndUserPatch(layer, action.patch, modeRef.current)
+                : action.patch;
               if (Object.keys(patch).length === 0) return layer;
               const patched: Layer = { ...layer, ...patch };
               if (typeof patched.width === 'number') {
@@ -248,7 +257,7 @@ export function DesignerProvider({
                 patched.height = Math.max(MIN_LAYER_SIZE, patched.height);
               }
               const scaled = scaleFontWithBox(layer, patched, action.patch);
-              return isEndUser || !persistLayout ? scaled : persistCurrentPageLayout(scaled, prev.canvas);
+              return constrained || !persistLayout ? scaled : persistCurrentPageLayout(scaled, prev.canvas);
             };
             const layers = prev.layers.map((layer) => applyPatch(layer, true));
             const pages = prev.pages?.map((page) => ({
@@ -277,7 +286,7 @@ export function DesignerProvider({
           break;
         }
         case 'DELETE_LAYERS': {
-          if (isEndUser) return;
+          if (constrained) return;
           const ids = new Set(action.ids ?? selectionRef.current);
           if (ids.size === 0) return;
           setDocument((prev) => {
@@ -340,7 +349,7 @@ export function DesignerProvider({
           break;
         }
         case 'REORDER': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next = {
               ...prev,
@@ -353,7 +362,7 @@ export function DesignerProvider({
           break;
         }
         case 'COPY_SELECTION': {
-          if (isEndUser) return;
+          if (constrained) return;
           const ids = new Set(selectionRef.current);
           for (const id of [...ids]) {
             for (const branchId of layerBranchIds(documentRef.current.layers, id)) ids.add(branchId);
@@ -370,7 +379,7 @@ export function DesignerProvider({
           break;
         }
         case 'COPY_ALL_LAYERS': {
-          if (isEndUser) return;
+          if (constrained) return;
           const layers = documentRef.current.layers;
           if (layers.length === 0) return;
           const slot: ClipboardSlot = {
@@ -385,7 +394,7 @@ export function DesignerProvider({
         case 'PASTE':
         case 'PASTE_ITEM':
         case 'PASTE_ITEMS': {
-          if (isEndUser) return;
+          if (constrained) return;
           const copied = clipboardRef.current;
           if (!copied || copied.layers.length === 0) return;
           const pageId = documentRef.current.activePageId ?? null;
@@ -416,7 +425,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_VISIBILITY': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             if (!prev.layers.some((layer) => layer.id === action.id)) return prev;
             const ids = new Set(layerBranchIds(prev.layers, action.id));
@@ -431,7 +440,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_BRANCH': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             if (!prev.layers.some((layer) => layer.id === action.id)) return prev;
             const ids = new Set(layerBranchIds(prev.layers, action.id));
@@ -451,7 +460,7 @@ export function DesignerProvider({
           break;
         }
         case 'ADD_GROUP': {
-          if (isEndUser) return;
+          if (constrained) return;
           const group = defaultLayerForType('group');
           group.name = nextGroupName(documentRef.current.layers);
           const selected = new Set(selectionRef.current);
@@ -470,7 +479,7 @@ export function DesignerProvider({
           break;
         }
         case 'PLACE_LAYER': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const moving = prev.layers.find((layer) => layer.id === action.id);
             if (!moving || action.parentId === moving.id) return prev;
@@ -499,7 +508,7 @@ export function DesignerProvider({
           break;
         }
         case 'BRING_FORWARD': {
-          if (isEndUser) return;
+          if (constrained) return;
           const ids = selectionRef.current;
           setDocument((prev) => {
             const next = { ...prev, layers: nudgeSelected(prev.layers, ids, 'forward') };
@@ -510,7 +519,7 @@ export function DesignerProvider({
           break;
         }
         case 'SEND_BACKWARD': {
-          if (isEndUser) return;
+          if (constrained) return;
           const ids = selectionRef.current;
           setDocument((prev) => {
             const next = { ...prev, layers: nudgeSelected(prev.layers, ids, 'backward') };
@@ -594,7 +603,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_CANVAS_SIZE': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next = switchDocumentPage(prev, action.width, action.height, action.presetId);
             if (next === prev) return prev;
@@ -636,7 +645,7 @@ export function DesignerProvider({
           break;
         }
         case 'ADD_TEMPLATE_PAGE': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next = addTemplatePage(prev);
             pushHistory(next);
@@ -647,7 +656,7 @@ export function DesignerProvider({
           break;
         }
         case 'REMOVE_TEMPLATE_PAGE': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next = removeActiveTemplatePage(prev);
             if (!next) return prev;
@@ -659,7 +668,7 @@ export function DesignerProvider({
           break;
         }
         case 'ADD_FONTS': {
-          if (isEndUser || action.fonts.length === 0) return;
+          if (constrained || action.fonts.length === 0) return;
           setDocument((prev) => {
             const current = prev.settings?.fonts ?? [];
             const nextFonts = [...current];
@@ -679,7 +688,7 @@ export function DesignerProvider({
           break;
         }
         case 'REMOVE_FONT': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const current = prev.settings?.fonts ?? [];
             if (!current.some((font) => font.id === action.id)) return prev;
@@ -690,6 +699,40 @@ export function DesignerProvider({
                 brands: prev.settings?.brands ?? {},
                 fonts: current.filter((font) => font.id !== action.id),
               },
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'REPLACE_FONT': {
+          if (constrained) return;
+          const from = action.from.trim();
+          if (!from) return;
+          const replacement = action.font;
+          setDocument((prev) => {
+            const synced = syncActiveTemplatePage(prev);
+            const replaceLayer = (layer: Layer): Layer => {
+              if (layer.type !== 'text' || layer.fontFamily?.trim() !== from) return layer;
+              if (!replacement) {
+                return { ...layer, fontFamily: undefined, fontWeight: undefined, fontStyle: undefined };
+              }
+              return {
+                ...layer,
+                fontFamily: replacement.postScriptName,
+                fontWeight: replacement.weight,
+                fontStyle: replacement.style,
+              };
+            };
+            const layers = synced.layers.map(replaceLayer);
+            const next: DesignerDocument = {
+              ...synced,
+              layers,
+              pages: synced.pages?.map((page) => ({
+                ...page,
+                layers: page.id === synced.activePageId ? layers : page.layers.map(replaceLayer),
+              })),
             };
             pushHistory(next);
             emitChanges(next);
@@ -714,7 +757,7 @@ export function DesignerProvider({
           break;
         }
         case 'PUSH_LAYER_TO_ALL_PAGES': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next: DesignerDocument = {
               ...prev,
@@ -730,7 +773,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_FIELD_VALUE': {
-          if (!isEndUser) return;
+          if (!constrained) return;
           const nextValues = { ...fieldValuesRef.current };
           if (action.value.trim()) nextValues[action.fieldId] = action.value;
           else delete nextValues[action.fieldId];
@@ -740,7 +783,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_FIELD_LABEL': {
-          if (isEndUser) return;
+          if (constrained) return;
           if (!action.label.trim()) return;
           setDocument((prev) => {
             if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
@@ -757,7 +800,7 @@ export function DesignerProvider({
           break;
         }
         case 'SET_LAYER_FIELD': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             if (action.fieldId && !prev.fields?.some((field) => field.id === action.fieldId)) return prev;
             const apply = (layer: Layer): Layer => {
@@ -787,7 +830,7 @@ export function DesignerProvider({
           break;
         }
         case 'ADD_MAGIC_STRINGS': {
-          if (isEndUser) return;
+          if (constrained) return;
           setDocument((prev) => {
             const next = assignMagicStrings(prev);
             if (next === prev) return prev;
@@ -819,7 +862,7 @@ export function DesignerProvider({
 
   const importDocumentJson = useCallback(
     (json: string) => {
-      if (modeRef.current === 'endUser') return false;
+      if (modeUsesTemplatePolicy(modeRef.current)) return false;
       try {
         const parsed = parseDesignerDocument(JSON.parse(json));
         if (!parsed) return false;
@@ -839,14 +882,14 @@ export function DesignerProvider({
     if (mode === 'admin' && initialDocument) {
       templateBaselineRef.current = cloneDocument(initialDocument);
     }
-    if (mode === 'endUser' && templateDocument) {
+    if (modeUsesTemplatePolicy(mode) && templateDocument) {
       templateBaselineRef.current = cloneDocument(templateDocument);
     }
   }, [initialDocument, templateDocument, mode]);
 
   const outputDocument = useMemo(() => {
-    const resolved = mode === 'endUser' ? resolveFieldText(document, fieldValues) : document;
-    if (mode !== 'endUser' || !viewPageId || !resolved.pages) return resolved;
+    const resolved = modeUsesTemplatePolicy(mode) ? resolveFieldText(document, fieldValues) : document;
+    if (!modeUsesTemplatePolicy(mode) || !viewPageId || !resolved.pages) return resolved;
     const page = resolved.pages.find((item) => item.id === viewPageId);
     if (!page) return resolved;
     return {

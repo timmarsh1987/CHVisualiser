@@ -106,6 +106,164 @@ export interface PlacedBox {
   height: number;
 }
 
+export interface CanvasSnapGuide {
+  axis: 'x' | 'y';
+  /** Page position of the guide, in canvas pixels. */
+  at: number;
+}
+
+/** How close the pointer must be, on screen, before a page guide catches the box. */
+const SNAP_SCREEN_PX = 6;
+
+function snapThreshold(zoom: number): number {
+  return SNAP_SCREEN_PX / Math.max(zoom, 0.05);
+}
+
+function pageLines(size: number): number[] {
+  return [0, size / 2, size];
+}
+
+interface EdgeSnap {
+  start: number;
+  size: number;
+  jump: number;
+  at: number;
+}
+
+function takeCloser(best: EdgeSnap | null, next: EdgeSnap, threshold: number): EdgeSnap | null {
+  if (next.size < MIN_LAYER_SIZE) return best;
+  if (Math.abs(next.jump) > threshold) return best;
+  if (!best || Math.abs(next.jump) < Math.abs(best.jump)) return next;
+  return best;
+}
+
+/** Snap one moving edge, or the box center, to a page edge or the page center. */
+function snapMovingEdge(
+  fixedStart: number,
+  size: number,
+  pageSize: number,
+  moving: 'start' | 'end',
+  threshold: number
+): EdgeSnap | null {
+  const end = fixedStart + size;
+  const movingAt = moving === 'end' ? end : fixedStart;
+  const mid = pageSize / 2;
+  let best: EdgeSnap | null = null;
+
+  for (const at of pageLines(pageSize)) {
+    if (moving === 'end') {
+      best = takeCloser(best, { start: fixedStart, size: at - fixedStart, jump: at - movingAt, at }, threshold);
+    } else {
+      best = takeCloser(best, { start: at, size: end - at, jump: at - movingAt, at }, threshold);
+    }
+  }
+
+  if (moving === 'end') {
+    const nextSize = 2 * (mid - fixedStart);
+    best = takeCloser(best, { start: fixedStart, size: nextSize, jump: nextSize - size, at: mid }, threshold);
+  } else {
+    const nextStart = 2 * mid - end;
+    best = takeCloser(
+      best,
+      { start: nextStart, size: end - nextStart, jump: nextStart - fixedStart, at: mid },
+      threshold
+    );
+  }
+
+  return best;
+}
+
+/**
+ * Slide a box so its left, center, or right meets the page's left, center, or right,
+ * and the same for the top and bottom.
+ */
+export function snapMoveToCanvas(
+  box: PlacedBox,
+  canvasWidth: number,
+  canvasHeight: number,
+  zoom: number
+): PlacedBox {
+  const threshold = snapThreshold(zoom);
+  let { x, y, width, height } = box;
+
+  let bestX: { delta: number } | null = null;
+  const xPairs: Array<[number, number]> = [
+    [x, 0],
+    [x + width / 2, canvasWidth / 2],
+    [x + width, canvasWidth],
+  ];
+  for (const [anchor, at] of xPairs) {
+    const delta = at - anchor;
+    if (Math.abs(delta) > threshold) continue;
+    if (!bestX || Math.abs(delta) < Math.abs(bestX.delta)) bestX = { delta };
+  }
+  if (bestX) x += bestX.delta;
+
+  let bestY: { delta: number } | null = null;
+  const yPairs: Array<[number, number]> = [
+    [y, 0],
+    [y + height / 2, canvasHeight / 2],
+    [y + height, canvasHeight],
+  ];
+  for (const [anchor, at] of yPairs) {
+    const delta = at - anchor;
+    if (Math.abs(delta) > threshold) continue;
+    if (!bestY || Math.abs(delta) < Math.abs(bestY.delta)) bestY = { delta };
+  }
+  if (bestY) y += bestY.delta;
+
+  return { x, y, width, height };
+}
+
+/** Snap the edges being scaled to the page edges or the page center. The opposite edge stays put. */
+export function snapResizeToCanvas(
+  box: PlacedBox,
+  canvasWidth: number,
+  canvasHeight: number,
+  zoom: number,
+  handle: 'nw' | 'ne' | 'sw' | 'se'
+): PlacedBox {
+  const threshold = snapThreshold(zoom);
+  let { x, y, width, height } = box;
+  const freeLeft = handle.includes('w');
+  const freeTop = handle.includes('n');
+
+  const horizontal = snapMovingEdge(x, width, canvasWidth, freeLeft ? 'start' : 'end', threshold);
+  if (horizontal) {
+    x = horizontal.start;
+    width = horizontal.size;
+  }
+
+  const vertical = snapMovingEdge(y, height, canvasHeight, freeTop ? 'start' : 'end', threshold);
+  if (vertical) {
+    y = vertical.start;
+    height = vertical.size;
+  }
+
+  return { x, y, width, height };
+}
+
+/** Guides for a box that is already sitting on a page edge or the page center. */
+export function canvasGuidesForBox(
+  box: PlacedBox,
+  canvasWidth: number,
+  canvasHeight: number
+): CanvasSnapGuide[] {
+  const guides: CanvasSnapGuide[] = [];
+  const aligned = (value: number, at: number) => Math.abs(value - at) <= 0.5;
+  for (const at of pageLines(canvasWidth)) {
+    if (aligned(box.x, at) || aligned(box.x + box.width / 2, at) || aligned(box.x + box.width, at)) {
+      guides.push({ axis: 'x', at });
+    }
+  }
+  for (const at of pageLines(canvasHeight)) {
+    if (aligned(box.y, at) || aligned(box.y + box.height / 2, at) || aligned(box.y + box.height, at)) {
+      guides.push({ axis: 'y', at });
+    }
+  }
+  return guides;
+}
+
 type PinMargins = Pick<
   Layer,
   'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom' | 'marginTop' | 'marginRight' | 'marginBottom' | 'marginLeft'

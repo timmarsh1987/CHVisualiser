@@ -2,7 +2,8 @@ export type LayerType = 'frame' | 'rect' | 'text' | 'image' | 'group';
 
 export type TextAlign = 'left' | 'middle' | 'right';
 
-export type DesignerMode = 'admin' | 'endUser';
+/** Admin builds the template. End user and publication edit an instance; publication hides layout tools. */
+export type DesignerMode = 'admin' | 'endUser' | 'publication';
 
 export type LayerRole = 'static' | 'text' | 'brand' | 'picker' | 'hidden';
 
@@ -149,6 +150,7 @@ export type LayerOverride = {
   y?: number;
   width?: number;
   height?: number;
+  rotation?: number;
   text?: string;
   fill?: string;
   color?: string;
@@ -208,6 +210,7 @@ export type DesignerAction =
   | { type: 'SET_BRAND_OPTION'; slot: string; option: string }
   | { type: 'ADD_FONTS'; fonts: DesignerFont[] }
   | { type: 'REMOVE_FONT'; id: string }
+  | { type: 'REPLACE_FONT'; from: string; font: DesignerFont | null }
   | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
   | { type: 'SET_FIELD_VALUE'; fieldId: string; value: string }
   | { type: 'SET_FIELD_LABEL'; fieldId: string; label: string }
@@ -221,4 +224,4 @@ export const MIN_ZOOM = 0.05;
 export const MAX_ZOOM = 8;
 
 export const CONTENT_OVERRIDE_KEYS = ['text', 'fill', 'color', 'src'] as const;
-export const TRANSFORM_OVERRIDE_KEYS = ['x', 'y', 'width', 'height'] as const;
+export const TRANSFORM_OVERRIDE_KEYS = ['x', 'y', 'width', 'height', 'rotation'] as const;

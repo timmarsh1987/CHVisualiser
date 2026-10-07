@@ -21,6 +21,7 @@ const BOOLEAN_OPTION_KEYS = [
   'detectMedical',
   'detectLogos',
   'detectNudityGraphic',
+  'showOverlay',
 ] as const;
 
 const NESTED_JSON_KEYS = ['config', 'settings', 'json', 'componentOptions'];

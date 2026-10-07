@@ -24,6 +24,8 @@ export type DetectionCheckDefinition = {
     | 'detectMedical'
     | 'detectLogos'
     | 'detectNudityGraphic';
+  /** Short label used on the traffic-light pills. */
+  shortLabel: string;
   description: string;
   /** Flag checks can mark the report flagged. Describe checks are informational. */
   kind: DetectionCheckKind;
@@ -33,6 +35,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'minors',
     label: 'Children / minors',
+    shortLabel: 'Children',
     optionKey: 'detectMinors',
     description: 'Flag if people who appear to be minors are visible.',
     kind: 'flag',
@@ -40,6 +43,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'animals',
     label: 'Animals',
+    shortLabel: 'Animals',
     optionKey: 'detectAnimals',
     description: 'Flag if any animal is visible.',
     kind: 'flag',
@@ -47,6 +51,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'culturalSensitive',
     label: 'Cultural or sensitive imagery',
+    shortLabel: 'Cultural',
     optionKey: 'detectCulturalSensitive',
     description:
       'Flag religious, cultural, memorial, or politically sensitive scenes for review.',
@@ -55,6 +60,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'firearmsOffensive',
     label: 'Firearms or offensive items',
+    shortLabel: 'Offensive',
     optionKey: 'detectFirearmsOffensive',
     description: 'Flag firearms, other weapons, hate symbols, or graphic violence.',
     kind: 'flag',
@@ -62,6 +68,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'whatYouSee',
     label: 'Tell me what you see',
+    shortLabel: 'Scene',
     optionKey: 'detectWhatYouSee',
     description: 'Describe the subject, setting, and notable objects. This does not flag the image.',
     kind: 'describe',
@@ -69,6 +76,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'medical',
     label: 'Medical or pharmaceuticals',
+    shortLabel: 'Medical',
     optionKey: 'detectMedical',
     description: 'Flag medicines, devices, pharmaceutical packaging, or a clinical setting.',
     kind: 'flag',
@@ -76,6 +84,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'logos',
     label: 'Logo detection',
+    shortLabel: 'Logos',
     optionKey: 'detectLogos',
     description: 'Flag a logo, brand mark, or wordmark, and name it when recognized.',
     kind: 'flag',
@@ -83,6 +92,7 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
   {
     id: 'nudityGraphic',
     label: 'Nudity or graphic content',
+    shortLabel: 'Graphic',
     optionKey: 'detectNudityGraphic',
     description: 'Flag nudity or graphic content such as gore. The reason stays non-graphic.',
     kind: 'flag',
@@ -91,12 +101,22 @@ export const DETECTION_CHECKS: DetectionCheckDefinition[] = [
 
 export type DetectionSelection = Record<DetectionCheckId, boolean>;
 
+/** Box as percentages of the image, origin at the top left. */
+export type DetectionRegion = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export type DetectionFinding = {
   id: DetectionCheckId;
   label: string;
   detected: boolean;
   confidence: number;
   summary: string;
+  /** Approximate areas. Empty when the model could not place a box. */
+  regions?: DetectionRegion[];
 };
 
 export type ImageDetectionReport = {
@@ -140,6 +160,11 @@ export type ImageDetectionOptions = {
   detectMedical?: boolean;
   detectLogos?: boolean;
   detectNudityGraphic?: boolean;
+  /**
+   * When false, location marks are still stored on the report but not drawn.
+   * Omitted defaults to showing the marks.
+   */
+  showOverlay?: boolean;
   nameProperty?: string;
   fileNameProperty?: string;
   descriptionProperty?: string;

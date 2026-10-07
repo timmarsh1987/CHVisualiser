@@ -51,6 +51,7 @@ function resolveOptions(
     detectMedical: options?.detectMedical,
     detectLogos: options?.detectLogos,
     detectNudityGraphic: options?.detectNudityGraphic,
+    showOverlay: options?.showOverlay !== false,
     nameProperty: options?.nameProperty?.trim(),
     fileNameProperty: options?.fileNameProperty?.trim(),
     descriptionProperty: options?.descriptionProperty?.trim(),
@@ -91,10 +92,50 @@ function statusClass(report: ImageDetectionReport) {
   return report.status;
 }
 
-function FindingCard({ finding }: { finding: DetectionFinding }) {
+type PillTone = 'clear' | 'flagged' | 'unchecked' | 'describe';
+
+function pillTone(checkId: DetectionCheckId, report: ImageDetectionReport): PillTone {
+  if (!report.checksRun.includes(checkId)) {
+    return 'unchecked';
+  }
+
+  const definition = DETECTION_CHECKS.find((check) => check.id === checkId);
+  if (definition?.kind === 'describe') {
+    return 'describe';
+  }
+
+  const finding = report.findings.find((entry) => entry.id === checkId);
+  return finding?.detected ? 'flagged' : 'clear';
+}
+
+function pillLabel(tone: PillTone) {
+  switch (tone) {
+    case 'flagged':
+      return 'Detected';
+    case 'clear':
+      return 'Clear';
+    case 'describe':
+      return 'Described';
+    default:
+      return 'Not checked';
+  }
+}
+
+function FindingCard({
+  finding,
+  highlighted,
+}: {
+  finding: DetectionFinding;
+  highlighted: boolean;
+}) {
   if (isDescribeFinding(finding)) {
     return (
-      <article className="ch-image-detection__finding ch-image-detection__finding--describe">
+      <article
+        id={`ch-id-finding-${finding.id}`}
+        className={`ch-image-detection__finding ch-image-detection__finding--describe${
+          highlighted ? ' ch-image-detection__finding--highlight' : ''
+        }`}
+      >
         <div className="ch-image-detection__finding-header">
           <h4 className="ch-image-detection__finding-title">{finding.label}</h4>
           <span className="ch-image-detection__badge ch-image-detection__badge--muted">
@@ -110,9 +151,10 @@ function FindingCard({ finding }: { finding: DetectionFinding }) {
 
   return (
     <article
+      id={`ch-id-finding-${finding.id}`}
       className={`ch-image-detection__finding ch-image-detection__finding--${
         finding.detected ? 'flagged' : 'clear'
-      }`}
+      }${highlighted ? ' ch-image-detection__finding--highlight' : ''}`}
     >
       <div className="ch-image-detection__finding-header">
         <h4 className="ch-image-detection__finding-title">{finding.label}</h4>
@@ -149,6 +191,10 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
   const [selection, setSelection] = useState<DetectionSelection>(() =>
     defaultDetectionSelection(options)
   );
+  const [checksOpen, setChecksOpen] = useState(false);
+  const [findingsOpen, setFindingsOpen] = useState(false);
+  const [overlayOn, setOverlayOn] = useState(true);
+  const [highlightedId, setHighlightedId] = useState<DetectionCheckId | null>(null);
 
   const defaultSelectionKey = DETECTION_CHECKS.map(
     (check) => `${check.id}:${String((resolvedOptions ?? options)?.[check.optionKey])}`
@@ -157,6 +203,10 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
   useEffect(() => {
     setSelection(defaultDetectionSelection(resolvedOptions ?? options));
   }, [defaultSelectionKey]);
+
+  useEffect(() => {
+    setOverlayOn(resolvedOptions?.showOverlay !== false);
+  }, [resolvedOptions?.showOverlay]);
 
   useEffect(() => {
     if (!resolvedOptions) {
@@ -332,26 +382,35 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
           <h2 className="ch-image-detection__title">Image detection</h2>
         </div>
 
-        <fieldset className="ch-image-detection__checks" disabled={analyzing || assetLoading}>
-          <legend className="ch-image-detection__checks-legend">Checks to run</legend>
-          <label className="ch-image-detection__check ch-image-detection__check--all">
-            <input type="checkbox" checked={allChecked} onChange={toggleAll} />
-            <span>All</span>
-          </label>
-          {DETECTION_CHECKS.map((check) => (
-            <label key={check.id} className="ch-image-detection__check">
-              <input
-                type="checkbox"
-                checked={selection[check.id]}
-                onChange={() => toggleCheck(check.id)}
-              />
-              <span>
-                {check.label}
-                <small>{check.description}</small>
-              </span>
+        <details
+          className="ch-image-detection__disclosure"
+          open={checksOpen}
+          onToggle={(event) => setChecksOpen(event.currentTarget.open)}
+        >
+          <summary className="ch-image-detection__summary">
+            Checks
+            <span>{checks.length} selected</span>
+          </summary>
+          <fieldset className="ch-image-detection__checks" disabled={analyzing || assetLoading}>
+            <label className="ch-image-detection__check ch-image-detection__check--all">
+              <input type="checkbox" checked={allChecked} onChange={toggleAll} />
+              <span>All</span>
             </label>
-          ))}
-        </fieldset>
+            {DETECTION_CHECKS.map((check) => (
+              <label key={check.id} className="ch-image-detection__check">
+                <input
+                  type="checkbox"
+                  checked={selection[check.id]}
+                  onChange={() => toggleCheck(check.id)}
+                />
+                <span>
+                  {check.label}
+                  <small>{check.description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+        </details>
 
         <button
           type="button"
@@ -368,24 +427,53 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
 
       <div className="ch-image-detection__body">
         <section className="ch-image-detection__column">
-          {asset && !assetLoading ? (
-            <div className="ch-image-detection__asset-card">
-              <h3 className="ch-image-detection__asset-title">{asset.name}</h3>
-              <dl className="ch-image-detection__asset-details">
-                {asset.fileName ? (
-                  <div>
-                    <dt>File</dt>
-                    <dd>{asset.fileName}</dd>
-                  </div>
-                ) : null}
-                {asset.mimeType ? (
-                  <div>
-                    <dt>Type</dt>
-                    <dd>{asset.mimeType}</dd>
-                  </div>
-                ) : null}
-              </dl>
-            </div>
+          {asset && !assetLoading && !nonImage && (asset.previewUrl || asset.fileUrl) ? (
+            <figure className="ch-image-detection__figure">
+              <div className="ch-image-detection__frame">
+                <img src={asset.previewUrl || asset.fileUrl} alt={asset.name} />
+                {overlayOn && resolvedOptions.showOverlay !== false && report
+                  ? report.findings.flatMap((finding) =>
+                      finding.detected
+                        ? (finding.regions ?? []).map((region, index) => (
+                            <span
+                              key={`${finding.id}-${index}`}
+                              className="ch-image-detection__mark"
+                              style={{
+                                left: `${region.x}%`,
+                                top: `${region.y}%`,
+                                width: `${region.width}%`,
+                                height: `${region.height}%`,
+                              }}
+                            >
+                              <span className="ch-image-detection__mark-label">
+                                {DETECTION_CHECKS.find((check) => check.id === finding.id)
+                                  ?.shortLabel ?? finding.label}
+                              </span>
+                            </span>
+                          ))
+                        : []
+                    )
+                  : null}
+              </div>
+              <figcaption className="ch-image-detection__caption">{asset.name}</figcaption>
+              {report && resolvedOptions.showOverlay !== false ? (
+                <label className="ch-image-detection__overlay-toggle">
+                  <input
+                    type="checkbox"
+                    checked={overlayOn}
+                    onChange={(event) => setOverlayOn(event.target.checked)}
+                  />
+                  Show marks on image
+                </label>
+              ) : null}
+              {report && overlayOn && resolvedOptions.showOverlay !== false ? (
+                <p className="ch-image-detection__hint">
+                  {report.findings.some((finding) => (finding.regions?.length ?? 0) > 0)
+                    ? 'Marks are approximate.'
+                    : 'No location marks for this result.'}
+                </p>
+              ) : null}
+            </figure>
           ) : null}
 
           {assetLoading ? <LoadingState active label="Loading…" /> : null}
@@ -457,11 +545,53 @@ export default function ImageDetectionPanel({ client, entity, options }: ImageDe
                 ) : null}
               </div>
 
-              <div className="ch-image-detection__finding-list">
-                {report.findings.map((finding) => (
-                  <FindingCard key={finding.id} finding={finding} />
-                ))}
+              <div className="ch-image-detection__pills" role="list" aria-label="Check results">
+                {DETECTION_CHECKS.map((check) => {
+                  const tone = pillTone(check.id, report);
+                  return (
+                    <button
+                      key={check.id}
+                      type="button"
+                      role="listitem"
+                      className={`ch-image-detection__pill ch-image-detection__pill--${tone}${
+                        highlightedId === check.id ? ' ch-image-detection__pill--active' : ''
+                      }`}
+                      aria-label={`${check.shortLabel}, ${pillLabel(tone)}`}
+                      onClick={() => {
+                        setHighlightedId(check.id);
+                        setFindingsOpen(true);
+                        window.setTimeout(() => {
+                          document
+                            .getElementById(`ch-id-finding-${check.id}`)
+                            ?.scrollIntoView({ block: 'nearest' });
+                        }, 0);
+                      }}
+                    >
+                      {check.shortLabel}
+                    </button>
+                  );
+                })}
               </div>
+
+              <details
+                className="ch-image-detection__disclosure"
+                open={findingsOpen}
+                onToggle={(event) => setFindingsOpen(event.currentTarget.open)}
+              >
+                <summary className="ch-image-detection__summary">
+                  Findings
+                  <span>{report.findings.length}</span>
+                </summary>
+                <div className="ch-image-detection__finding-list">
+                  {report.findings.map((finding) => (
+                    <FindingCard
+                      key={finding.id}
+                      finding={finding}
+                      highlighted={highlightedId === finding.id}
+                    />
+                  ))}
+                </div>
+              </details>
             </div>
           ) : null}
         </section>

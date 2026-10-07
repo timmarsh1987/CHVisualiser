@@ -60,7 +60,11 @@ export default function DesignerAssetBuilder({
 
   const merged = useMemo(() => {
     if (!templateDoc) return null;
-    return mergeTemplateAndInstance(templateDoc, instance);
+    return mergeTemplateAndInstance(
+      templateDoc,
+      instance,
+      template.channelType === 'Print' ? 'publication' : 'endUser'
+    );
   }, [templateDoc, instance]);
 
   const handleSave = useCallback(async () => {
@@ -120,7 +124,7 @@ export default function DesignerAssetBuilder({
       </div>
       <DesignerShell
         key={`${template.id}:${marketingAsset.id}`}
-        mode="endUser"
+        mode={template.channelType === 'Print' ? 'publication' : 'endUser'}
         document={merged}
         templateDocument={templateDoc}
         templateId={template.id}

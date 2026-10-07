@@ -2,6 +2,7 @@
 import type {
   DetectionCheckId,
   DetectionFinding,
+  DetectionRegion,
   DetectionStatus,
   ImageDetectionReport,
 } from './types';
@@ -63,6 +64,40 @@ function normalizeDefinitionHref(href: string): string {
   }
 }
 
+function parseRegion(value: unknown): DetectionRegion | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  const record = value as Record<string, unknown>;
+  const asPercent = (entry: unknown) => {
+    const number = Number(entry);
+    if (!Number.isFinite(number)) {
+      return null;
+    }
+    const scaled = number >= 0 && number <= 1 ? number * 100 : number;
+    if (scaled < 0 || scaled > 100) {
+      return null;
+    }
+    return scaled;
+  };
+
+  const x = asPercent(record.x);
+  const y = asPercent(record.y);
+  const width = asPercent(record.width);
+  const height = asPercent(record.height);
+  if (x == null || y == null || width == null || height == null || width < 2 || height < 2) {
+    return null;
+  }
+
+  return {
+    x,
+    y,
+    width: Math.min(width, 100 - x),
+    height: Math.min(height, 100 - y),
+  };
+}
+
 function parseFinding(value: unknown): DetectionFinding | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null;
@@ -88,6 +123,12 @@ function parseFinding(value: unknown): DetectionFinding | null {
     detected: record.detected === true,
     confidence,
     summary: typeof record.summary === 'string' ? record.summary : '',
+    regions: Array.isArray(record.regions)
+      ? record.regions
+          .map((entry) => parseRegion(entry))
+          .filter((entry): entry is DetectionRegion => entry != null)
+          .slice(0, 6)
+      : [],
   };
 }
 

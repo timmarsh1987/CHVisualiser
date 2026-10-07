@@ -39,6 +39,7 @@ export default function Toolbar() {
   const transferRef = useRef<HTMLDivElement>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const isAdmin = mode === 'admin';
+  const modeLabel = mode === 'admin' ? 'Admin' : mode === 'publication' ? 'Publication' : 'Edit';
   const presetId = resolveCanvasPresetId(
     canvasDocument.canvas.width,
     canvasDocument.canvas.height,
@@ -199,7 +200,7 @@ export default function Toolbar() {
         <span className="chd-toolbar-logo-wrap">
           <img className="chd-toolbar-logo" src={epamWhite} alt="EPAM" />
         </span>
-        <span className="chd-toolbar-mode">{isAdmin ? 'Admin' : 'Edit'}</span>
+        <span className="chd-toolbar-mode">{modeLabel}</span>
       </div>
 
       {showTemplateSettings ? (

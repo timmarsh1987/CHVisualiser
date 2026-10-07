@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
 import { clampBoxToPins, fillLayerToCanvas } from './constraints';
+import { normalizeRotation } from './coords';
 import { fontsFromFiles, layerFontIsLoaded, layerUsesFont } from './fontFiles';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
 import { magicStringFor } from './fields';
@@ -244,8 +245,35 @@ function FontManager({ document }: { document: DesignerDocument }) {
               </p>
               <ul className="chd-font-missing-list">
                 {missing.map((item) => (
-                  <li key={item.name}>
-                    {item.name} - {usageLine(item.layers, item.pages)}
+                  <li key={item.name} className="chd-font-replace-row">
+                    <span>
+                      {item.name} - {usageLine(item.layers, item.pages)}
+                    </span>
+                    <label className="chd-field chd-font-replace">
+                      <span>Replace with</span>
+                      <select
+                        value=""
+                        aria-label={`Replace ${item.name}`}
+                        onChange={(event) => {
+                          const next = event.target.value;
+                          if (!next) return;
+                          if (next === 'georgia') {
+                            dispatch({ type: 'REPLACE_FONT', from: item.name, font: null });
+                            return;
+                          }
+                          const font = fonts.find((face) => face.postScriptName === next);
+                          if (font) dispatch({ type: 'REPLACE_FONT', from: item.name, font });
+                        }}
+                      >
+                        <option value="">Choose a font</option>
+                        <option value="georgia">Georgia</option>
+                        {fonts.map((font) => (
+                          <option key={font.id} value={font.postScriptName}>
+                            {fontTitle(font, fonts)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
                   </li>
                 ))}
               </ul>
@@ -319,6 +347,7 @@ export default function PropertiesPane({
   const mode = useDesignerMode();
   const document = useDesignerDocument();
   const isAdmin = mode === 'admin';
+  const isPublication = mode === 'publication';
 
   const selected = layers.filter((l) => selection.includes(l.id));
   const layer: Layer | null = selected.length === 1 ? selected[0] : null;
@@ -447,6 +476,7 @@ export default function PropertiesPane({
 
           {layer.type === 'group' ? null : (
           <>
+          {!isPublication ? (
           <Section title="Placement">
             <div className="chd-field-row">
               <NumberField
@@ -483,7 +513,9 @@ export default function PropertiesPane({
               />
             </div>
           </Section>
+          ) : null}
 
+          {!isPublication ? (
           <Section title="Dimensions">
             <div className="chd-field-row">
               <NumberField
@@ -519,9 +551,20 @@ export default function PropertiesPane({
                 }
               />
             </div>
+            <NumberField
+              label="Rotation"
+              value={Math.round(layer.rotation ?? 0)}
+              disabled={!canTransform}
+              onChange={(rotation) => {
+                const next = normalizeRotation(rotation);
+                patch({ rotation: next || undefined });
+              }}
+            />
           </Section>
+          ) : null}
 
-          {canEditContent &&
+          {!isPublication &&
+            canEditContent &&
             (layer.type === 'frame' || layer.type === 'rect' || layer.type === 'image') && (
               <Section title="Fill">
                 <label className="chd-field">
@@ -672,7 +715,9 @@ export default function PropertiesPane({
                 />
               </label>
               <p className="chd-field-hint">
-                {magicStringFor(field)}. Leave this empty to keep the sample copy.
+                {isPublication
+                  ? 'Leave this empty to keep the sample copy.'
+                  : `${magicStringFor(field)}. Leave this empty to keep the sample copy.`}
               </p>
               <label className="chd-field">
                 <span>Color</span>

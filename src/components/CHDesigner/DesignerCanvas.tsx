@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { clampBoxToPins } from './constraints';
+import {
+  canvasGuidesForBox,
+  clampBoxToPins,
+  snapMoveToCanvas,
+  snapResizeToCanvas,
+  type CanvasSnapGuide,
+  type PlacedBox,
+} from './constraints';
 import { layerFontIsLoaded, missingFontNames } from './fontFiles';
-import { clamp, fitPageInView, revealBoxInView, screenDeltaToCanvas, zoomAroundPoint, type ViewBox } from './coords';
+import { clamp, fitPageInView, normalizeRotation, revealBoxInView, screenDeltaToCanvas, screenToCanvas, zoomAroundPoint, type ViewBox } from './coords';
 import LayerNode from './LayerNode';
 import { layerAllowsTransform, layerIsDrawn, layerIsSelectable } from './policy';
 import {
@@ -46,6 +53,13 @@ type Interaction =
       canvasWidth: number;
       canvasHeight: number;
       handle: ResizeHandle;
+    }
+  | {
+      kind: 'rotate';
+      id: string;
+      centerX: number;
+      centerY: number;
+      origRotation: number;
     };
 
 type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
@@ -59,6 +73,7 @@ export default function DesignerCanvas() {
   const dispatch = useDesignerAction();
   const mode = useDesignerMode();
   const [interaction, setInteraction] = useState<Interaction | null>(null);
+  const [snapGuides, setSnapGuides] = useState<CanvasSnapGuide[]>([]);
   const [spaceDown, setSpaceDown] = useState(false);
   const viewportStateRef = useRef(viewport);
   viewportStateRef.current = viewport;
@@ -66,9 +81,9 @@ export default function DesignerCanvas() {
   modeRef.current = mode;
   const viewportElRef = useRef<HTMLDivElement>(null);
   const interactionRef = useRef<Interaction | null>(null);
-  interactionRef.current = interaction;
   const didFitRef = useRef(false);
   const panMovedRef = useRef(false);
+  const rotateRef = useRef({ last: 0, accum: 0 });
   const onWheelRef = useRef<(event: WheelEvent) => void>(() => undefined);
 
   const applyView = (next: { zoom: number; panX: number; panY: number }) => {
@@ -160,9 +175,9 @@ export default function DesignerCanvas() {
   }, [dispatch, selection.length]);
 
   useEffect(() => {
-    if (!interaction) return;
-
     const onMove = (e: PointerEvent) => {
+      const interaction = interactionRef.current;
+      if (!interaction) return;
       const zoom = viewportStateRef.current.zoom;
       if (interaction.kind === 'pan') {
         const dx = e.clientX - interaction.startX;
@@ -177,34 +192,59 @@ export default function DesignerCanvas() {
         return;
       }
 
+      if (interaction.kind === 'move') {
+        const { dx, dy } = screenDeltaToCanvas(
+          e.clientX - interaction.startX,
+          e.clientY - interaction.startY,
+          zoom
+        );
+        const moving: { id: string; origin: Layer; box: PlacedBox }[] = [];
+        for (const id of interaction.ids) {
+          const origin = interaction.origins[id];
+          if (!origin) continue;
+          moving.push({
+            id,
+            origin,
+            box: { x: origin.x + dx, y: origin.y + dy, width: origin.width, height: origin.height },
+          });
+        }
+        if (moving.length === 0) return;
+        const group = boundsOf(moving.map((item) => item.box));
+        const snapped = snapMoveToCanvas(group, interaction.canvasWidth, interaction.canvasHeight, zoom);
+        const shiftX = snapped.x - group.x;
+        const shiftY = snapped.y - group.y;
+        const placed: PlacedBox[] = [];
+        for (const item of moving) {
+          const next = clampBoxToPins(
+            {
+              x: item.box.x + shiftX,
+              y: item.box.y + shiftY,
+              width: item.box.width,
+              height: item.box.height,
+            },
+            item.origin,
+            interaction.canvasWidth,
+            interaction.canvasHeight,
+            'move'
+          );
+          placed.push(next);
+          dispatch({
+            type: 'UPDATE_LAYER',
+            id: item.id,
+            patch: next,
+            pushHistory: false,
+          });
+        }
+        setSnapGuides(canvasGuidesForBox(boundsOf(placed), interaction.canvasWidth, interaction.canvasHeight));
+        return;
+      }
+
+      if (interaction.kind === 'resize') {
       const { dx, dy } = screenDeltaToCanvas(
         e.clientX - interaction.startX,
         e.clientY - interaction.startY,
         zoom
       );
-
-      if (interaction.kind === 'move') {
-        for (const id of interaction.ids) {
-          const origin = interaction.origins[id];
-          if (!origin) continue;
-          const next = clampBoxToPins(
-            { x: origin.x + dx, y: origin.y + dy, width: origin.width, height: origin.height },
-            origin,
-            interaction.canvasWidth,
-            interaction.canvasHeight,
-            'move'
-          );
-          dispatch({
-            type: 'UPDATE_LAYER',
-            id,
-            patch: next,
-            pushHistory: false,
-          });
-        }
-        return;
-      }
-
-      // resize
       let nextX = interaction.origX;
       let nextY = interaction.origY;
       let nextW = interaction.origW;
@@ -225,8 +265,15 @@ export default function DesignerCanvas() {
         nextY = interaction.origY + (interaction.origH - nextH);
       }
 
-      const resized = clampBoxToPins(
+      const snapped = snapResizeToCanvas(
         { x: nextX, y: nextY, width: nextW, height: nextH },
+        interaction.canvasWidth,
+        interaction.canvasHeight,
+        zoom,
+        interaction.handle
+      );
+      const resized = clampBoxToPins(
+        snapped,
         interaction.layer,
         interaction.canvasWidth,
         interaction.canvasHeight,
@@ -239,15 +286,46 @@ export default function DesignerCanvas() {
         patch: resized,
         pushHistory: false,
       });
+      setSnapGuides(canvasGuidesForBox(resized, interaction.canvasWidth, interaction.canvasHeight));
+      return;
+      }
+
+      const viewportEl = viewportElRef.current;
+      if (!viewportEl) return;
+      const point = screenToCanvas(
+        e.clientX,
+        e.clientY,
+        viewportEl.getBoundingClientRect(),
+        viewportStateRef.current
+      );
+      const angle = Math.atan2(point.y - interaction.centerY, point.x - interaction.centerX);
+      let step = ((angle - rotateRef.current.last) * 180) / Math.PI;
+      if (step > 180) step -= 360;
+      if (step < -180) step += 360;
+      rotateRef.current.last = angle;
+      rotateRef.current.accum += step;
+      let degrees = interaction.origRotation + rotateRef.current.accum;
+      if (e.shiftKey) degrees = Math.round(degrees / 15) * 15;
+      const rotation = normalizeRotation(degrees);
+      dispatch({
+        type: 'UPDATE_LAYER',
+        id: interaction.id,
+        patch: { rotation: rotation || undefined },
+        pushHistory: false,
+      });
     };
 
     const onUp = () => {
+      const interaction = interactionRef.current;
+      if (!interaction) return;
       if (interaction.kind === 'pan' && interaction.clearOnClick && !panMovedRef.current) {
         dispatch({ type: 'UNSELECT_ALL' });
-      } else if (interaction.kind === 'move' || interaction.kind === 'resize') {
+      } else if (interaction.kind === 'move' || interaction.kind === 'resize' || interaction.kind === 'rotate') {
         dispatch({ type: 'COMMIT' });
       }
+      interactionRef.current = null;
       setInteraction(null);
+      setSnapGuides([]);
     };
 
     window.addEventListener('pointermove', onMove);
@@ -256,7 +334,7 @@ export default function DesignerCanvas() {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [interaction, dispatch]);
+  }, [dispatch]);
 
   onWheelRef.current = (event: WheelEvent) => {
     const el = viewportElRef.current;
@@ -280,9 +358,14 @@ export default function DesignerCanvas() {
     return () => el.removeEventListener('wheel', onWheel);
   }, []);
 
+  const beginGesture = (next: Interaction) => {
+    interactionRef.current = next;
+    setInteraction(next);
+  };
+
   const beginPan = (e: React.PointerEvent, clearOnClick: boolean, immediate: boolean) => {
     panMovedRef.current = immediate;
-    setInteraction({
+    beginGesture({
       kind: 'pan',
       startX: e.clientX,
       startY: e.clientY,
@@ -313,7 +396,7 @@ export default function DesignerCanvas() {
   };
 
   const canTransformLayer = (layer: Layer) => {
-    if (mode === 'admin') return !layer.locked;
+    if (mode === 'admin' || mode === 'publication') return !layer.locked;
     return layerAllowsTransform(layer);
   };
 
@@ -335,7 +418,7 @@ export default function DesignerCanvas() {
       }
     }
     if (Object.keys(origins).length === 0) return;
-    setInteraction({
+    beginGesture({
       kind: 'move',
       ids: Object.keys(origins),
       startX: e.clientX,
@@ -346,11 +429,34 @@ export default function DesignerCanvas() {
     });
   };
 
+  const handleRotateStart = (layer: Layer, e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (!canTransformLayer(layer)) return;
+    const viewportEl = viewportElRef.current;
+    if (!viewportEl) return;
+    const point = screenToCanvas(e.clientX, e.clientY, viewportEl.getBoundingClientRect(), viewport);
+    const centerX = layer.x + layer.width / 2;
+    const centerY = layer.y + layer.height / 2;
+    rotateRef.current = {
+      last: Math.atan2(point.y - centerY, point.x - centerX),
+      accum: 0,
+    };
+    dispatch({ type: 'SELECT', ids: [layer.id] });
+    beginGesture({
+      kind: 'rotate',
+      id: layer.id,
+      centerX,
+      centerY,
+      origRotation: layer.rotation ?? 0,
+    });
+  };
+
   const handleResizeStart = (layer: Layer, handle: ResizeHandle, e: React.PointerEvent) => {
     e.stopPropagation();
     if (!canTransformLayer(layer)) return;
     dispatch({ type: 'SELECT', ids: [layer.id] });
-    setInteraction({
+    beginGesture({
       kind: 'resize',
       id: layer.id,
       layer,
@@ -417,61 +523,83 @@ export default function DesignerCanvas() {
                 missingFont={!layerFontIsLoaded(layer, loadedFonts)}
                 onSelect={(e) => handleLayerSelect(layer, e)}
                 onMoveStart={(e) => handleMoveStart(layer, e)}
-                onUnlock={
-                  mode === 'admin'
-                    ? () => dispatch({ type: 'UPDATE_LAYER', id: layer.id, patch: { locked: false } })
-                    : undefined
-                }
               />
             ))}
           </div>
+        </div>
+        </div>
+      </div>
 
-          {showHandles && primary ? (
-            <div
-              className="chd-selection-box"
-              style={{
-                left: primary.x,
-                top: primary.y,
-                width: primary.width,
-                height: primary.height,
-              }}
-            >
-              {HANDLES.map((handle) => (
-                <div
-                  key={handle}
-                  className={`chd-handle chd-handle--${handle}`}
-                  onPointerDown={(e) => handleResizeStart(primary, handle, e)}
-                />
-              ))}
+      <div className="chd-selection-overlay">
+        {snapGuides.map((guide) => (
+          <div
+            key={`${guide.axis}:${guide.at}`}
+            className={`chd-snap-guide chd-snap-guide--${guide.axis}`}
+            style={guideStyle(guide, document.canvas.width, document.canvas.height, viewport)}
+          />
+        ))}
+        {document.layers
+          .filter((layer) => layer.locked && layerIsDrawn(layer, document.settings))
+          .map((layer) => (
+            <div key={`lock-${layer.id}`} className="chd-lock-anchor" style={layerBoxStyle(layer, viewport)}>
+              <span
+                className={`chd-layer-lock${mode === 'admin' ? '' : ' chd-layer-lock--fixed'}`}
+                role="img"
+                title={mode === 'admin' ? 'Double-click to unlock' : 'Locked'}
+                aria-label={mode === 'admin' ? 'Locked. Double-click to unlock' : 'Locked'}
+                onPointerDown={(event) => event.stopPropagation()}
+                onDoubleClick={(event) => {
+                  if (mode !== 'admin') return;
+                  event.preventDefault();
+                  event.stopPropagation();
+                  dispatch({ type: 'UPDATE_LAYER', id: layer.id, patch: { locked: false } });
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <rect x="2" y="5.5" width="8" height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+                  <path
+                    d="M4 5.5V3.8a2 2 0 0 1 4 0v1.7"
+                    stroke="currentColor"
+                    strokeWidth="1.3"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
             </div>
-          ) : primary ? (
+          ))}
+        {showHandles && primary ? (
+          <div className="chd-selection-box" style={layerBoxStyle(primary, viewport)}>
+            <div className="chd-rotate-stem" />
             <div
-              className="chd-selection-outline"
-              style={{
-                left: primary.x,
-                top: primary.y,
-                width: primary.width,
-                height: primary.height,
-              }}
+              className="chd-handle chd-handle--rotate"
+              role="button"
+              aria-label="Rotate"
+              title="Rotate"
+              onPointerDown={(e) => handleRotateStart(primary, e)}
             />
-          ) : null}
+            {HANDLES.map((handle) => (
+              <div
+                key={handle}
+                className={`chd-handle chd-handle--${handle}`}
+                role="button"
+                aria-label={`Scale from ${handle}`}
+                onPointerDown={(e) => handleResizeStart(primary, handle, e)}
+              />
+            ))}
+          </div>
+        ) : primary ? (
+          <div className="chd-selection-outline" style={layerBoxStyle(primary, viewport)} />
+        ) : null}
 
-          {selectedLayers.length > 1
-            ? selectedLayers.map((layer) => (
-                <div
-                  key={`sel-${layer.id}`}
-                  className="chd-selection-outline"
-                  style={{
-                    left: layer.x,
-                    top: layer.y,
-                    width: layer.width,
-                    height: layer.height,
-                  }}
-                />
-              ))
-            : null}
-        </div>
-        </div>
+        {selectedLayers.length > 1
+          ? selectedLayers.map((layer) => (
+              <div
+                key={`sel-${layer.id}`}
+                className="chd-selection-outline"
+                style={layerBoxStyle(layer, viewport)}
+              />
+            ))
+          : null}
       </div>
 
       <div className="chd-viewport-hint">
@@ -479,6 +607,55 @@ export default function DesignerCanvas() {
       </div>
     </div>
   );
+}
+
+function boundsOf(boxes: PlacedBox[]): PlacedBox {
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const box of boxes) {
+    x0 = Math.min(x0, box.x);
+    y0 = Math.min(y0, box.y);
+    x1 = Math.max(x1, box.x + box.width);
+    y1 = Math.max(y1, box.y + box.height);
+  }
+  return { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) };
+}
+
+function guideStyle(
+  guide: CanvasSnapGuide,
+  canvasWidth: number,
+  canvasHeight: number,
+  viewport: { zoom: number; panX: number; panY: number }
+): React.CSSProperties {
+  const zoom = viewport.zoom;
+  if (guide.axis === 'x') {
+    return {
+      left: viewport.panX + guide.at * zoom,
+      top: viewport.panY,
+      height: canvasHeight * zoom,
+    };
+  }
+  return {
+    left: viewport.panX,
+    top: viewport.panY + guide.at * zoom,
+    width: canvasWidth * zoom,
+  };
+}
+
+function layerBoxStyle(
+  layer: Layer,
+  viewport: { zoom: number; panX: number; panY: number }
+): React.CSSProperties {
+  const zoom = viewport.zoom;
+  return {
+    left: viewport.panX + layer.x * zoom,
+    top: viewport.panY + layer.y * zoom,
+    width: layer.width * zoom,
+    height: layer.height * zoom,
+    transform: layer.rotation ? `rotate(${layer.rotation}deg)` : undefined,
+  };
 }
 
 function unionBox(layers: Layer[]): ViewBox {

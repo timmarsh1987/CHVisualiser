@@ -163,7 +163,7 @@ function buildDetectionPrompt(asset, checks, imageContext) {
   const findingExample = selected
     .map(
       (check) =>
-        `    { "id": "${check.id}", "detected": false, "confidence": 0, "summary": "short reason" }`
+        `    { "id": "${check.id}", "detected": false, "confidence": 0, "summary": "short reason", "regions": [] }`
     )
     .join(',\n');
 
@@ -195,15 +195,52 @@ Rules:
 - summary on each finding is one short sentence.
 - Prefer visual evidence. Do not invent content that is not in the image.
 - whatYouSee is a description. Include it when requested. It does not mean the image is a problem.
+- regions is an array of boxes around what you can see for that check. Each box is percentages of the image, origin at the top left: { "x": 10, "y": 20, "width": 30, "height": 40 }. Use 0-100, not pixels.
+- When detected is false, regions must be [].
+- When detected is true, include one loose box per visible instance. If you cannot place a box, use [].
+- For minors and nudityGraphic, one loose box around the relevant area is enough. Do not outline a body.
 
 Asset:
 ${assetLines.join('\n')}`;
 }
 
 /**
- * @param {unknown} payload
- * @param {string[]} checks
+ * @param {unknown} value
+ * @returns {number | null}
  */
+function asPercent(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  const scaled = number >= 0 && number <= 1 ? number * 100 : number;
+  if (scaled < 0 || scaled > 100) return null;
+  return Math.round(scaled * 10) / 10;
+}
+
+/**
+ * @param {unknown} value
+ */
+function normalizeRegions(value) {
+  if (!Array.isArray(value)) return [];
+  const regions = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue;
+    const box = /** @type {Record<string, unknown>} */ (entry);
+    const x = asPercent(box.x);
+    const y = asPercent(box.y);
+    const width = asPercent(box.width);
+    const height = asPercent(box.height);
+    if (x == null || y == null || width == null || height == null || width < 2 || height < 2) {
+      continue;
+    }
+    const clampedWidth = Math.min(width, 100 - x);
+    const clampedHeight = Math.min(height, 100 - y);
+    if (clampedWidth < 2 || clampedHeight < 2) continue;
+    regions.push({ x, y, width: clampedWidth, height: clampedHeight });
+    if (regions.length >= 6) break;
+  }
+  return regions;
+}
+
 function normalizeReport(payload, checks) {
   const record = payload && typeof payload === 'object' ? /** @type {Record<string, unknown>} */ (payload) : {};
   const returned = Array.isArray(record.findings) ? record.findings : [];
@@ -227,6 +264,7 @@ function normalizeReport(payload, checks) {
       summary:
         asString(item.summary) ||
         (match ? '' : 'No result returned for this check.'),
+      regions: detected ? normalizeRegions(item.regions) : [],
     };
   });
 

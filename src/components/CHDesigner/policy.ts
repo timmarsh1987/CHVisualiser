@@ -26,6 +26,18 @@ export function layerAllowsTransform(layer: Layer): boolean {
   return Boolean(layer.allowTransform);
 }
 
+/** Publication treats an unlocked layer as movable. End-user mode still uses the template flag. */
+export function layerCanTransform(layer: Layer, mode: DesignerMode): boolean {
+  if (layer.locked) return false;
+  if (mode === 'admin' || mode === 'publication') return true;
+  return Boolean(layer.allowTransform);
+}
+
+/** Instance editing. Layer lock, transform, and content flags come from the template. */
+export function modeUsesTemplatePolicy(mode: DesignerMode): boolean {
+  return mode === 'endUser' || mode === 'publication';
+}
+
 export function layerIsSelectable(
   layer: Layer,
   mode: DesignerMode,
@@ -33,6 +45,7 @@ export function layerIsSelectable(
 ): boolean {
   if (!layerIsShown(layer, settings)) return false;
   if (mode === 'admin') return true;
+  if (mode === 'publication') return !layer.locked;
   return layerAllowsContentEdit(layer) || layerAllowsTransform(layer);
 }
 
@@ -54,7 +67,7 @@ export function parseDesignerInstance(raw: unknown): DesignerInstanceDocument | 
     if (!value || typeof value !== 'object') continue;
     const item = value as Record<string, unknown>;
     const override: LayerOverride = {};
-    for (const key of ['x', 'y', 'width', 'height'] as const) {
+    for (const key of ['x', 'y', 'width', 'height', 'rotation'] as const) {
       if (typeof item[key] === 'number' && Number.isFinite(item[key])) {
         override[key] = item[key] as number;
       }
@@ -86,16 +99,21 @@ export function compactFieldValues(raw: unknown): Record<string, string> | undef
   return Object.keys(fields).length > 0 ? fields : undefined;
 }
 
-function applyLayerOverrides(layers: Layer[], overrides: Record<string, LayerOverride>): Layer[] {
+function applyLayerOverrides(
+  layers: Layer[],
+  overrides: Record<string, LayerOverride>,
+  mode: DesignerMode
+): Layer[] {
   return layers.map((layer) => {
     const override = overrides[layer.id];
     if (!override) return layer;
     const next: Layer = { ...layer };
-    if (layerAllowsTransform(layer)) {
+    if (layerCanTransform(layer, mode)) {
       if (typeof override.x === 'number') next.x = override.x;
       if (typeof override.y === 'number') next.y = override.y;
       if (typeof override.width === 'number') next.width = override.width;
       if (typeof override.height === 'number') next.height = override.height;
+      if (typeof override.rotation === 'number') next.rotation = override.rotation || undefined;
     }
     if (layerAllowsContentEdit(layer)) {
       if (typeof override.text === 'string') next.text = override.text;
@@ -115,17 +133,21 @@ function layersForOverrides(doc: DesignerDocument): Layer[] {
 
 export function mergeTemplateAndInstance(
   template: DesignerDocument,
-  instance: DesignerInstanceDocument | null | undefined
+  instance: DesignerInstanceDocument | null | undefined,
+  mode: DesignerMode = 'endUser'
 ): DesignerDocument {
   const base = cloneDocument(template);
   if (!instance?.overrides) return base;
-  const layers = applyLayerOverrides(base.layers, instance.overrides);
+  const layers = applyLayerOverrides(base.layers, instance.overrides, mode);
   return {
     ...base,
     layers,
     pages: base.pages?.map((page) => ({
       ...page,
-      layers: page.id === base.activePageId ? layers : applyLayerOverrides(page.layers, instance.overrides),
+      layers:
+        page.id === base.activePageId
+          ? layers
+          : applyLayerOverrides(page.layers, instance.overrides, mode),
     })),
   };
 }
@@ -134,7 +156,8 @@ export function diffInstanceOverrides(
   template: DesignerDocument,
   merged: DesignerDocument,
   templateId: string,
-  fieldValues?: Record<string, string>
+  fieldValues?: Record<string, string>,
+  mode: DesignerMode = 'endUser'
 ): DesignerInstanceDocument {
   const overrides: Record<string, LayerOverride> = {};
   const byId = new Map(layersForOverrides(template).map((layer) => [layer.id, layer]));
@@ -144,11 +167,12 @@ export function diffInstanceOverrides(
     if (!base) continue;
     const override: LayerOverride = {};
 
-    if (layerAllowsTransform(base)) {
+    if (layerCanTransform(base, mode)) {
       if (layer.x !== base.x) override.x = layer.x;
       if (layer.y !== base.y) override.y = layer.y;
       if (layer.width !== base.width) override.width = layer.width;
       if (layer.height !== base.height) override.height = layer.height;
+      if ((layer.rotation ?? 0) !== (base.rotation ?? 0)) override.rotation = layer.rotation ?? 0;
     }
     if (layerAllowsContentEdit(base)) {
       if (!base.fieldId && (layer.text ?? '') !== (base.text ?? '')) override.text = layer.text;
@@ -167,13 +191,18 @@ export function diffInstanceOverrides(
 }
 
 /** Restrict an end-user patch to fields allowed by layer policy. */
-export function filterEndUserPatch(layer: Layer, patch: Partial<Layer>): Partial<Layer> {
+export function filterEndUserPatch(
+  layer: Layer,
+  patch: Partial<Layer>,
+  mode: DesignerMode = 'endUser'
+): Partial<Layer> {
   const next: Partial<Layer> = {};
-  if (layerAllowsTransform(layer)) {
+  if (layerCanTransform(layer, mode)) {
     if (patch.x !== undefined) next.x = patch.x;
     if (patch.y !== undefined) next.y = patch.y;
     if (patch.width !== undefined) next.width = patch.width;
     if (patch.height !== undefined) next.height = patch.height;
+    if ('rotation' in patch) next.rotation = patch.rotation;
   }
   if (layerAllowsContentEdit(layer)) {
     if (patch.text !== undefined) next.text = patch.text;

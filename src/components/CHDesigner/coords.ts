@@ -38,6 +38,15 @@ export function zoomAroundPoint(
   };
 }
 
+/** Fold an angle into -180..180 degrees. Zero stays unset-friendly. */
+export function normalizeRotation(angle: number): number {
+  if (!Number.isFinite(angle)) return 0;
+  let next = ((angle % 360) + 360) % 360;
+  if (next > 180) next -= 360;
+  if (Math.abs(next) < 0.05) return 0;
+  return Math.round(next * 10) / 10;
+}
+
 /** Scale a screen-space delta into canvas units. */
 export function screenDeltaToCanvas(
   dx: number,

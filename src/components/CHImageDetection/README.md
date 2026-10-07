@@ -71,6 +71,10 @@ If those members do not exist yet, the panel still shows the fresh result and re
 
 Non-image assets (PDF, video, and similar) are rejected. At least one check must be selected.
 
+Checks and findings are collapsed. Traffic-light pills above the findings show each check: green when it ran and nothing was found, red when it was detected, grey when it was not selected. **Scene** is blue because that check describes the image and does not flag it.
+
+When the model can place a subject, the saved report includes approximate boxes. **Show marks on image** draws them on the preview. Set `"showOverlay": false` to keep the boxes in the saved report without drawing them. These are not measured coordinates from a dedicated detector.
+
 ## Server setup (Vercel)
 
 Set a vision-capable assistant id and reuse the existing CodeMie auth:

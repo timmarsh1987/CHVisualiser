@@ -4,7 +4,12 @@ import { registerDesignerFonts, unregisterDesignerFont } from './fontFiles';
 import LayersPanel from './LayersPanel';
 import PageStrip from './PageStrip';
 import PropertiesPane from './PropertiesPane';
-import { DesignerProvider, useDesignerDocument, type DesignerProviderProps } from './store';
+import {
+  DesignerProvider,
+  useDesignerDocument,
+  useSelection,
+  type DesignerProviderProps,
+} from './store';
 import Toolbar from './Toolbar';
 import type { DesignerDocument, DesignerFont, DesignerInstanceDocument, DesignerMode } from './types';
 
@@ -78,6 +83,107 @@ function startPanelResize(
   handle.addEventListener('pointercancel', stop);
 }
 
+function ShellBody({
+  mode,
+  publication,
+  layersOpen,
+  setLayersOpen,
+  propertiesOpen,
+  setPropertiesOpen,
+  layersWidth,
+  setLayersWidth,
+  propertiesWidth,
+  setPropertiesWidth,
+  statusSlot,
+  statusClassName,
+  saveStatus,
+}: {
+  mode: DesignerShellProps['mode'];
+  publication: boolean;
+  layersOpen: boolean;
+  setLayersOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  propertiesOpen: boolean;
+  setPropertiesOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  layersWidth: number;
+  setLayersWidth: React.Dispatch<React.SetStateAction<number>>;
+  propertiesWidth: number;
+  setPropertiesWidth: React.Dispatch<React.SetStateAction<number>>;
+  statusSlot?: React.ReactNode;
+  statusClassName?: string;
+  saveStatus?: React.ReactNode;
+}) {
+  const selection = useSelection();
+  const selectionKey = selection.join('\n');
+  const [hiddenFor, setHiddenFor] = useState('');
+  const openedBySelection = publication && selectionKey !== '' && hiddenFor !== selectionKey;
+  const showProperties = propertiesOpen || openedBySelection;
+
+  return (
+    <div
+      className={`chd-root${mode === 'endUser' ? ' chd-root--end-user' : ''}${
+        publication ? ' chd-root--publication' : ''
+      }`}
+    >
+      <Toolbar />
+      {statusSlot ? (
+        <div className={`chd-status-bar${statusClassName ? ` ${statusClassName}` : ''}`}>
+          {statusSlot}
+        </div>
+      ) : null}
+      <div
+        className={`chd-main${layersOpen ? '' : ' chd-main--layers-collapsed'}${showProperties ? '' : ' chd-main--properties-collapsed'}`}
+        style={{
+          ['--chd-layers-width' as string]: `${layersOpen ? layersWidth : COLLAPSED_PANEL}px`,
+          ['--chd-properties-width' as string]: `${showProperties ? propertiesWidth : COLLAPSED_PANEL}px`,
+        }}
+      >
+        <div className="chd-panel-slot">
+          <LayersPanel collapsed={!layersOpen} onToggleCollapse={() => setLayersOpen((open) => !open)} />
+          {layersOpen ? (
+            <div
+              className="chd-panel-resizer chd-panel-resizer--end"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize layers"
+              onPointerDown={(event) => startPanelResize(event, layersWidth, 1, setLayersWidth)}
+            />
+          ) : null}
+        </div>
+        <div className="chd-stage">
+          <DesignerCanvas />
+          <PageStrip />
+        </div>
+        <div className="chd-panel-slot">
+          <PropertiesPane
+            collapsed={!showProperties}
+            onToggleCollapse={() => {
+              if (showProperties) {
+                setPropertiesOpen(false);
+                if (publication) setHiddenFor(selectionKey);
+                return;
+              }
+              setHiddenFor('');
+              setPropertiesOpen(true);
+            }}
+          />
+          {showProperties ? (
+            <div
+              className="chd-panel-resizer chd-panel-resizer--start"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize properties"
+              onPointerDown={(event) =>
+                startPanelResize(event, propertiesWidth, -1, setPropertiesWidth)
+              }
+            />
+          ) : null}
+        </div>
+      </div>
+      {saveStatus}
+    </div>
+  );
+}
+
 export default function DesignerShell({
   mode = 'admin',
   document,
@@ -90,8 +196,9 @@ export default function DesignerShell({
   statusClassName,
   saveStatus,
 }: DesignerShellProps) {
-  const [layersOpen, setLayersOpen] = useState(true);
-  const [propertiesOpen, setPropertiesOpen] = useState(true);
+  const publication = mode === 'publication';
+  const [layersOpen, setLayersOpen] = useState(!publication);
+  const [propertiesOpen, setPropertiesOpen] = useState(!publication);
   const [layersWidth, setLayersWidth] = useState(300);
   const [propertiesWidth, setPropertiesWidth] = useState(260);
   const providerProps: Omit<DesignerProviderProps, 'children'> = {
@@ -107,56 +214,21 @@ export default function DesignerShell({
   return (
     <DesignerProvider {...providerProps}>
       <FontRegistry />
-      <div className={`chd-root${mode === 'endUser' ? ' chd-root--end-user' : ''}`}>
-        <Toolbar />
-        {statusSlot ? (
-          <div className={`chd-status-bar${statusClassName ? ` ${statusClassName}` : ''}`}>
-            {statusSlot}
-          </div>
-        ) : null}
-        <div
-          className={`chd-main${layersOpen ? '' : ' chd-main--layers-collapsed'}${propertiesOpen ? '' : ' chd-main--properties-collapsed'}`}
-          style={{
-            ['--chd-layers-width' as string]: `${layersOpen ? layersWidth : COLLAPSED_PANEL}px`,
-            ['--chd-properties-width' as string]: `${propertiesOpen ? propertiesWidth : COLLAPSED_PANEL}px`,
-          }}
-        >
-          <div className="chd-panel-slot">
-            <LayersPanel collapsed={!layersOpen} onToggleCollapse={() => setLayersOpen((open) => !open)} />
-            {layersOpen ? (
-              <div
-                className="chd-panel-resizer chd-panel-resizer--end"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize layers"
-                onPointerDown={(event) => startPanelResize(event, layersWidth, 1, setLayersWidth)}
-              />
-            ) : null}
-          </div>
-          <div className="chd-stage">
-            <DesignerCanvas />
-            <PageStrip />
-          </div>
-          <div className="chd-panel-slot">
-            <PropertiesPane
-              collapsed={!propertiesOpen}
-              onToggleCollapse={() => setPropertiesOpen((open) => !open)}
-            />
-            {propertiesOpen ? (
-              <div
-                className="chd-panel-resizer chd-panel-resizer--start"
-                role="separator"
-                aria-orientation="vertical"
-                aria-label="Resize properties"
-                onPointerDown={(event) =>
-                  startPanelResize(event, propertiesWidth, -1, setPropertiesWidth)
-                }
-              />
-            ) : null}
-          </div>
-        </div>
-        {saveStatus}
-      </div>
+      <ShellBody
+        mode={mode}
+        publication={publication}
+        layersOpen={layersOpen}
+        setLayersOpen={setLayersOpen}
+        propertiesOpen={propertiesOpen}
+        setPropertiesOpen={setPropertiesOpen}
+        layersWidth={layersWidth}
+        setLayersWidth={setLayersWidth}
+        propertiesWidth={propertiesWidth}
+        setPropertiesWidth={setPropertiesWidth}
+        statusSlot={statusSlot}
+        statusClassName={statusClassName}
+        saveStatus={saveStatus}
+      />
     </DesignerProvider>
   );
 }

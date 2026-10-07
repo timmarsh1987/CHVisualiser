@@ -9,6 +9,7 @@ import './src/components/CHDesigner/index.css';
 function Preview() {
   const [document, setDocument] = useState<DesignerDocument | null>(null);
   const [status, setStatus] = useState('Loading IDML…');
+  const mode = new URLSearchParams(window.location.search).get('mode') === 'publication' ? 'publication' : 'admin';
 
   useEffect(() => {
     let cancelled = false;
@@ -57,7 +58,7 @@ function Preview() {
       >
         {status}
       </div>
-      <DesignerShell mode="admin" document={document} />
+      <DesignerShell mode={mode} document={document} />
     </>
   );
 }
