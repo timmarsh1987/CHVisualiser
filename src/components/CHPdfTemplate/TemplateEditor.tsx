@@ -8,7 +8,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import type { FlowBlock, Template } from '../../../pdf-builder/packages/render-core/src/browser';
+import type { FlowBlock, FlowRow, Template } from '../../../pdf-builder/packages/render-core/src/browser';
 import sampleProduct from '../../../pdf-builder/fixtures/examples/entity.json';
 import fallbackCatalog from '../../../pdf-builder/fixtures/examples/fields.json';
 import {
@@ -45,23 +45,323 @@ function findBlock(template: Template, id: string | null): { rowIndex: number; b
   return null;
 }
 
-function addBlock(template: Template, type: FlowBlock['type']): Template {
-  const next = structuredClone(template);
+type ContentType = 'text' | 'image' | 'table' | 'list';
+
+const COLUMN_PRESETS: Array<{ label: string; spans: number[] }> = [
+  { label: '1 column', spans: [12] },
+  { label: '2 columns', spans: [6, 6] },
+  { label: '3 columns', spans: [4, 4, 4] },
+  { label: '4 columns', spans: [3, 3, 3, 3] },
+  { label: '8 + 4', spans: [8, 4] },
+  { label: '4 + 8', spans: [4, 8] },
+];
+
+function isContentType(value: string): value is ContentType {
+  return value === 'text' || value === 'image' || value === 'table' || value === 'list';
+}
+
+function spacer(span: number): FlowBlock {
+  return { id: newId('slot'), label: 'Empty', type: 'spacer', span };
+}
+
+function contentBlock(type: ContentType, span: number): FlowBlock {
   const id = newId('block');
-  const block: FlowBlock =
-    type === 'table'
-      ? {
-          id,
-          label: 'Table',
-          type,
-          span: 12,
-          columns: [{ header: 'ProductName', binding: { kind: 'property', path: 'ProductName' }, width: 1 }],
-        }
-      : type === 'list'
-        ? { id, label: 'List', type, span: 12, binding: { kind: 'repeating', path: 'Unbound' } }
-        : { id, label: type === 'image' ? 'Image' : 'Text', type, span: 12, binding: { kind: 'property', path: 'Unbound' } };
-  next.layout?.rows.push({ id: newId('row'), blocks: [block] });
+  if (type === 'table') {
+    return {
+      id,
+      label: 'Table',
+      type,
+      span,
+      columns: [{ header: 'ProductName', binding: { kind: 'property', path: 'ProductName' }, width: 1 }],
+    };
+  }
+  if (type === 'list') {
+    return { id, label: 'List', type, span, binding: { kind: 'repeating', path: 'Unbound' } };
+  }
+  return { id, label: type === 'image' ? 'Image' : 'Text', type, span, binding: { kind: 'property', path: 'Unbound' } };
+}
+
+function addColumnRow(template: Template, spans: number[]): Template {
+  const next = structuredClone(template);
+  next.layout?.rows.push({ id: newId('row'), blocks: spans.map((span) => spacer(span)) });
   return next;
+}
+
+function findLocation(template: Template, id: string): { rowIndex: number; blockIndex: number } | null {
+  const rows = template.layout?.rows ?? [];
+  for (const [rowIndex, row] of rows.entries()) {
+    const blockIndex = row.blocks.findIndex((block) => block.id === id);
+    if (blockIndex >= 0) return { rowIndex, blockIndex };
+  }
+  return null;
+}
+
+function rowSlots(row: FlowRow): Array<{ key: string; span: number; block: FlowBlock | null; index: number | 'end' }> {
+  const slots: Array<{ key: string; span: number; block: FlowBlock | null; index: number | 'end' }> = row.blocks.map((block, index) => ({
+    key: block.id,
+    span: block.span,
+    block: block.type === 'spacer' ? null : block,
+    index,
+  }));
+  const used = row.blocks.reduce((sum, block) => sum + block.span, 0);
+  if (used < 12) slots.push({ key: `${row.id}-open`, span: 12 - used, block: null, index: 'end' });
+  return slots;
+}
+
+function placePayload(template: Template, rowIndex: number, index: number | 'end', payload: string): { template: Template; selectedId: string | null } {
+  const next = structuredClone(template);
+  const rows = next.layout?.rows ?? [];
+  const row = rows[rowIndex];
+  if (!row) return { template, selectedId: null };
+  const used = row.blocks.reduce((sum, block) => sum + block.span, 0);
+
+  if (payload.startsWith('move:')) {
+    const from = findLocation(next, payload.slice(5));
+    if (!from) return { template, selectedId: null };
+    const moving = rows[from.rowIndex]?.blocks[from.blockIndex];
+    if (!moving || moving.type === 'spacer') return { template, selectedId: null };
+    if (from.rowIndex === rowIndex && (from.blockIndex === index || index === 'end')) {
+      return { template, selectedId: moving.id };
+    }
+    const sourceSpan = moving.span;
+    if (index === 'end') {
+      if (used >= 12) return { template, selectedId: moving.id };
+      rows[from.rowIndex].blocks[from.blockIndex] = spacer(sourceSpan);
+      const placed = { ...moving, span: 12 - used };
+      row.blocks.push(placed);
+      return { template: next, selectedId: placed.id };
+    }
+    const target = row.blocks[index];
+    if (!target) return { template, selectedId: moving.id };
+    const targetSpan = target.span;
+    row.blocks[index] = { ...moving, span: targetSpan };
+    rows[from.rowIndex].blocks[from.blockIndex] =
+      target.type === 'spacer' ? spacer(sourceSpan) : { ...target, span: sourceSpan };
+    return { template: next, selectedId: moving.id };
+  }
+
+  if (!payload.startsWith('new:')) return { template, selectedId: null };
+  const type = payload.slice(4);
+  if (!isContentType(type)) return { template, selectedId: null };
+  if (index === 'end') {
+    if (used >= 12) return { template, selectedId: null };
+    const placed = contentBlock(type, 12 - used);
+    row.blocks.push(placed);
+    return { template: next, selectedId: placed.id };
+  }
+  const target = row.blocks[index];
+  if (!target || target.type !== 'spacer') return { template, selectedId: null };
+  const placed = contentBlock(type, target.span);
+  row.blocks[index] = placed;
+  return { template: next, selectedId: placed.id };
+}
+
+function reorderRow(template: Template, fromIndex: number, toIndex: number): Template {
+  const next = structuredClone(template);
+  const rows = next.layout?.rows ?? [];
+  if (!rows[fromIndex] || fromIndex === toIndex) return template;
+  const [row] = rows.splice(fromIndex, 1);
+  if (!row) return template;
+  const destination = fromIndex < toIndex ? toIndex - 1 : toIndex;
+  rows.splice(destination, 0, row);
+  return next;
+}
+
+function moveRow(template: Template, rowIndex: number, direction: -1 | 1): Template {
+  const next = structuredClone(template);
+  const rows = next.layout?.rows ?? [];
+  const target = rowIndex + direction;
+  const current = rows[rowIndex];
+  const swap = rows[target];
+  if (!current || !swap) return template;
+  rows[rowIndex] = swap;
+  rows[target] = current;
+  return next;
+}
+
+function LayoutBoard({
+  template,
+  selectedId,
+  dropTarget,
+  onSelect,
+  onDropTarget,
+  onAddRow,
+  onPlace,
+  onMoveRow,
+  onRemoveRow,
+  onReorderRow,
+}: {
+  template: Template;
+  selectedId: string | null;
+  dropTarget: string | null;
+  onSelect: (id: string) => void;
+  onDropTarget: (id: string | null) => void;
+  onAddRow: (spans: number[]) => void;
+  onPlace: (rowIndex: number, index: number | 'end', payload: string) => void;
+  onMoveRow: (rowIndex: number, direction: -1 | 1) => void;
+  onRemoveRow: (rowIndex: number) => void;
+  onReorderRow: (fromIndex: number, toIndex: number) => void;
+}) {
+  const rows = template.layout?.rows ?? [];
+  const readPayload = (event: React.DragEvent): string => event.dataTransfer.getData('text/plain');
+  return (
+    <Stack spacing={1.5} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+      <Typography variant="subtitle1">Page layout</Typography>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        {COLUMN_PRESETS.map((preset) => (
+          <Button key={preset.label} size="small" variant="outlined" onClick={() => onAddRow(preset.spans)}>
+            {preset.label}
+          </Button>
+        ))}
+      </Stack>
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+        {(['text', 'image', 'table', 'list'] as const).map((type) => (
+          <Box
+            key={type}
+            component="button"
+            type="button"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData('text/plain', `new:${type}`);
+              event.dataTransfer.effectAllowed = 'copy';
+            }}
+            sx={{
+              px: 1.5,
+              py: 1,
+              border: 1,
+              borderColor: 'primary.main',
+              borderRadius: 1,
+              bgcolor: 'background.paper',
+              color: 'primary.main',
+              cursor: 'grab',
+              textTransform: 'capitalize',
+            }}
+          >
+            {type}
+          </Box>
+        ))}
+      </Stack>
+      {rows.length === 0 ? (
+        <Typography variant="body2">Add a column layout, then drag text, image, table, or list into a column.</Typography>
+      ) : null}
+      {rows.map((row, rowIndex) => (
+        <Box
+          key={row.id}
+          onDragOver={(event) => {
+            event.preventDefault();
+            onDropTarget(row.id);
+          }}
+          onDrop={(event) => {
+            const payload = readPayload(event);
+            if (!payload.startsWith('row:')) return;
+            event.preventDefault();
+            const fromIndex = Number(payload.slice(4));
+            if (Number.isInteger(fromIndex) && fromIndex !== rowIndex) onReorderRow(fromIndex, rowIndex);
+            onDropTarget(null);
+          }}
+          sx={{
+            p: 1,
+            border: 1,
+            borderColor: dropTarget === row.id ? 'primary.main' : 'divider',
+            borderRadius: 1,
+          }}
+        >
+          <Stack direction="row" spacing={1} sx={{ alignItems: 'center', mb: 1 }}>
+            <Box
+              component="button"
+              type="button"
+              draggable
+              aria-label={`Drag row ${rowIndex + 1}`}
+              onDragStart={(event) => {
+                event.dataTransfer.setData('text/plain', `row:${rowIndex}`);
+                event.dataTransfer.effectAllowed = 'move';
+              }}
+              sx={{ border: 0, bgcolor: 'transparent', cursor: 'grab', color: 'text.secondary', px: 0.5 }}
+            >
+              Row {rowIndex + 1}
+            </Box>
+            <Button size="small" disabled={rowIndex === 0} onClick={() => onMoveRow(rowIndex, -1)}>Up</Button>
+            <Button size="small" disabled={rowIndex === rows.length - 1} onClick={() => onMoveRow(rowIndex, 1)}>Down</Button>
+            <Button size="small" color="warning" onClick={() => onRemoveRow(rowIndex)}>Remove row</Button>
+          </Stack>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: rowSlots(row).map((slot) => `${slot.span}fr`).join(' '),
+              gap: 1,
+            }}
+          >
+            {rowSlots(row).map((slot) => {
+              const active = dropTarget === slot.key;
+              return (
+                <Box
+                  key={slot.key}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onDropTarget(slot.key);
+                  }}
+                  onDragLeave={() => {
+                    if (dropTarget === slot.key) onDropTarget(null);
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const payload = readPayload(event);
+                    if (payload.startsWith('row:')) {
+                      const fromIndex = Number(payload.slice(4));
+                      if (Number.isInteger(fromIndex) && fromIndex !== rowIndex) onReorderRow(fromIndex, rowIndex);
+                      return;
+                    }
+                    onPlace(rowIndex, slot.index, payload);
+                    onDropTarget(null);
+                  }}
+                  sx={{
+                    minHeight: 84,
+                    p: 1,
+                    border: '1px dashed',
+                    borderColor: active ? 'primary.main' : 'divider',
+                    borderRadius: 1,
+                    bgcolor: active ? 'action.hover' : 'background.default',
+                  }}
+                >
+                  {slot.block ? (
+                    <Box
+                      component="button"
+                      type="button"
+                      draggable
+                      onClick={() => onSelect(slot.block?.id ?? '')}
+                      onDragStart={(event) => {
+                        event.stopPropagation();
+                        event.dataTransfer.setData('text/plain', `move:${slot.block?.id ?? ''}`);
+                        event.dataTransfer.effectAllowed = 'move';
+                      }}
+                      sx={{
+                        width: '100%',
+                        minHeight: 68,
+                        border: 0,
+                        borderRadius: 1,
+                        cursor: 'grab',
+                        textAlign: 'left',
+                        px: 1,
+                        bgcolor: slot.block.id === selectedId ? 'primary.main' : 'action.selected',
+                        color: slot.block.id === selectedId ? 'primary.contrastText' : 'text.primary',
+                      }}
+                    >
+                      <strong>{slot.block.label}</strong>
+                      <span style={{ display: 'block' }}>{slot.block.type}</span>
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Drop here</Typography>
+                  )}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      ))}
+    </Stack>
+  );
 }
 
 export default function TemplateEditor({ client, entity, options }: EditorProps) {
@@ -74,6 +374,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
   const [status, setStatus] = useState('Loading templates...');
   const [error, setError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
 
   const selected = findBlock(template, selectedId);
   const textFields = useMemo(
@@ -104,7 +405,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
           setTemplateId(match.id);
           setName(match.name);
           setTemplate(loaded);
-          setSelectedId(loaded.layout?.rows[0]?.blocks[0]?.id ?? null);
+          setSelectedId(loaded.layout?.rows.flatMap((row) => row.blocks).find((block) => block.type !== 'spacer')?.id ?? null);
         }
         setStatus(listed.length > 0 ? `${listed.length} templates.` : 'No templates yet.');
       } catch (loadError) {
@@ -148,7 +449,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     setTemplateId(loaded.id);
     setName(loaded.name);
     setTemplate(parsed);
-    setSelectedId(parsed.layout?.rows[0]?.blocks[0]?.id ?? null);
+    setSelectedId(parsed.layout?.rows.flatMap((row) => row.blocks).find((block) => block.type !== 'spacer')?.id ?? null);
     setError('');
   };
 
@@ -226,36 +527,10 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
             New template
           </Button>
         </Stack>
-        <Stack direction="row" spacing={1}>
-          {(['text', 'image', 'table', 'list'] as const).map((type) => (
-            <Button key={type} variant="outlined" onClick={() => {
-              const next = addBlock(template, type);
-              setTemplate(next);
-              setSelectedId(next.layout?.rows.at(-1)?.blocks[0]?.id ?? null);
-            }}>
-              {type}
-            </Button>
-          ))}
-        </Stack>
-        <Stack spacing={1}>
-          {template.layout?.rows.map((row) => (
-            <Stack key={row.id} direction="row" spacing={1}>
-              {row.blocks.map((block) => (
-                <Button
-                  key={block.id}
-                  variant={block.id === selectedId ? 'contained' : 'text'}
-                  onClick={() => setSelectedId(block.id)}
-                  sx={{ justifyContent: 'flex-start', textTransform: 'none' }}
-                >
-                  {block.label} · span {block.span}
-                </Button>
-              ))}
-            </Stack>
-          ))}
-        </Stack>
-        {selected ? (
+        <Typography variant="body2">Choose a column layout on the page, then drag a block into a column.</Typography>
+        {selected && selected.block.type !== 'spacer' ? (
           <Stack spacing={1}>
-            {selected.block.type !== 'table' ? (
+            {selected.block.type === 'text' || selected.block.type === 'image' || selected.block.type === 'list' ? (
               <TextField
                 select
                 label="Field"
@@ -337,38 +612,51 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
                 </TextField>
               </Stack>
             ) : null}
-            <TextField
-              label="Span"
-              type="number"
-              value={selected.block.span}
-              onChange={(event) => {
-                const span = Math.min(12, Math.max(1, Number(event.target.value) || 1));
-                updateSelected((block) => {
-                  block.span = span;
-                });
-              }}
-            />
             <Button color="warning" onClick={() => {
               const next = structuredClone(template);
               const row = next.layout?.rows[selected.rowIndex];
-              if (!row) return;
-              row.blocks = row.blocks.filter((block) => block.id !== selected.block.id);
-              if (row.blocks.length === 0) next.layout?.rows.splice(selected.rowIndex, 1);
+              const block = row?.blocks.find((item) => item.id === selected.block.id);
+              if (!row || !block) return;
+              const index = row.blocks.indexOf(block);
+              row.blocks[index] = spacer(block.span);
               setTemplate(next);
               setSelectedId(null);
             }}>
-              Delete block
+              Clear column
             </Button>
           </Stack>
         ) : (
           <Typography variant="body2">Select a block to choose its fields.</Typography>
         )}
       </Stack>
-      <Box sx={{ flex: 1, minHeight: 640, bgcolor: '#d5d5d5' }}>
-        {previewUrl ? (
-          <iframe title="PDF preview" src={previewUrl} style={{ width: '100%', height: '100%', minHeight: 640, border: 0 }} />
-        ) : null}
-      </Box>
+      <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
+        <LayoutBoard
+          template={template}
+          selectedId={selectedId}
+          dropTarget={dropTarget}
+          onSelect={setSelectedId}
+          onDropTarget={setDropTarget}
+          onAddRow={(spans) => setTemplate(addColumnRow(template, spans))}
+          onPlace={(rowIndex, index, payload) => {
+            const placed = placePayload(template, rowIndex, index, payload);
+            setTemplate(placed.template);
+            if (placed.selectedId) setSelectedId(placed.selectedId);
+          }}
+          onMoveRow={(rowIndex, direction) => setTemplate(moveRow(template, rowIndex, direction))}
+          onReorderRow={(fromIndex, toIndex) => setTemplate(reorderRow(template, fromIndex, toIndex))}
+          onRemoveRow={(rowIndex) => {
+            const next = structuredClone(template);
+            const removed = next.layout?.rows.splice(rowIndex, 1) ?? [];
+            if (removed.some((row) => row.blocks.some((block) => block.id === selectedId))) setSelectedId(null);
+            setTemplate(next);
+          }}
+        />
+        <Box sx={{ flex: 1, minHeight: 640, bgcolor: '#d5d5d5' }}>
+          {previewUrl ? (
+            <iframe title="PDF preview" src={previewUrl} style={{ width: '100%', height: '100%', minHeight: 640, border: 0 }} />
+          ) : null}
+        </Box>
+      </Stack>
     </Stack>
   );
 }

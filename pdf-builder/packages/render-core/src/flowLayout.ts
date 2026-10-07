@@ -196,7 +196,7 @@ export function layoutFlow(options: LayoutFlowOptions): LayoutFlowResult {
         content: prepared.content,
         report: prepared.report,
       });
-      reports.push(prepared.report);
+      if (block.type !== "spacer") reports.push(prepared.report);
       column += block.span;
     }
     placeRow(items, true);
@@ -220,6 +220,9 @@ function prepareBlock(
   if (block.type === "image") return prepareImage(block, options);
   if (block.type === "table") return prepareTable(block, width, options);
   if (block.type === "list") return prepareList(block, width, options);
+  if (block.type === "spacer") {
+    return { content: { kind: "empty" }, report: reportFor(block.id, "ok") };
+  }
   return prepareText(block, width, options);
 }
 

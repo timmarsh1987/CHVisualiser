@@ -7,6 +7,7 @@
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
+    "jsx": "react-jsx",
     "skipLibCheck": true,
     "noEmit": true,
     "resolveJsonModule": true,

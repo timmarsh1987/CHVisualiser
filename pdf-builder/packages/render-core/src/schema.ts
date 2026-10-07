@@ -202,11 +202,19 @@ const listBlockSchema = z
   })
   .strict();
 
+const spacerBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal("spacer"),
+  })
+  .strict();
+
 const blockSchema = z.discriminatedUnion("type", [
   textBlockSchema,
   imageBlockSchema,
   tableBlockSchema,
   listBlockSchema,
+  spacerBlockSchema,
 ]);
 
 const layoutRowSchema = z

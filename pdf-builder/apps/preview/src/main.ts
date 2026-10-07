@@ -129,10 +129,11 @@ const layoutOf = (): FlowLayout => {
 const newId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`;
 
 const bindingText = (block: FlowBlock): string => {
-  if (!block.binding) {
-    return block.type === "table" ? block.columns.map((column) => column.header).join(", ") : "";
+  if (block.type === "spacer") return "Empty";
+  if (block.type === "table") {
+    return block.binding?.path ?? block.columns.map((column) => column.header).join(", ");
   }
-  if (block.binding.kind === "relation") {
+  if (block.type === "text" && block.binding.kind === "relation") {
     return block.binding.property === "Unbound" ? block.binding.path : `${block.binding.path}>${block.binding.property}`;
   }
   return block.binding.path;
@@ -246,7 +247,7 @@ const applyField = (fieldId: string): void => {
     block.binding = { kind: "property", path: field.path };
   } else if (block.type === "list") {
     block.binding = { kind: "repeating", path: field.path };
-  } else {
+  } else if (block.type === "table") {
     block.binding = { kind: "repeating", path: field.path };
     block.columns = (field.columns ?? [{ header: "Column", path: "Value", width: 1 }]).map((column) => ({
       header: column.header,
@@ -337,7 +338,7 @@ const paintInspector = (): void => {
   empty.value = "";
   empty.textContent = "Choose a field";
   fieldSelect.append(empty);
-  const currentPath = found.block.binding?.path ?? "";
+  const currentPath = found.block.type === "spacer" ? "" : found.block.type === "table" ? found.block.binding?.path ?? "" : found.block.binding.path;
   for (const field of matching) {
     const option = document.createElement("option");
     option.value = field.id;

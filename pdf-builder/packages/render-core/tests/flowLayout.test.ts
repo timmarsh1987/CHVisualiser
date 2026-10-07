@@ -75,6 +75,27 @@ describe("column geometry", () => {
       ["right", 309, 267],
     ]);
   });
+
+  it("keeps an empty column and places the next block beside it", () => {
+    const template = flowTemplate([
+      {
+        id: "row-1",
+        blocks: [
+          { id: "gap", label: "Empty", type: "spacer", span: 6 },
+          {
+            id: "right",
+            label: "Right",
+            type: "text",
+            span: 6,
+            binding: { kind: "property", path: "Right" },
+          },
+        ],
+      },
+    ]);
+    const laid = place(template, { Right: "Two" });
+    expect(laid.pages[0]?.map((block) => [block.blockId, block.x, block.width])).toEqual([["right", 309, 267]]);
+    expect(laid.reports.map((report) => report.regionId)).toEqual(["right"]);
+  });
 });
 
 describe("layoutFlow", () => {
