@@ -1,0 +1,50 @@
+{
+  "id": "example-overlay",
+  "name": "Example overlay",
+  "version": 1,
+  "language": "en",
+  "fonts": [
+    {
+      "family": "Liberation Sans",
+      "regular": "LiberationSans-Regular.ttf",
+      "bold": "LiberationSans-Bold.ttf",
+      "italic": "LiberationSans-Italic.ttf",
+      "boldItalic": "LiberationSans-BoldItalic.ttf"
+    }
+  ],
+  "defaults": {
+    "fontFamily": "Liberation Sans",
+    "fontSize": 12,
+    "color": "#000000"
+  },
+  "pages": [
+    {
+      "pageIndex": 0,
+      "size": { "width": 612, "height": 792 },
+      "regions": [
+        {
+          "id": "heading",
+          "label": "Heading",
+          "type": "static",
+          "text": "Data sheet",
+          "rect": { "x": 72, "y": 72, "width": 240, "height": 24 },
+          "style": { "fontSize": 16, "color": "#000000", "align": "left", "lineHeight": 1.2, "bold": true }
+        },
+        {
+          "id": "title",
+          "label": "Title",
+          "type": "text",
+          "binding": { "kind": "property", "path": "Title" },
+          "rect": { "x": 72, "y": 108, "width": 360, "height": 24 },
+          "style": {
+            "fontSize": 12,
+            "minSize": 8,
+            "color": "#000000",
+            "align": "left",
+            "lineHeight": 1.2
+          }
+        }
+      ]
+    }
+  ]
+}

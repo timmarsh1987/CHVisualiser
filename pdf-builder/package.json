@@ -1,0 +1,18 @@
+{
+  "name": "pdf-builder",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@10.32.1",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild"]
+  },
+  "scripts": {
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "render": "node scripts/render.mjs",
+    "preview": "pnpm --filter @pdfbuilder/preview dev"
+  }
+}

@@ -1,0 +1,436 @@
+{
+  "fields": [
+    {
+      "id": "identifier",
+      "label": "identifier",
+      "kind": "text",
+      "path": "identifier"
+    },
+    {
+      "id": "ProductName",
+      "label": "ProductName",
+      "kind": "text",
+      "path": "ProductName"
+    },
+    {
+      "id": "ProductNumber",
+      "label": "ProductNumber",
+      "kind": "text",
+      "path": "ProductNumber"
+    },
+    {
+      "id": "MarketingNotes",
+      "label": "MarketingNotes",
+      "kind": "text",
+      "path": "MarketingNotes"
+    },
+    {
+      "id": "MarketingNotes2",
+      "label": "MarketingNotes2",
+      "kind": "text",
+      "path": "MarketingNotes2"
+    },
+    {
+      "id": "HotelName",
+      "label": "HotelName",
+      "kind": "text",
+      "path": "HotelName"
+    },
+    {
+      "id": "URL",
+      "label": "URL",
+      "kind": "text",
+      "path": "URL"
+    },
+    {
+      "id": "Address",
+      "label": "Address",
+      "kind": "text",
+      "path": "Address"
+    },
+    {
+      "id": "CheckInTime",
+      "label": "CheckInTime",
+      "kind": "text",
+      "path": "CheckInTime"
+    },
+    {
+      "id": "CheckOutTime",
+      "label": "CheckOutTime",
+      "kind": "text",
+      "path": "CheckOutTime"
+    },
+    {
+      "id": "Brand",
+      "label": "Brand",
+      "kind": "text",
+      "path": "Brand"
+    },
+    {
+      "id": "Country",
+      "label": "Country",
+      "kind": "text",
+      "path": "Country"
+    },
+    {
+      "id": "Amenities",
+      "label": "Amenities",
+      "kind": "text",
+      "path": "Amenities"
+    },
+    {
+      "id": "Facilities",
+      "label": "Facilities",
+      "kind": "text",
+      "path": "Facilities"
+    },
+    {
+      "id": "FacilityOneName",
+      "label": "FacilityOneName",
+      "kind": "text",
+      "path": "FacilityOneName"
+    },
+    {
+      "id": "FacilityOneDescription",
+      "label": "FacilityOneDescription",
+      "kind": "text",
+      "path": "FacilityOneDescription"
+    },
+    {
+      "id": "FacilityOneHours",
+      "label": "FacilityOneHours",
+      "kind": "text",
+      "path": "FacilityOneHours"
+    },
+    {
+      "id": "FacilityTwoName",
+      "label": "FacilityTwoName",
+      "kind": "text",
+      "path": "FacilityTwoName"
+    },
+    {
+      "id": "FacilityTwoDescription",
+      "label": "FacilityTwoDescription",
+      "kind": "text",
+      "path": "FacilityTwoDescription"
+    },
+    {
+      "id": "FacilityTwoHours",
+      "label": "FacilityTwoHours",
+      "kind": "text",
+      "path": "FacilityTwoHours"
+    },
+    {
+      "id": "FacilityThreeName",
+      "label": "FacilityThreeName",
+      "kind": "text",
+      "path": "FacilityThreeName"
+    },
+    {
+      "id": "FacilityThreeDescription",
+      "label": "FacilityThreeDescription",
+      "kind": "text",
+      "path": "FacilityThreeDescription"
+    },
+    {
+      "id": "FacilityThreeHours",
+      "label": "FacilityThreeHours",
+      "kind": "text",
+      "path": "FacilityThreeHours"
+    },
+    {
+      "id": "MenuName",
+      "label": "MenuName",
+      "kind": "text",
+      "path": "MenuName"
+    },
+    {
+      "id": "MenuItems",
+      "label": "MenuItems",
+      "kind": "text",
+      "path": "MenuItems"
+    },
+    {
+      "id": "MenuSectionATitle",
+      "label": "MenuSectionATitle",
+      "kind": "text",
+      "path": "MenuSectionATitle"
+    },
+    {
+      "id": "MenuSectionAItemTitle1",
+      "label": "MenuSectionAItemTitle1",
+      "kind": "text",
+      "path": "MenuSectionAItemTitle1"
+    },
+    {
+      "id": "MenuSectionAItemDescription1",
+      "label": "MenuSectionAItemDescription1",
+      "kind": "text",
+      "path": "MenuSectionAItemDescription1"
+    },
+    {
+      "id": "MenuSectionAItemPrice1",
+      "label": "MenuSectionAItemPrice1",
+      "kind": "text",
+      "path": "MenuSectionAItemPrice1"
+    },
+    {
+      "id": "MenuSectionAItemTitle2",
+      "label": "MenuSectionAItemTitle2",
+      "kind": "text",
+      "path": "MenuSectionAItemTitle2"
+    },
+    {
+      "id": "MenuSectionAItemDescription2",
+      "label": "MenuSectionAItemDescription2",
+      "kind": "text",
+      "path": "MenuSectionAItemDescription2"
+    },
+    {
+      "id": "MenuSectionAItemPrice2",
+      "label": "MenuSectionAItemPrice2",
+      "kind": "text",
+      "path": "MenuSectionAItemPrice2"
+    },
+    {
+      "id": "MenuSectionBTitle",
+      "label": "MenuSectionBTitle",
+      "kind": "text",
+      "path": "MenuSectionBTitle"
+    },
+    {
+      "id": "MenuSectionBItemTitle1",
+      "label": "MenuSectionBItemTitle1",
+      "kind": "text",
+      "path": "MenuSectionBItemTitle1"
+    },
+    {
+      "id": "MenuSectionBItemDescription1",
+      "label": "MenuSectionBItemDescription1",
+      "kind": "text",
+      "path": "MenuSectionBItemDescription1"
+    },
+    {
+      "id": "MenuSectionBItemPrice1",
+      "label": "MenuSectionBItemPrice1",
+      "kind": "text",
+      "path": "MenuSectionBItemPrice1"
+    },
+    {
+      "id": "ManagerName",
+      "label": "ManagerName",
+      "kind": "text",
+      "path": "ManagerName"
+    },
+    {
+      "id": "ManagerTitle",
+      "label": "ManagerTitle",
+      "kind": "text",
+      "path": "ManagerTitle"
+    },
+    {
+      "id": "ManagerHotel1Name",
+      "label": "ManagerHotel1Name",
+      "kind": "text",
+      "path": "ManagerHotel1Name"
+    },
+    {
+      "id": "ManagerHotel1Address",
+      "label": "ManagerHotel1Address",
+      "kind": "text",
+      "path": "ManagerHotel1Address"
+    },
+    {
+      "id": "ManagerHotel1Email",
+      "label": "ManagerHotel1Email",
+      "kind": "text",
+      "path": "ManagerHotel1Email"
+    },
+    {
+      "id": "ManagerHotel2Name",
+      "label": "ManagerHotel2Name",
+      "kind": "text",
+      "path": "ManagerHotel2Name"
+    },
+    {
+      "id": "ManagerHotel2Address",
+      "label": "ManagerHotel2Address",
+      "kind": "text",
+      "path": "ManagerHotel2Address"
+    },
+    {
+      "id": "ManagerHotel2Email",
+      "label": "ManagerHotel2Email",
+      "kind": "text",
+      "path": "ManagerHotel2Email"
+    },
+    {
+      "id": "ManagerHotel1Brand",
+      "label": "ManagerHotel1Brand",
+      "kind": "text",
+      "path": "ManagerHotel1Brand"
+    },
+    {
+      "id": "ManagerHotel2Brand",
+      "label": "ManagerHotel2Brand",
+      "kind": "text",
+      "path": "ManagerHotel2Brand"
+    },
+    {
+      "id": "PublishStatusDetails",
+      "label": "PublishStatusDetails",
+      "kind": "text",
+      "path": "PublishStatusDetails"
+    },
+    {
+      "id": "M.PCM.Product.IsVariant",
+      "label": "M.PCM.Product.IsVariant",
+      "kind": "text",
+      "path": "M.PCM.Product.IsVariant"
+    },
+    {
+      "id": "ProductLabel",
+      "label": "ProductLabel",
+      "kind": "localized",
+      "path": "ProductLabel"
+    },
+    {
+      "id": "ProductShortDescription",
+      "label": "ProductShortDescription",
+      "kind": "localized",
+      "path": "ProductShortDescription"
+    },
+    {
+      "id": "ProductLongDescription",
+      "label": "ProductLongDescription",
+      "kind": "localized",
+      "path": "ProductLongDescription"
+    },
+    {
+      "id": "PublishStatus",
+      "label": "PublishStatus",
+      "kind": "option",
+      "path": "PublishStatus"
+    },
+    {
+      "id": "created_on",
+      "label": "created_on",
+      "kind": "text",
+      "path": "created_on"
+    },
+    {
+      "id": "modified_on",
+      "label": "modified_on",
+      "kind": "text",
+      "path": "modified_on"
+    },
+    {
+      "id": "PCMProductFamilyToProduct",
+      "label": "PCMProductFamilyToProduct",
+      "kind": "relation",
+      "path": "PCMProductFamilyToProduct"
+    },
+    {
+      "id": "PCMProductToMasterAsset",
+      "label": "PCMProductToMasterAsset",
+      "kind": "relation",
+      "path": "PCMProductToMasterAsset"
+    },
+    {
+      "id": "EpamCustomerToProduct",
+      "label": "EpamCustomerToProduct",
+      "kind": "relation",
+      "path": "EpamCustomerToProduct"
+    },
+    {
+      "id": "EpamHotelToProduct",
+      "label": "EpamHotelToProduct",
+      "kind": "relation",
+      "path": "EpamHotelToProduct"
+    },
+    {
+      "id": "ProductToHotelAsset",
+      "label": "ProductToHotelAsset",
+      "kind": "relation",
+      "path": "ProductToHotelAsset"
+    },
+    {
+      "id": "EpamMenuToProduct",
+      "label": "EpamMenuToProduct",
+      "kind": "relation",
+      "path": "EpamMenuToProduct"
+    },
+    {
+      "id": "EpamManagerToProduct",
+      "label": "EpamManagerToProduct",
+      "kind": "relation",
+      "path": "EpamManagerToProduct"
+    },
+    {
+      "id": "PCMProductToChiliPublication",
+      "label": "PCMProductToChiliPublication",
+      "kind": "relation",
+      "path": "PCMProductToChiliPublication"
+    },
+    {
+      "id": "PCMProductStatusToProduct",
+      "label": "PCMProductStatusToProduct",
+      "kind": "relation",
+      "path": "PCMProductStatusToProduct"
+    },
+    {
+      "id": "PCMCatalogToProduct",
+      "label": "PCMCatalogToProduct",
+      "kind": "relation",
+      "path": "PCMCatalogToProduct"
+    },
+    {
+      "id": "PCMProductToDiscussion",
+      "label": "PCMProductToDiscussion",
+      "kind": "relation",
+      "path": "PCMProductToDiscussion"
+    },
+    {
+      "id": "MPCMProductToStateMachine",
+      "label": "MPCMProductToStateMachine",
+      "kind": "relation",
+      "path": "MPCMProductToStateMachine"
+    },
+    {
+      "id": "MPCMProductToAvailableRoute",
+      "label": "MPCMProductToAvailableRoute",
+      "kind": "relation",
+      "path": "MPCMProductToAvailableRoute"
+    },
+    {
+      "id": "MPCMProductToActiveState",
+      "label": "MPCMProductToActiveState",
+      "kind": "relation",
+      "path": "MPCMProductToActiveState"
+    },
+    {
+      "id": "StateUserToMPCMProduct",
+      "label": "StateUserToMPCMProduct",
+      "kind": "relation",
+      "path": "StateUserToMPCMProduct"
+    },
+    {
+      "id": "AssignedUserToMPCMProduct",
+      "label": "AssignedUserToMPCMProduct",
+      "kind": "relation",
+      "path": "AssignedUserToMPCMProduct"
+    },
+    {
+      "id": "AssignedUserGroupToMPCMProduct",
+      "label": "AssignedUserGroupToMPCMProduct",
+      "kind": "relation",
+      "path": "AssignedUserGroupToMPCMProduct"
+    },
+    {
+      "id": "ProductToProductVariant",
+      "label": "ProductToProductVariant",
+      "kind": "relation",
+      "path": "ProductToProductVariant"
+    }
+  ]
+}

@@ -1,0 +1,174 @@
+body {
+  margin: 0;
+  color: #1a1a1a;
+  background: #f4f4f4;
+  font-family: "Segoe UI", sans-serif;
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(360px, 1fr);
+  height: 100vh;
+}
+
+#controls {
+  padding: 20px;
+  overflow: auto;
+  background: #fff;
+  border-right: 1px solid #ddd;
+}
+
+h1 {
+  margin: 0 0 8px;
+  font-size: 20px;
+}
+
+p {
+  margin: 0 0 16px;
+  line-height: 1.4;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 14px;
+}
+
+label[hidden] {
+  display: none;
+}
+
+input[type="number"],
+input[type="text"],
+select {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  box-sizing: border-box;
+  padding: 8px;
+  font: inherit;
+}
+
+#palette {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+#palette button,
+.inspector-actions button,
+#download-json {
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.canvas {
+  min-height: 180px;
+  margin-bottom: 16px;
+  padding: 8px;
+  border: 1px dashed #b5b5b5;
+  background: #fafafa;
+}
+
+.canvas.drag-over {
+  background: #eef5ff;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+  padding: 4px;
+  background: #f0f0f0;
+}
+
+.block {
+  min-height: 52px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.block.selected {
+  border-color: #1d4e89;
+  box-shadow: inset 0 0 0 1px #1d4e89;
+}
+
+.block strong,
+.block span {
+  display: block;
+}
+
+.block span {
+  color: #555;
+  font-size: 12px;
+}
+
+.drop-hint {
+  margin: 24px 0;
+  color: #666;
+  text-align: center;
+}
+
+.inspector-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.column-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.file-row {
+  display: flex;
+  gap: 16px;
+  align-items: end;
+}
+
+.file-row label {
+  margin: 0;
+}
+
+#status {
+  min-height: 1.4em;
+}
+
+#status.error {
+  color: #8a1f1f;
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+#sheet-wrap {
+  overflow: auto;
+  padding: 24px;
+  background: #d5d5d5;
+}
+
+#pages {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+canvas {
+  display: block;
+  margin: 0 auto;
+  background: #fff;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.25);
+}

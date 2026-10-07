@@ -20,6 +20,8 @@ const COMPONENTS = [
   "CHImageDetection",
   "CHC2PAProvenance",
   "CHImageComposer",
+  "CHPdfTemplate",
+  "CHPdfSheet",
 ];
 const distDir = path.join(__dirname, "../../dist");
 

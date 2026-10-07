@@ -1,0 +1,66 @@
+{
+  "id": "m-pcm-product",
+  "name": "M.PCM.Product sheet",
+  "version": 1,
+  "language": "en",
+  "fonts": [
+    {
+      "family": "Liberation Sans",
+      "regular": "LiberationSans-Regular.ttf",
+      "bold": "LiberationSans-Bold.ttf",
+      "italic": "LiberationSans-Italic.ttf",
+      "boldItalic": "LiberationSans-BoldItalic.ttf"
+    }
+  ],
+  "defaults": {
+    "fontFamily": "Liberation Sans",
+    "fontSize": 12,
+    "color": "#000000"
+  },
+  "pages": [
+    {
+      "pageIndex": 0,
+      "size": { "width": 612, "height": 792 },
+      "regions": []
+    }
+  ],
+  "layout": {
+    "columnCount": 12,
+    "margin": 36,
+    "columnGap": 6,
+    "rowGap": 10,
+    "rows": [
+      {
+        "id": "row-name",
+        "blocks": [
+          {
+            "id": "product-name",
+            "label": "ProductName",
+            "type": "text",
+            "span": 8,
+            "binding": { "kind": "property", "path": "ProductName" }
+          },
+          {
+            "id": "publish-status",
+            "label": "PublishStatus",
+            "type": "text",
+            "span": 4,
+            "binding": { "kind": "property", "path": "PublishStatus" }
+          }
+        ]
+      },
+      {
+        "id": "row-summary",
+        "blocks": [
+          {
+            "id": "short-description",
+            "label": "ProductShortDescription",
+            "type": "text",
+            "span": 12,
+            "binding": { "kind": "property", "path": "ProductShortDescription" }
+          }
+        ]
+      }
+    ]
+  }
+}

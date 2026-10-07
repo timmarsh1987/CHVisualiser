@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Column template builder</title>
+    <link rel="stylesheet" href="/src/preview.css" />
+  </head>
+  <body>
+    <main>
+      <section id="controls">
+        <h1>Column template builder</h1>
+        <p>Drop a block on the page. Choose a product field and the sample product fills the PDF.</p>
+        <div id="palette" aria-label="Blocks">
+          <button type="button" draggable="true" data-block="text">Text</button>
+          <button type="button" draggable="true" data-block="image">Image</button>
+          <button type="button" draggable="true" data-block="table">Table</button>
+          <button type="button" draggable="true" data-block="list">List</button>
+        </div>
+        <div id="canvas" class="canvas" aria-label="Template page"></div>
+        <div id="inspector">
+          <p id="inspector-empty">Select a block.</p>
+          <div id="inspector-fields" hidden>
+            <label>
+              Field
+              <select id="field"></select>
+            </label>
+            <label id="relation-property-label" hidden>
+              Related property
+              <input id="relation-property" type="text" autocomplete="off" />
+            </label>
+            <label>
+              Span
+              <input id="span" type="number" min="1" max="12" step="1" />
+            </label>
+            <div id="table-columns" hidden>
+              <p>Columns</p>
+              <div id="column-list"></div>
+              <label>
+                Add column
+                <select id="add-column"></select>
+              </label>
+            </div>
+            <div class="inspector-actions">
+              <button type="button" id="move-up">Move up</button>
+              <button type="button" id="move-down">Move down</button>
+              <button type="button" id="delete-block">Delete</button>
+            </div>
+          </div>
+        </div>
+        <p class="file-row">
+          <button type="button" id="download-json">Download JSON</button>
+          <label>
+            Upload JSON
+            <input id="upload-json" type="file" accept="application/json,.json" />
+          </label>
+        </p>
+        <p><a id="download" href="#">Download PDF</a></p>
+        <p id="status" role="status"></p>
+        <pre id="report"></pre>
+      </section>
+      <div id="sheet-wrap">
+        <div id="pages"></div>
+      </div>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

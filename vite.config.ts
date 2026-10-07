@@ -21,6 +21,8 @@ export const COMPONENTS = [
   "CHImageDetection",
   "CHC2PAProvenance",
   "CHImageComposer",
+  "CHPdfTemplate",
+  "CHPdfSheet",
 ] as const;
 export type ComponentName = (typeof COMPONENTS)[number];
 
