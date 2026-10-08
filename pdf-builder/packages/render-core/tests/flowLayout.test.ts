@@ -184,6 +184,36 @@ describe("layoutFlow", () => {
     expect(laid.reports[0]?.message).toContain("Continued on the next page.");
   });
 
+  it("uses the related asset id as the image key", () => {
+    const template = flowTemplate([
+      {
+        id: "row-1",
+        blocks: [
+          {
+            id: "photo",
+            label: "Image",
+            type: "image",
+            span: 12,
+            binding: { kind: "property", path: "PCMProductToMasterAsset" },
+          },
+        ],
+      },
+    ]);
+    const layout = template.layout;
+    if (!layout) throw new Error("Expected a flow layout.");
+    const laid = layoutFlow({
+      pageWidth: 612,
+      pageHeight: 792,
+      layout,
+      data: { PCMProductToMasterAsset: [{ id: 60735, FileName: "pill-image-1.jpg" }] },
+      defaults,
+      measure,
+      imageSize: (key) => (key === "60735" ? { width: 612, height: 431 } : null),
+    });
+    expect(laid.pages[0]?.[0]?.draw).toEqual({ type: "image", key: "60735" });
+    expect(laid.reports[0]?.status).toBe("ok");
+  });
+
   it("reads chosen product fields as one table row when the table has no repeating group", () => {
     const template = flowTemplate([
       {

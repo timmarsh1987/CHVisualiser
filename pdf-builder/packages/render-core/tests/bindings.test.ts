@@ -33,6 +33,22 @@ describe("resolveBinding", () => {
     if (resolved.status === "ok") expect(resolved.value).toHaveLength(2);
   });
 
+  it("reads a property from the first related record", () => {
+    const related = {
+      PCMProductStatusToProduct: [{ ProductStatusName: "Approved" }],
+      PCMProductToMasterAsset: [{ id: 60735, FileName: "pill-image-1.jpg" }],
+    };
+    expect(
+      resolveBinding(
+        { kind: "relation", path: "PCMProductStatusToProduct", property: "ProductStatusName" },
+        related,
+      ),
+    ).toEqual({ status: "ok", value: "Approved" });
+    expect(
+      resolveBinding({ kind: "relation", path: "PCMProductToMasterAsset", property: "FileName" }, related),
+    ).toEqual({ status: "ok", value: "pill-image-1.jpg" });
+  });
+
   it("reads a property whose name contains dots", () => {
     expect(resolveBinding({ kind: "property", path: "M.PCM.Product.IsVariant" }, { "M.PCM.Product.IsVariant": false })).toEqual({
       status: "ok",

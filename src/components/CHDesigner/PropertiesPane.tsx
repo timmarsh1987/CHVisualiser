@@ -659,11 +659,13 @@ export default function PropertiesPane({
                       }
                     >
                       <option value="">None</option>
-                      {(document.fields ?? []).map((item) => (
-                        <option key={item.id} value={item.id}>
-                          {item.label} ({magicStringFor(item)})
-                        </option>
-                      ))}
+                      {(document.fields ?? [])
+                        .filter((item) => item.kind !== 'image')
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label} ({magicStringFor(item)})
+                          </option>
+                        ))}
                     </select>
                   </label>
                   {field ? (
@@ -759,6 +761,52 @@ export default function PropertiesPane({
 
           {canEditContent && layer.type === 'image' && (
             <Section title="Image">
+              {isAdmin ? (
+                <>
+                  <label className="chd-field">
+                    <span>Generation field</span>
+                    <select
+                      value={layer.fieldId || ''}
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'SET_LAYER_FIELD',
+                          layerId: layer.id,
+                          fieldId: e.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">None</option>
+                      {(document.fields ?? [])
+                        .filter((item) => item.kind === 'image')
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label} ({magicStringFor(item)})
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  {layer.fieldId ? (
+                    <p className="chd-field-hint">
+                      A generation row replaces this image. The picture on the page stays as the sample.
+                    </p>
+                  ) : (
+                    <button
+                      type="button"
+                      className="chd-btn"
+                      onClick={() =>
+                        dispatch({
+                          type: 'ADD_FIELD',
+                          kind: 'image',
+                          label: layer.name || 'Image',
+                          layerId: layer.id,
+                        })
+                      }
+                    >
+                      Create image field
+                    </button>
+                  )}
+                </>
+              ) : null}
               <div className="chd-image-source">
                 <span>Image</span>
                 <AssetPicker

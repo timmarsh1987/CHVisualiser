@@ -1,7 +1,7 @@
 import { cloneDocument, createLayerId } from './document';
 import { syncActiveTemplatePage } from './templateSettings';
 import { reflowTextStory } from './textFlow';
-import type { DesignerDocument, DesignerField, Layer } from './types';
+import type { DesignerDocument, DesignerField, DesignerFieldKind, Layer } from './types';
 
 export function magicStringFor(field: Pick<DesignerField, 'key'>): string {
   return `{{${field.key}}}`;
@@ -62,13 +62,11 @@ export function assignMagicStrings(doc: DesignerDocument): DesignerDocument {
 
   const copy = syncActiveTemplatePage(cloneDocument(doc));
   const fields = [...(copy.fields ?? [])];
-  const used = new Set(fields.map((field) => field.key));
   for (const layers of layerLists(copy)) {
     for (const layer of layers) {
       if (!canTakeField(layer)) continue;
       const label = fieldLabelFromText(layer.text, layer.name);
-      const key = uniqueKey(slugFieldKey(label), used);
-      const field: DesignerField = { id: `field-${createLayerId()}`, key, label };
+      const field = createDesignerField(fields, label, 'text');
       fields.push(field);
       layer.fieldId = field.id;
     }
@@ -87,8 +85,8 @@ function filledValues(values: Record<string, string> | undefined): Record<string
 }
 
 /**
- * Copy the document and replace each bound story with its entered value.
- * An empty value leaves the sample. Overflow then uses the existing text reflow.
+ * Copy the document and replace each bound story or image with its entered value.
+ * An empty value leaves the sample. Text overflow then uses the existing reflow.
  */
 export function resolveFieldText(
   doc: DesignerDocument,
@@ -101,9 +99,14 @@ export function resolveFieldText(
   const touched: string[] = [];
   for (const layers of layerLists(copy)) {
     for (const layer of layers) {
-      if (!layer.fieldId || layer.continuesFrom) continue;
+      if (!layer.fieldId) continue;
       const value = filled[layer.fieldId];
-      if (value === undefined || (layer.text || '') === value) continue;
+      if (value === undefined) continue;
+      if (layer.type === 'image') {
+        if ((layer.src || '') !== value) layer.src = value;
+        continue;
+      }
+      if (layer.continuesFrom || (layer.text || '') === value) continue;
       layer.text = value;
       touched.push(layer.id);
     }
@@ -191,4 +194,160 @@ export function parseBatchCsv(csv: string, fields: DesignerField[]): BatchCsv {
     return values;
   });
   return { rows, unmatched };
+}
+
+export function fieldKind(field: Pick<DesignerField, 'kind'>): DesignerFieldKind {
+  return field.kind === 'image' ? 'image' : 'text';
+}
+
+export function createDesignerField(
+  existing: DesignerField[],
+  label: string,
+  kind: DesignerFieldKind
+): DesignerField {
+  const used = new Set(existing.map((field) => field.key));
+  const safeLabel = label.trim() || (kind === 'image' ? 'Image' : 'Text');
+  const field: DesignerField = {
+    id: `field-${createLayerId()}`,
+    key: uniqueKey(slugFieldKey(safeLabel), used),
+    label: safeLabel,
+  };
+  if (kind === 'image') field.kind = 'image';
+  return field;
+}
+
+export interface FieldCatalogEntry {
+  id: string;
+  label: string;
+  kind: string;
+  path: string;
+}
+
+function compactName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+/** Suggested product member when the field has no stored mapping yet. */
+export function suggestFieldSource(field: DesignerField, catalog: FieldCatalogEntry[]): string | undefined {
+  if (field.source) return field.source.path.trim() || undefined;
+  const needles = [field.key, field.label].map(compactName).filter((name) => name.length > 1);
+  const image = fieldKind(field) === 'image';
+  const pool = catalog.filter((entry) =>
+    image ? entry.kind === 'relation' || entry.kind === 'image' : entry.kind !== 'relation'
+  );
+  const hit = pool.find((entry) => {
+    const names = [entry.id, entry.label, entry.path].map(compactName);
+    return names.some((name) => needles.includes(name));
+  });
+  return hit?.path;
+}
+
+/** Text stored on a product property, including option lists and localized bags. */
+export function propertyText(value: unknown): string {
+  if (value == null) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => propertyText(item))
+      .filter(Boolean)
+      .join(', ');
+  }
+  if (typeof value !== 'object') return '';
+  const record = value as Record<string, unknown>;
+  if (typeof record.Invariant === 'string' && record.Invariant.trim()) return record.Invariant.trim();
+  if (typeof record.invariant === 'string' && record.invariant.trim()) return record.invariant.trim();
+  const labels = record.labels ?? record.Labels;
+  if (labels && typeof labels === 'object' && !Array.isArray(labels)) {
+    const first = Object.values(labels as Record<string, unknown>).find(
+      (item) => typeof item === 'string' && item.trim()
+    );
+    if (typeof first === 'string') return first.trim();
+  }
+  for (const key of ['en-US', 'en-us', 'value', 'Value']) {
+    const text = record[key];
+    if (typeof text === 'string' && text.trim()) return text.trim();
+  }
+  if (typeof record.identifier === 'string' && record.identifier.trim() && !record.href) {
+    return record.identifier.trim();
+  }
+  const firstString = Object.values(record).find((item) => typeof item === 'string' && item.trim());
+  if (typeof firstString === 'string' && !firstString.includes('/api/')) return firstString.trim();
+  return '';
+}
+
+export function valuesForProduct(
+  fields: DesignerField[],
+  data: Record<string, unknown>,
+  catalog: FieldCatalogEntry[],
+  images: Record<string, string>
+): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const field of fields) {
+    if (fieldKind(field) === 'image') {
+      const image = images[field.id];
+      if (image?.trim()) values[field.id] = image.trim();
+      continue;
+    }
+    const path = field.source?.path?.trim() || suggestFieldSource(field, catalog);
+    if (!path) continue;
+    const text = propertyText(data[path]);
+    if (text) values[field.id] = text;
+  }
+  return values;
+}
+
+export interface GenerationRow {
+  id: string;
+  label: string;
+  source: 'product' | 'csv';
+  productId?: number;
+  values: Record<string, string>;
+}
+
+export function isDirectImageValue(value: string): boolean {
+  return /^(https?:|data:image\/)/i.test(value.trim());
+}
+
+/** A CSV image cell that points at a Content Hub asset rather than a URL. */
+export function assetIdFromImageCell(value: string): number | null {
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) {
+    const id = Number(trimmed);
+    return Number.isSafeInteger(id) && id > 0 ? id : null;
+  }
+  const match = trimmed.match(/\/api\/entities\/(\d+)/i);
+  if (!match) return null;
+  const id = Number(match[1]);
+  return Number.isSafeInteger(id) && id > 0 ? id : null;
+}
+
+export function rowsFromBatchCsv(parsed: BatchCsv, idPrefix: string): GenerationRow[] {
+  return parsed.rows.map((values, index) => {
+    const text = Object.values(values).find((value) => value.trim() && !isDirectImageValue(value));
+    return {
+      id: `${idPrefix}-${index + 1}`,
+      label: (text || `Row ${index + 1}`).trim().slice(0, 80),
+      source: 'csv',
+      values,
+    };
+  });
+}
+
+export function generationFileStem(row: Pick<GenerationRow, 'label' | 'productId'>, templateId?: string): string {
+  const slug = slugFieldKey(row.label).replace(/_/g, '-');
+  const parts = [slug || 'output'];
+  if (templateId) parts.push(`t${templateId}`);
+  if (row.productId) parts.push(`p${row.productId}`);
+  return parts.join('-').slice(0, 90);
+}
+
+const PRODUCT_LABEL_KEYS = ['ProductName', 'ProductLabel', 'Title', 'Name', 'DisplayName', 'identifier'];
+
+export function productLabelFromData(data: Record<string, unknown>): string {
+  for (const key of PRODUCT_LABEL_KEYS) {
+    const text = propertyText(data[key]);
+    if (text) return text.slice(0, 80);
+  }
+  return '';
 }

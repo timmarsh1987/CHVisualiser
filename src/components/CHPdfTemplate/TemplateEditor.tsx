@@ -16,6 +16,7 @@ import {
   ensurePdfTemplateDefinition,
   listPdfTemplates,
   loadPdfTemplate,
+  loadPreviewProduct,
   loadProductFields,
   pageEntityId,
   savePdfTemplate,
@@ -267,11 +268,16 @@ function structureText(block: LeafBlock): string {
   return 'Text';
 }
 
+function tableColumnFields(fields: CatalogField[]): CatalogField[] {
+  return fields.filter((field) => field.kind === 'text' || field.kind === 'localized' || field.kind === 'option');
+}
+
 function choicesFor(block: LeafBlock, fields: CatalogField[]): CatalogField[] {
   if (block.type === 'text') {
     return fields.filter((field) => field.kind === 'text' || field.kind === 'localized' || field.kind === 'option' || field.kind === 'relation');
   }
-  if (block.type === 'image' || block.type === 'list') return fields.filter((field) => field.kind === block.type);
+  if (block.type === 'image') return fields.filter((field) => field.kind === 'image' || field.kind === 'relation');
+  if (block.type === 'list') return fields.filter((field) => field.kind === block.type);
   return [];
 }
 
@@ -286,6 +292,68 @@ function applyCatalogField(block: FlowBlock, field: CatalogField): void {
   } else {
     block.binding = { kind: 'repeating', path: field.path };
   }
+}
+
+function isTextValue(value: unknown): boolean {
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  if (typeof record.identifier === 'string') return true;
+  const entries = Object.values(record);
+  return entries.length > 0 && entries.every((item) => typeof item === 'string');
+}
+
+function relationPropertyNames(data: Record<string, unknown>, path: string): string[] {
+  const value = data[path];
+  const record = Array.isArray(value) ? value[0] : value;
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return [];
+  return Object.entries(record)
+    .filter(([key, item]) => key !== 'id' && isTextValue(item))
+    .map(([key]) => key);
+}
+
+function RelationPropertyField({
+  value,
+  names,
+  onChange,
+  size,
+}: {
+  value: string;
+  names: string[];
+  onChange: (value: string) => void;
+  size?: 'small';
+}) {
+  const current = value === 'Unbound' ? '' : value;
+  if (names.length === 0) {
+    return (
+      <TextField
+        size={size}
+        fullWidth
+        label="Related property"
+        value={current}
+        onMouseDown={(event) => event.stopPropagation()}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    );
+  }
+  const options = current !== '' && !names.includes(current) ? [current, ...names] : names;
+  return (
+    <TextField
+      select
+      size={size}
+      fullWidth
+      label="Related property"
+      value={current}
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      <MenuItem value="">Choose a property</MenuItem>
+      {options.map((name) => (
+        <MenuItem key={name} value={name}>{name}</MenuItem>
+      ))}
+    </TextField>
+  );
 }
 
 function rowSlots(row: FlowRow): Array<{ key: string; span: number; block: FlowBlock | null; index: number | 'end' }> {
@@ -377,6 +445,10 @@ function LayoutBoard({
   onClear,
   fields,
   onAssignField,
+  onAddTableColumn,
+  onRemoveTableColumn,
+  data,
+  onAssignRelationProperty,
 }: {
   template: Template;
   selectedId: string | null;
@@ -391,6 +463,10 @@ function LayoutBoard({
   onClear: (blockId: string) => void;
   fields: CatalogField[];
   onAssignField: (blockId: string, path: string) => void;
+  onAddTableColumn: (blockId: string, path: string) => void;
+  onRemoveTableColumn: (blockId: string, index: number) => void;
+  data: Record<string, unknown>;
+  onAssignRelationProperty: (blockId: string, property: string) => void;
 }) {
   const rows = template.layout?.rows ?? [];
   const readPayload = (event: React.DragEvent): string => event.dataTransfer.getData('text/plain');
@@ -584,8 +660,49 @@ function LayoutBoard({
                             <Typography variant="caption" sx={{ display: 'block', textTransform: 'capitalize', color: 'text.secondary' }}>
                               {item.type}
                             </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{structureText(item)}</Typography>
+                            {item.type === 'table' ? null : (
+                              <Typography variant="body2" sx={{ fontWeight: 700 }}>{structureText(item)}</Typography>
+                            )}
                           </Box>
+                          {item.type === 'table' ? (
+                            <Stack spacing={0.75} sx={{ mt: 1 }} onMouseDown={(event) => event.stopPropagation()}>
+                              {item.columns.map((column, index) => (
+                                <Stack key={`${column.binding.path}-${index}`} direction="row" spacing={0.5} sx={{ alignItems: 'center' }}>
+                                  <Typography variant="body2" sx={{ flex: 1, fontWeight: 600 }}>{column.header}</Typography>
+                                  <Button
+                                    size="small"
+                                    color="warning"
+                                    disabled={item.columns.length < 2}
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      onRemoveTableColumn(item.id, index);
+                                    }}
+                                  >
+                                    Remove
+                                  </Button>
+                                </Stack>
+                              ))}
+                              <TextField
+                                select
+                                size="small"
+                                fullWidth
+                                label="Add column"
+                                value=""
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onSelect(item.id);
+                                }}
+                                onChange={(event) => onAddTableColumn(item.id, event.target.value)}
+                              >
+                                <MenuItem value="">Add a field</MenuItem>
+                                {tableColumnFields(fields)
+                                  .filter((field) => !item.columns.some((column) => column.binding.path === field.path))
+                                  .map((field) => (
+                                    <MenuItem key={field.id} value={field.path}>{field.label}</MenuItem>
+                                  ))}
+                              </TextField>
+                            </Stack>
+                          ) : null}
                           {item.type === 'text' || item.type === 'image' || item.type === 'list' ? (
                             <TextField
                               select
@@ -608,6 +725,16 @@ function LayoutBoard({
                                 </MenuItem>
                               ))}
                             </TextField>
+                          ) : null}
+                          {item.type === 'text' && item.binding.kind === 'relation' ? (
+                            <Box sx={{ mt: 1 }}>
+                              <RelationPropertyField
+                                size="small"
+                                value={item.binding.property}
+                                names={relationPropertyNames(data, item.binding.path)}
+                                onChange={(property) => onAssignRelationProperty(item.id, property)}
+                              />
+                            </Box>
                           ) : null}
                           <Box
                             component="button"
@@ -700,6 +827,8 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
   const [status, setStatus] = useState('Loading templates...');
   const [error, setError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
+  const [previewData, setPreviewData] = useState<Record<string, unknown>>(sampleProduct as Record<string, unknown>);
+  const [previewImages, setPreviewImages] = useState<Record<string, Uint8Array>>({});
   const [dropTarget, setDropTarget] = useState<string | null>(null);
   const [baseline, setBaseline] = useState<{ name: string; template: Template; templateId: number | null } | null>(null);
 
@@ -708,10 +837,6 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
   };
 
   const selected = findBlock(template, selectedId);
-  const textFields = useMemo(
-    () => fields.filter((field) => field.kind === 'text' || field.kind === 'localized' || field.kind === 'option' || field.kind === 'relation'),
-    [fields]
-  );
   const columnFields = useMemo(
     () => fields.filter((field) => field.kind === 'text' || field.kind === 'localized' || field.kind === 'option'),
     [fields]
@@ -755,8 +880,25 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
 
   useEffect(() => {
     let cancelled = false;
+    const identifier = typeof (sampleProduct as { identifier?: unknown }).identifier === 'string'
+      ? (sampleProduct as { identifier: string }).identifier
+      : '';
+    void loadPreviewProduct(client, entity, identifier).then((loaded) => {
+      if (cancelled || !loaded) return;
+      setPreviewData(loaded.data);
+      setPreviewImages(loaded.images);
+    }).catch(() => {
+      // The sample product stays in the preview when Content Hub has no matching product.
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, entity]);
+
+  useEffect(() => {
+    let cancelled = false;
     const timer = window.setTimeout(() => {
-      void renderTemplate(template, sampleProduct as Record<string, unknown>).then((bytes) => {
+      void renderTemplate(template, previewData, previewImages).then((bytes) => {
         if (cancelled) return;
         const copy = new ArrayBuffer(bytes.byteLength);
         new Uint8Array(copy).set(bytes);
@@ -773,7 +915,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [template]);
+  }, [template, previewData, previewImages]);
 
   const openTemplate = async (id: number) => {
     const loaded = await loadPdfTemplate(client, id);
@@ -839,6 +981,30 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     setStatus('Changes discarded.');
   };
 
+  const updateTable = (blockId: string, mutate: (columns: Extract<FlowBlock, { type: 'table' }>['columns']) => void) => {
+    const next = structuredClone(template);
+    const located = findLocation(next, blockId);
+    const column = located && next.layout ? next.layout.rows[located.rowIndex]?.blocks[located.blockIndex] : null;
+    if (!located || !column) return;
+    const target = located.itemIndex != null && column.type === 'stack' ? column.items[located.itemIndex] : column;
+    if (!target || target.type !== 'table') return;
+    mutate(target.columns);
+    setTemplate(next);
+    setSelectedId(blockId);
+  };
+
+  const assignRelationProperty = (blockId: string, property: string) => {
+    const next = structuredClone(template);
+    const located = findLocation(next, blockId);
+    const column = located && next.layout ? next.layout.rows[located.rowIndex]?.blocks[located.blockIndex] : null;
+    if (!located || !column) return;
+    const target = located.itemIndex != null && column.type === 'stack' ? column.items[located.itemIndex] : column;
+    if (!target || target.type !== 'text' || target.binding.kind !== 'relation') return;
+    target.binding = { ...target.binding, property: property.trim() || 'Unbound' };
+    setTemplate(next);
+    setSelectedId(blockId);
+  };
+
   const assignField = (blockId: string, path: string) => {
     const field = fields.find((item) => item.path === path);
     if (!field) return;
@@ -851,22 +1017,6 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     applyCatalogField(target, field);
     setTemplate(next);
     setSelectedId(blockId);
-  };
-
-  const updateSelected = (mutate: (block: FlowBlock) => void) => {
-    if (!selected) return;
-    const next = structuredClone(template);
-    const located = findLocation(next, selected.block.id);
-    const column = located && next.layout ? next.layout.rows[located.rowIndex]?.blocks[located.blockIndex] : null;
-    if (!located || !column) return;
-    if (located.itemIndex != null && column.type === 'stack') {
-      const item = column.items[located.itemIndex];
-      if (!item) return;
-      mutate(item);
-    } else {
-      mutate(column);
-    }
-    setTemplate(next);
   };
 
   return (
@@ -938,8 +1088,23 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
           }}
           fields={fields}
           onAssignField={assignField}
+          onAddTableColumn={(blockId, path) => {
+            const field = columnFields.find((item) => item.path === path);
+            if (!field) return;
+            updateTable(blockId, (columns) => {
+              if (columns.some((column) => column.binding.path === field.path)) return;
+              columns.push({ header: field.label, binding: { kind: 'property', path: field.path }, width: 1 });
+            });
+          }}
+          onRemoveTableColumn={(blockId, index) => {
+            updateTable(blockId, (columns) => {
+              if (columns.length > 1) columns.splice(index, 1);
+            });
+          }}
+          data={previewData}
+          onAssignRelationProperty={assignRelationProperty}
         />
-        {selected && selected.block.type !== 'spacer' ? (
+        {selected && (selected.block.type === 'text' || selected.block.type === 'image' || selected.block.type === 'list') ? (
           <Stack spacing={1}>
             {selected.block.type === 'text' || selected.block.type === 'image' || selected.block.type === 'list' ? (
               <TextField
@@ -949,7 +1114,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
                 onChange={(event) => assignField(selected.block.id, event.target.value)}
               >
                 <MenuItem value="">Choose a field</MenuItem>
-                {(selected.block.type === 'text' ? textFields : fields.filter((field) => field.kind === selected.block.type)).map((field) => (
+                {choicesFor(selected.block, fields).map((field) => (
                   <MenuItem key={field.id} value={field.path}>
                     {field.kind === 'text' ? field.label : `${field.label} (${field.kind})`}
                   </MenuItem>
@@ -957,58 +1122,11 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
               </TextField>
             ) : null}
             {selected.block.type === 'text' && selected.block.binding.kind === 'relation' ? (
-              <TextField
-                label="Related property"
-                value={selected.block.binding.property === 'Unbound' ? '' : selected.block.binding.property}
-                onChange={(event) => {
-                  const property = event.target.value.trim();
-                  updateSelected((block) => {
-                    if (block.type === 'text' && block.binding.kind === 'relation') {
-                      block.binding = { ...block.binding, property: property || 'Unbound' };
-                    }
-                  });
-                }}
+              <RelationPropertyField
+                value={selected.block.binding.property}
+                names={relationPropertyNames(previewData, selected.block.binding.path)}
+                onChange={(property) => assignRelationProperty(selected.block.id, property)}
               />
-            ) : null}
-            {selected.block.type === 'table' ? (
-              <Stack spacing={1}>
-                <Typography variant="body2">Columns are product fields. Each chosen field is one cell.</Typography>
-                {selected.block.columns.map((column, index) => (
-                  <Stack key={`${column.binding.path}-${index}`} direction="row" spacing={1} sx={{ alignItems: 'center' }}>
-                    <Typography variant="body2" sx={{ flex: 1 }}>{column.header}</Typography>
-                    <Button
-                      disabled={selected.block.type === 'table' && selected.block.columns.length < 2}
-                      onClick={() => updateSelected((block) => {
-                        if (block.type === 'table' && block.columns.length > 1) block.columns.splice(index, 1);
-                      })}
-                    >
-                      Remove
-                    </Button>
-                  </Stack>
-                ))}
-                <TextField
-                  select
-                  label="Add column"
-                  value=""
-                  onChange={(event) => {
-                    const field = columnFields.find((item) => item.path === event.target.value);
-                    if (!field) return;
-                    updateSelected((block) => {
-                      if (block.type !== 'table') return;
-                      block.columns.push({
-                        header: field.label,
-                        binding: { kind: 'property', path: field.path },
-                        width: 1,
-                      });
-                    });
-                  }}
-                >
-                  <MenuItem value="">Add a field</MenuItem>
-                  {columnFields.map((field) => (
-                    <MenuItem key={field.id} value={field.path}>{field.label}</MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
             ) : null}
             <Button color="warning" onClick={() => {
               setTemplate(removeItem(template, selected.block.id));
@@ -1017,7 +1135,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
               Clear column
             </Button>
           </Stack>
-        ) : (
+        ) : selected ? null : (
           <Typography variant="body2">Select a block to choose its fields.</Typography>
         )}
         <PageStructure template={template} />

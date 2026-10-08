@@ -61,11 +61,13 @@ export function readTemplate(json: string, name: string): Template {
 
 export async function renderTemplate(
   template: Template,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
+  images?: Record<string, Uint8Array>
 ): Promise<Uint8Array> {
   const fonts = await loadFonts();
   const result = await renderDocument(template, parseDataContext(data), {
     fonts,
+    images,
     generatedAt: new Date().toISOString(),
   });
   return result.bytes;

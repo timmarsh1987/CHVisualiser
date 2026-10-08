@@ -18,7 +18,7 @@ import {
   nextGroupName,
   parseDesignerDocument,
 } from './document';
-import { assignMagicStrings, resolveFieldText } from './fields';
+import { assignMagicStrings, createDesignerField, resolveFieldText } from './fields';
 import { addTemplatePage, removeActiveTemplatePage, syncActiveTemplatePage } from './templateSettings';
 import { reflowTextStory, scaleFontWithBox } from './textFlow';
 import {
@@ -799,6 +799,69 @@ export function DesignerProvider({
           });
           break;
         }
+        case 'SET_FIELD_SOURCE': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const next: DesignerDocument = {
+              ...prev,
+              fields: prev.fields.map((field) =>
+                field.id === action.fieldId ? { ...field, source: { path: action.path } } : field
+              ),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_FIELD_SOURCES': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.length) return prev;
+            let changed = false;
+            const fields = prev.fields.map((field) => {
+              const path = action.sources[field.id];
+              if (path == null || field.source) return field;
+              changed = true;
+              return { ...field, source: { path } };
+            });
+            if (!changed) return prev;
+            const next: DesignerDocument = { ...prev, fields };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'ADD_FIELD': {
+          if (constrained) return;
+          setDocument((prev) => {
+            const fields = [...(prev.fields ?? [])];
+            const field = createDesignerField(fields, action.label, action.kind);
+            fields.push(field);
+            const apply = (layer: Layer): Layer => {
+              if (!action.layerId || layer.id !== action.layerId || layer.continuesFrom) return layer;
+              return { ...layer, fieldId: field.id };
+            };
+            const layers = action.layerId ? prev.layers.map(apply) : prev.layers;
+            const next: DesignerDocument = prev.pages
+              ? {
+                  ...prev,
+                  fields,
+                  layers,
+                  pages: prev.pages.map((page) => ({
+                    ...page,
+                    layers: page.id === prev.activePageId ? layers : page.layers.map(apply),
+                  })),
+                }
+              : { ...prev, fields, layers };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
         case 'SET_LAYER_FIELD': {
           if (constrained) return;
           setDocument((prev) => {
@@ -947,6 +1010,10 @@ function useDesignerStore(): DesignerStoreValue {
 
 export function useDesignerMode(): DesignerMode {
   return useDesignerStore().mode;
+}
+
+export function useDesignerTemplateId(): string | undefined {
+  return useDesignerStore().templateId;
 }
 
 export function useDesignerDocument(): DesignerDocument {

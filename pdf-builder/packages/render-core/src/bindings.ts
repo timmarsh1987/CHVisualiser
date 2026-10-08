@@ -33,15 +33,26 @@ export function resolveBinding(binding: Binding, data: DataContext): BindingReso
     return { status: "ok", value: found.value };
   }
   if (binding.kind === "relation") {
-    const found = readPath(data, [...binding.path.split(">"), binding.property]);
-    if (!found.ok) return { status: "unbound", path: bindingLabel(binding) };
-    return { status: "ok", value: found.value };
+    const found = readPath(data, binding.path.split(">"));
+    const record = found.ok ? firstRecord(found.value) : null;
+    if (!record || !Object.prototype.hasOwnProperty.call(record, binding.property)) {
+      return { status: "unbound", path: bindingLabel(binding) };
+    }
+    const value = record[binding.property];
+    if (value === undefined || value === null) return { status: "unbound", path: bindingLabel(binding) };
+    return { status: "ok", value };
   }
   const found = readPath(data, binding.path.split(">"));
   if (!found.ok || !Array.isArray(found.value)) {
     return { status: "unbound", path: binding.path };
   }
   return { status: "ok", value: found.value };
+}
+
+function firstRecord(value: unknown): Record<string, unknown> | null {
+  if (Array.isArray(value)) return firstRecord(value[0]);
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
 }
 
 function readPath(root: unknown, segments: string[]): { ok: true; value: unknown } | { ok: false } {

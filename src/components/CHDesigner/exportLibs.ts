@@ -14,6 +14,7 @@ export type JsPdfInstance = {
   ) => void;
   addPage: (format?: [number, number], orientation?: 'portrait' | 'landscape') => void;
   save: (filename: string) => void;
+  output: (type: 'blob') => Blob;
 };
 
 type JsPdfCtor = new (options: {

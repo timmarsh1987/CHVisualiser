@@ -405,7 +405,7 @@ function prepareImage(
       }),
     };
   }
-  const key = safeText(resolved.value, options.language);
+  const key = imageLookupKey(resolved.value, options.language ?? "en");
   const pixels = key ? (options.imageSize?.(key) ?? null) : null;
   if (!key || !pixels) {
     return {
@@ -547,6 +547,24 @@ function fitCell(
     text: ellipsizeLine(text, width, (line) => measure(line, style.fontSize, style.bold, style.italic, style.fontFamily)),
     truncated: true,
   };
+}
+
+function imageLookupKey(value: unknown, language: string): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const key = imageLookupKey(item, language);
+      if (key) return key;
+    }
+    return "";
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.id === "number" && Number.isFinite(record.id)) return String(record.id);
+    if (typeof record.id === "string" && record.id.trim()) return record.id.trim();
+  }
+  return safeText(value, language);
 }
 
 function safeText(value: unknown, language = "en"): string {

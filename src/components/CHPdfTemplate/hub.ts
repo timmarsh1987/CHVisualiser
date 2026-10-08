@@ -5,6 +5,7 @@ import {
   PDF_TEMPLATE_SCHEMA,
   PRODUCT_DEFINITION,
 } from './definition';
+import { linkedHrefs, relationEndpoint, relationIsExpanded, renditionHref } from './relations';
 
 export type HubClient = {
   raw?: {
@@ -217,6 +218,113 @@ export function dataFromEntity(entity: unknown): Record<string, unknown> {
 
 export async function loadEntityData(client: HubClient, id: number): Promise<Record<string, unknown>> {
   return dataFromEntity(unwrapEntity(await getJson(client, `/api/entities/${id}`)));
+}
+
+export type ProductContext = {
+  data: Record<string, unknown>;
+  images: Record<string, Uint8Array>;
+};
+
+const RELATION_LIMIT = 8;
+
+export function productEntityId(entity: unknown): number | null {
+  const record = asRecord(entity);
+  if (!record) return null;
+  const definition = asRecord(record.entitydefinition)?.href;
+  const properties = asRecord(record.properties);
+  const isProduct =
+    (typeof definition === 'string' && definition.includes(`/entitydefinitions/${PRODUCT_DEFINITION}`)) ||
+    Boolean(properties && Object.prototype.hasOwnProperty.call(properties, 'ProductName'));
+  return isProduct ? entityIdFrom(record) : null;
+}
+
+export async function loadProductContext(client: HubClient, id: number): Promise<ProductContext> {
+  const entity = unwrapEntity(await getJson(client, `/api/entities/${id}`));
+  const data = dataFromEntity(entity);
+  const images: Record<string, Uint8Array> = {};
+  const seen = new Map<number, { properties: Record<string, unknown>; rendition: string }>();
+  const relations = asRecord(entity.relations) ?? {};
+  for (const [name, value] of Object.entries(relations)) {
+    try {
+      const related = await loadRelation(client, value, seen);
+      if (related.length === 0) continue;
+      data[name] = related.map((item) => item.properties);
+      for (const item of related) {
+        if (!item.rendition || images[item.id]) continue;
+        const bytes = await loadImageBytes(item.rendition);
+        if (bytes) images[item.id] = bytes;
+      }
+    } catch {
+      // A relation that cannot be read stays unbound.
+    }
+  }
+  return { data, images };
+}
+
+export async function loadPreviewProduct(
+  client: HubClient,
+  entity: unknown,
+  identifier: string
+): Promise<ProductContext | null> {
+  const productId = productEntityId(entity);
+  if (productId != null) return loadProductContext(client, productId);
+  const safeIdentifier = identifier.replace(/'/g, '');
+  if (!safeIdentifier || !client.raw?.getAsync) return null;
+  try {
+    const query = encodeURIComponent(
+      `Definition.Name=='${PRODUCT_DEFINITION}' AND Identifier=='${safeIdentifier}'`
+    );
+    const content = await getJson(client, `/api/entities/query?query=${query}&take=1`);
+    const id = itemsFrom(content).map((item) => entityIdFrom(item)).find((item) => item != null);
+    if (id == null) return null;
+    return loadProductContext(client, id);
+  } catch {
+    return null;
+  }
+}
+
+async function loadRelation(
+  client: HubClient,
+  value: unknown,
+  seen: Map<number, { properties: Record<string, unknown>; rendition: string }>
+): Promise<Array<{ id: string; properties: Record<string, unknown>; rendition: string }>> {
+  let relation = asRecord(value) ?? {};
+  if (!relationIsExpanded(relation)) {
+    const endpoint = relationEndpoint(relation);
+    if (!endpoint) return [];
+    relation = asRecord(unwrapEntity(await getJson(client, endpoint))) ?? {};
+  }
+  const records: Array<{ id: string; properties: Record<string, unknown>; rendition: string }> = [];
+  for (const href of linkedHrefs(relation).slice(0, RELATION_LIMIT)) {
+    const id = entityIdFrom(href);
+    if (id == null) continue;
+    let loaded = seen.get(id);
+    if (!loaded) {
+      const related = unwrapEntity(await getJson(client, `/api/entities/${id}`));
+      const properties = dataFromEntity(related);
+      properties.id = id;
+      loaded = { properties, rendition: renditionHref(related) };
+      seen.set(id, loaded);
+    }
+    records.push({ id: String(id), properties: loaded.properties, rendition: loaded.rendition });
+  }
+  return records;
+}
+
+async function loadImageBytes(href: string): Promise<Uint8Array | null> {
+  const response = await fetch(href);
+  if (!response.ok) return null;
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!isJpeg(bytes) && !isPng(bytes)) return null;
+  return bytes;
+}
+
+function isPng(bytes: Uint8Array): boolean {
+  return bytes.length >= 8 && bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47;
+}
+
+function isJpeg(bytes: Uint8Array): boolean {
+  return bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
 }
 
 export async function loadProductFields(client: HubClient): Promise<CatalogField[]> {

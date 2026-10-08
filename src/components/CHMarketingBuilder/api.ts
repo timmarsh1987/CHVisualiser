@@ -129,6 +129,11 @@ export function setContentHubClient(client: unknown) {
   chClient = (client ?? {}) as ChClient;
 }
 
+/** The client last passed to setContentHubClient, when it can call Content Hub. */
+export function getContentHubClient(): unknown {
+  return chClient.raw?.getAsync ? chClient : null;
+}
+
 export function setContentHubProxyBase(base: string) {
   proxyBase = base.replace(/\/$/, '') || DEFAULT_PROXY_BASE;
 }

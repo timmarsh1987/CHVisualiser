@@ -18,7 +18,7 @@ function layoutPixels(element: HTMLElement, axis: 'width' | 'height'): number {
   return Math.max(1, Math.round(measured));
 }
 
-function downloadBlob(blob: Blob, filename: string) {
+export function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = window.document.createElement('a');
   anchor.href = url;
@@ -46,7 +46,7 @@ export async function captureElement(element: HTMLElement): Promise<HTMLCanvasEl
   }
 }
 
-function pagesFromDocument(document: DesignerDocument): DesignerTemplatePage[] {
+export function pagesFromDocument(document: DesignerDocument): DesignerTemplatePage[] {
   const synced = syncActiveTemplatePage(document);
   if (synced.pages?.length) return synced.pages;
   return [
@@ -133,6 +133,7 @@ function pageSizeMm(pageWidthPx: number, pageHeightPx: number) {
 export interface BatchPdf {
   addPageImage: (canvas: HTMLCanvasElement, pageWidthPx: number, pageHeightPx: number) => void;
   save: (filename: string) => void;
+  toBlob: () => Blob;
 }
 
 export async function createBatchPdf(): Promise<BatchPdf> {
@@ -158,17 +159,70 @@ export async function createBatchPdf(): Promise<BatchPdf> {
       if (!pdf) throw new Error('There are no pages to download.');
       pdf.save(filename);
     },
+    toBlob() {
+      if (!pdf) throw new Error('There are no pages to download.');
+      return pdf.output('blob');
+    },
   };
 }
 
-async function exportPng(canvas: HTMLCanvasElement, filename: string) {
-  const blob: Blob = await new Promise((resolve, reject) => {
+export function canvasToPngBlob(canvas: HTMLCanvasElement): Promise<Blob> {
+  return new Promise((resolve, reject) => {
     canvas.toBlob((result) => {
       if (result) resolve(result);
       else reject(new Error('Could not create PNG.'));
     }, 'image/png');
   });
-  downloadBlob(blob, filename);
+}
+
+function pageFileSlug(name: string, index: number): string {
+  const slug = name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
+  return slug || `page-${index + 1}`;
+}
+
+export interface RenderedFile {
+  name: string;
+  blob: Blob;
+}
+
+/** One PDF of every page, plus a PNG of the only page or one PNG per page. */
+export async function renderDocumentFiles(document: DesignerDocument, stem: string): Promise<RenderedFile[]> {
+  const synced = syncActiveTemplatePage(document);
+  const pages = pagesFromDocument(synced);
+  const background = synced.canvas.background || '#ffffff';
+  if (pages.length === 0) {
+    throw new Error('There are no pages to generate.');
+  }
+
+  const safeStem = stem.replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'output';
+  const files: RenderedFile[] = [];
+  const pdf = await createBatchPdf();
+  const usedNames = new Set<string>();
+  for (let index = 0; index < pages.length; index += 1) {
+    const page = pages[index];
+    const canvas = await capturePage(page, synced.settings, background);
+    pdf.addPageImage(canvas, page.width, page.height);
+    if (pages.length === 1) {
+      files.push({ name: `${safeStem}.png`, blob: await canvasToPngBlob(canvas) });
+      continue;
+    }
+    let name = `${safeStem}-${pageFileSlug(page.name || page.id, index)}.png`;
+    if (usedNames.has(name)) name = `${safeStem}-page-${index + 1}.png`;
+    usedNames.add(name);
+    files.push({ name, blob: await canvasToPngBlob(canvas) });
+  }
+  files.push({ name: `${safeStem}.pdf`, blob: pdf.toBlob() });
+  return files;
+}
+
+async function exportPng(canvas: HTMLCanvasElement, filename: string) {
+  downloadBlob(await canvasToPngBlob(canvas), filename);
 }
 
 export async function generateDesignerOutput(

@@ -6,7 +6,7 @@ import { fontsFromFiles } from './fontFiles';
 import { importIdmlFile } from './idmlImport';
 import { importPsdFile } from './psdImport';
 import { pinLayerInPlace } from './pageLayout';
-import BatchMenu from './BatchMenu';
+import GeneratePanel from './GeneratePanel';
 import CopyMenu from './CopyMenu';
 import GenerateMenu from './GenerateMenu';
 import {
@@ -344,7 +344,7 @@ export default function Toolbar() {
 
       <div className="chd-toolbar-group">
         <GenerateMenu />
-        <BatchMenu />
+        {isAdmin ? <GeneratePanel /> : null}
         <div className="chd-zoom-controls">
           <button
             type="button"

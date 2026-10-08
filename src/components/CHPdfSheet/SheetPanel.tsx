@@ -4,8 +4,8 @@ import type { Template } from '../../../pdf-builder/packages/render-core/src/bro
 import {
   dataFromEntity,
   listPdfTemplates,
-  loadEntityData,
   loadPdfTemplate,
+  loadProductContext,
   pageEntityId,
   saveGeneratedPdf,
   type HubClient,
@@ -23,6 +23,7 @@ export default function SheetPanel({ client, entity, options }: SheetProps) {
   const [templateId, setTemplateId] = useState<number | ''>('');
   const [template, setTemplate] = useState<Template | null>(null);
   const [data, setData] = useState<Record<string, unknown>>({});
+  const [images, setImages] = useState<Record<string, Uint8Array>>({});
   const [previewUrl, setPreviewUrl] = useState('');
   const [fileName, setFileName] = useState('product.pdf');
   const [status, setStatus] = useState('Loading PDF templates...');
@@ -37,10 +38,11 @@ export default function SheetPanel({ client, entity, options }: SheetProps) {
         if (cancelled) return;
         setTemplates(listed.map((item) => ({ id: item.id, name: item.name })));
         const entityId = pageEntityId(entity, options);
-        const product = entityId != null ? await loadEntityData(client, entityId) : dataFromEntity(entity);
+        const product = entityId != null ? await loadProductContext(client, entityId) : { data: dataFromEntity(entity), images: {} };
         if (cancelled) return;
-        setData(product);
-        const productName = typeof product.ProductName === 'string' ? product.ProductName : 'product';
+        setData(product.data);
+        setImages(product.images);
+        const productName = typeof product.data.ProductName === 'string' ? product.data.ProductName : 'product';
         setFileName(`${productName}.pdf`);
         setStatus(listed.length > 0 ? 'Choose a template.' : 'No PDF templates have been saved yet.');
         if (listed[0]) setTemplateId(listed[0].id);
@@ -74,7 +76,7 @@ export default function SheetPanel({ client, entity, options }: SheetProps) {
     if (!template) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void renderTemplate(template, data).then((nextBytes) => {
+      void renderTemplate(template, data, images).then((nextBytes) => {
         if (cancelled) return;
         setBytes(nextBytes);
         const copy = new ArrayBuffer(nextBytes.byteLength);
@@ -93,7 +95,7 @@ export default function SheetPanel({ client, entity, options }: SheetProps) {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [template, data]);
+  }, [template, data, images]);
 
   return (
     <Stack spacing={2} sx={{ p: 2 }}>

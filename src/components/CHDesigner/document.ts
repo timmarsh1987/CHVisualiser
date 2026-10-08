@@ -380,7 +380,13 @@ function parseFields(raw: unknown): DesignerField[] | undefined {
     if (typeof field.key !== 'string' || !field.key || keys.has(field.key)) continue;
     if (typeof field.label !== 'string' || !field.label) continue;
     keys.add(field.key);
-    fields.push({ id: field.id, key: field.key, label: field.label });
+    const parsed: DesignerField = { id: field.id, key: field.key, label: field.label };
+    if (field.kind === 'image') parsed.kind = 'image';
+    if (field.source && typeof field.source === 'object' && !Array.isArray(field.source)) {
+      const path = (field.source as Record<string, unknown>).path;
+      if (typeof path === 'string') parsed.source = { path: path.trim() };
+    }
+    fields.push(parsed);
   }
   return fields.length > 0 ? fields : undefined;
 }

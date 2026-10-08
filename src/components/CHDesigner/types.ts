@@ -71,10 +71,21 @@ export interface Layer {
   /** Brand name for a brand-slot layer, such as Hampton. */
   option?: string;
   direction?: 'ltr' | 'rtl';
-  /** Magic-string field whose value replaces this frame’s story on an output. */
+  /** Magic-string field whose value replaces this frame’s story or image on an output. */
   fieldId?: string;
   /** Group this layer sits inside. Groups are folders in the layers panel, not drawn on the page. */
   parentId?: string;
+}
+
+export type DesignerFieldKind = 'text' | 'image';
+
+/** Product property or relation that fills this field during generation. */
+export interface DesignerFieldSource {
+  /**
+   * Member name on M.PCM.Product.
+   * An empty path is an explicit choice to keep the sample.
+   */
+  path: string;
 }
 
 export interface DesignerField {
@@ -83,6 +94,10 @@ export interface DesignerField {
   key: string;
   /** Name shown when someone fills the field. */
   label: string;
+  /** Image fields replace a bound image layer’s src. Absent means text. */
+  kind?: DesignerFieldKind;
+  /** Remembered product-property mapping. Absent until a generation run chooses one. */
+  source?: DesignerFieldSource;
 }
 
 export interface DesignerTemplatePage {
@@ -214,7 +229,10 @@ export type DesignerAction =
   | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
   | { type: 'SET_FIELD_VALUE'; fieldId: string; value: string }
   | { type: 'SET_FIELD_LABEL'; fieldId: string; label: string }
+  | { type: 'SET_FIELD_SOURCE'; fieldId: string; path: string }
+  | { type: 'SET_FIELD_SOURCES'; sources: Record<string, string> }
   | { type: 'SET_LAYER_FIELD'; layerId: string; fieldId: string | null }
+  | { type: 'ADD_FIELD'; kind: DesignerFieldKind; label: string; layerId?: string }
   | { type: 'ADD_MAGIC_STRINGS' }
   | { type: 'COMMIT' };
 
