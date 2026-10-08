@@ -90,7 +90,7 @@ export interface DesignerFieldSource {
 
 export interface DesignerField {
   id: string;
-  /** Magic string body, without braces. `dish_name` is shown as `{{dish_name}}`. */
+  /** Variable name, without braces. `cinema` is shown as `{{cinema}}`. */
   key: string;
   /** Name shown when someone fills the field. */
   label: string;
@@ -98,6 +98,11 @@ export interface DesignerField {
   kind?: DesignerFieldKind;
   /** Remembered product-property mapping. Absent until a generation run chooses one. */
   source?: DesignerFieldSource;
+  /**
+   * CSV column that fills this field.
+   * An empty string is an explicit choice to leave the field unused.
+   */
+  csvColumn?: string;
 }
 
 export interface DesignerTemplatePage {
@@ -229,8 +234,11 @@ export type DesignerAction =
   | { type: 'PUSH_LAYER_TO_ALL_PAGES'; id: string }
   | { type: 'SET_FIELD_VALUE'; fieldId: string; value: string }
   | { type: 'SET_FIELD_LABEL'; fieldId: string; label: string }
+  | { type: 'SET_FIELD_KEY'; fieldId: string; key: string }
   | { type: 'SET_FIELD_SOURCE'; fieldId: string; path: string }
   | { type: 'SET_FIELD_SOURCES'; sources: Record<string, string> }
+  | { type: 'SET_FIELD_CSV'; fieldId: string; column: string }
+  | { type: 'SET_FIELD_CSV_COLUMNS'; columns: Record<string, string> }
   | { type: 'SET_LAYER_FIELD'; layerId: string; fieldId: string | null }
   | { type: 'ADD_FIELD'; kind: DesignerFieldKind; label: string; layerId?: string }
   | { type: 'ADD_MAGIC_STRINGS' }

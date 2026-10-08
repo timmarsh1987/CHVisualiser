@@ -18,7 +18,7 @@ import {
   nextGroupName,
   parseDesignerDocument,
 } from './document';
-import { assignMagicStrings, createDesignerField, resolveFieldText } from './fields';
+import { assignMagicStrings, createDesignerField, resolveFieldText, variableKey } from './fields';
 import { addTemplatePage, removeActiveTemplatePage, syncActiveTemplatePage } from './templateSettings';
 import { reflowTextStory, scaleFontWithBox } from './textFlow';
 import {
@@ -799,6 +799,23 @@ export function DesignerProvider({
           });
           break;
         }
+        case 'SET_FIELD_KEY': {
+          if (constrained) return;
+          setDocument((prev) => {
+            const current = prev.fields?.find((field) => field.id === action.fieldId);
+            if (!current) return prev;
+            const key = variableKey(action.key, prev.fields ?? [], action.fieldId);
+            if (!key || key === current.key) return prev;
+            const next: DesignerDocument = {
+              ...prev,
+              fields: (prev.fields ?? []).map((field) => (field.id === action.fieldId ? { ...field, key } : field)),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
         case 'SET_FIELD_SOURCE': {
           if (constrained) return;
           setDocument((prev) => {
@@ -809,6 +826,43 @@ export function DesignerProvider({
                 field.id === action.fieldId ? { ...field, source: { path: action.path } } : field
               ),
             };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_FIELD_CSV': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const next: DesignerDocument = {
+              ...prev,
+              fields: prev.fields.map((field) => {
+                if (field.id === action.fieldId) return { ...field, csvColumn: action.column };
+                if (action.column && field.csvColumn === action.column) return { ...field, csvColumn: '' };
+                return field;
+              }),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_FIELD_CSV_COLUMNS': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.length) return prev;
+            let changed = false;
+            const fields = prev.fields.map((field) => {
+              const column = action.columns[field.id];
+              if (column == null || field.csvColumn !== undefined) return field;
+              changed = true;
+              return { ...field, csvColumn: column };
+            });
+            if (!changed) return prev;
+            const next: DesignerDocument = { ...prev, fields };
             pushHistory(next);
             emitChanges(next);
             return next;

@@ -3,12 +3,18 @@ import { getContentHubClient } from '../CHMarketingBuilder/api';
 import type { CatalogField } from '../CHPdfTemplate/hub';
 import { downloadBlob, pagesFromDocument, renderDocumentFiles, type RenderedFile } from './exportArtboard';
 import {
+  csvColumnLetter,
   fieldKind,
   generationFileStem,
-  parseBatchCsv,
+  magicStringFor,
+  parseCsvSheet,
   resolveFieldText,
-  rowsFromBatchCsv,
+  rowsFromCsvSheet,
+  slugFieldKey,
+  suggestCsvColumn,
   suggestFieldSource,
+  type CsvColumn,
+  type CsvSheet,
   type GenerationRow,
 } from './fields';
 import {
@@ -33,6 +39,48 @@ type RowStatus = { state: 'pending' | 'done' | 'failed'; error?: string };
 
 function messageOf(cause: unknown): string {
   return cause instanceof Error ? cause.message : 'Could not generate this row.';
+}
+
+function priceGroups(columns: CsvColumn[]): Map<string, CsvColumn[]> {
+  const groups = new Map<string, CsvColumn[]>();
+  for (const column of columns) {
+    if (column.kind !== 'price') continue;
+    const name = column.label.split(' · ')[0] || 'Prices';
+    const group = groups.get(name);
+    if (group) group.push(column);
+    else groups.set(name, [column]);
+  }
+  return groups;
+}
+
+function columnSections(columns: CsvColumn[], query: string): { name: string; columns: CsvColumn[] }[] {
+  const needle = query.trim().toLowerCase();
+  const matches = (column: CsvColumn) => {
+    if (!needle) return true;
+    return (
+      column.label.toLowerCase().includes(needle) || csvColumnLetter(column.index).toLowerCase() === needle
+    );
+  };
+  const identity = columns.filter((column) => column.kind !== 'price' && matches(column));
+  const sections = identity.length > 0 ? [{ name: 'Cinema', columns: identity }] : [];
+  for (const [name, group] of priceGroups(columns)) {
+    const visible = group.filter(matches);
+    if (visible.length > 0) sections.push({ name, columns: visible });
+  }
+  return sections;
+}
+
+function variableLabel(field: DesignerField): string {
+  const token = magicStringFor(field);
+  const image = field.kind === 'image' ? ' (image)' : '';
+  const label = field.label.trim();
+  if (!label || slugFieldKey(label) === field.key) return `${token}${image}`;
+  return `${token} ${label}${image}`;
+}
+
+function columnCaption(column: CsvColumn, section: string): string {
+  if (column.kind !== 'price') return `${column.label} (${csvColumnLetter(column.index)})`;
+  return column.label.slice(section.length + 3) || column.label;
 }
 
 function membersFor(field: DesignerField, catalog: CatalogField[]): CatalogField[] {
@@ -89,8 +137,10 @@ export default function GeneratePanel() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<ProductHit[]>([]);
+  const [csvSheet, setCsvSheet] = useState<CsvSheet | null>(null);
+  const [columnQuery, setColumnQuery] = useState('');
+  const [droppedCsv, setDroppedCsv] = useState<string[]>([]);
   const [csvRows, setCsvRows] = useState<GenerationRow[]>([]);
-  const [unmatched, setUnmatched] = useState<string[]>([]);
   const [catalog, setCatalog] = useState<CatalogField[]>([]);
   const [productRows, setProductRows] = useState<GenerationRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
@@ -103,6 +153,7 @@ export default function GeneratePanel() {
   const [message, setMessage] = useState<string | null>(null);
 
   const fieldKey = fields.map((field) => `${field.id}:${field.kind ?? ''}:${field.source?.path ?? ''}`).join('|');
+  const csvMapKey = fields.map((field) => `${field.id}:${field.csvColumn ?? ''}:${field.key}:${field.label}`).join('|');
   const rows = useMemo(() => [...productRows, ...csvRows], [productRows, csvRows]);
   const rowsKey = rows.map((row) => `${row.id}:${Object.entries(row.values).join('=')}`).join('|');
   const activeRow = rows.find((row) => row.id === activeRowId) ?? null;
@@ -214,15 +265,40 @@ export default function GeneratePanel() {
     );
   };
 
+  useEffect(() => {
+    if (!csvSheet || fields.length === 0) return;
+    const columns: Record<string, string> = {};
+    for (const field of fields) {
+      if (field.csvColumn !== undefined) continue;
+      const column = suggestCsvColumn(field, csvSheet.columns);
+      if (column) columns[field.id] = column;
+    }
+    if (Object.keys(columns).length === 0) return;
+    dispatch({ type: 'SET_FIELD_CSV_COLUMNS', columns });
+  }, [csvSheet, csvMapKey, fields, dispatch]);
+
+  useEffect(() => {
+    if (!csvSheet) {
+      setCsvRows((current) => (current.length === 0 ? current : []));
+      return;
+    }
+    let cancelled = false;
+    const built = rowsFromCsvSheet(csvSheet, fields, 'csv').filter((row) => !droppedCsv.includes(row.id));
+    void hydrateCsvImageFields(client, fields, built).then((rows) => {
+      if (!cancelled) setCsvRows(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [csvSheet, csvMapKey, fields, client, droppedCsv]);
+
   const loadCsv = async (file: File | null) => {
     if (!file) return;
     setSourceError(null);
     try {
-      const parsed = parseBatchCsv(await file.text(), fields);
-      const imported = rowsFromBatchCsv(parsed, `csv-${Date.now()}`);
-      const hydrated = await hydrateCsvImageFields(client, fields, imported);
-      setCsvRows((current) => [...current, ...hydrated]);
-      setUnmatched(parsed.unmatched);
+      setDroppedCsv([]);
+      setColumnQuery('');
+      setCsvSheet(parseCsvSheet(await file.text()));
       setTab('csv');
     } catch (cause) {
       setSourceError(messageOf(cause));
@@ -234,7 +310,7 @@ export default function GeneratePanel() {
       setSelected((current) => current.filter((item) => item.id !== row.productId));
       return;
     }
-    setCsvRows((current) => current.filter((item) => item.id !== row.id));
+    setDroppedCsv((current) => (current.includes(row.id) ? current : [...current, row.id]));
   };
 
   const generate = async () => {
@@ -335,24 +411,24 @@ export default function GeneratePanel() {
             </button>
           </div>
           <p className="chd-field-hint">
-            Each product or CSV row becomes one asset. Empty values keep the sample on the template.
+            Each product or cinema row becomes one asset. Empty values keep the sample on the template.
           </p>
 
           {fields.length === 0 ? (
-            <p className="chd-field-hint">Add magic strings, or create an image field on a picture, before generating.</p>
+            <p className="chd-field-hint">Add a variable on a text frame, or an image field on a picture, before generating.</p>
           ) : (
             <div className="chd-gen-section">
-              <p className="chd-gen-label">Field mapping</p>
+              <p className="chd-gen-label">Variables</p>
+              <p className="chd-field-hint">
+                Each magic string is a variable. Associate a CSV column with it on the CSV tab, or a product property here.
+              </p>
               {fields.map((field) => {
                 const members = membersFor(field, catalog);
                 const current = field.source?.path ?? '';
                 const known = members.some((entry) => entry.path === current);
                 return (
                   <label key={field.id} className="chd-field">
-                    <span>
-                      {field.label}
-                      {field.kind === 'image' ? ' (image)' : ''}
-                    </span>
+                    <span>{variableLabel(field)}</span>
                     <select
                       value={current}
                       onChange={(event) =>
@@ -429,10 +505,11 @@ export default function GeneratePanel() {
           ) : (
             <div className="chd-gen-section">
               <p className="chd-field-hint">
-                The header row matches a field label, key, or magic string. An image cell can be a URL or an asset id.
+                Each row is one cinema. Associate a variable with each column you want on the asset. Cinema is the
+                name column. Price columns are the ones filled with ticket prices.
               </p>
-              <button type="button" className="chd-btn" disabled={fields.length === 0} onClick={() => fileRef.current?.click()}>
-                Add CSV rows
+              <button type="button" className="chd-btn" onClick={() => fileRef.current?.click()}>
+                Choose CSV
               </button>
               <input
                 ref={fileRef}
@@ -444,8 +521,79 @@ export default function GeneratePanel() {
                   event.target.value = '';
                 }}
               />
-              {unmatched.length > 0 ? (
-                <p className="chd-field-hint">Ignored columns: {unmatched.join(', ')}</p>
+              {csvSheet ? (
+                <>
+                  <p className="chd-field-hint">
+                    {csvSheet.records.length === 1 ? '1 cinema' : `${csvSheet.records.length} cinemas`}.{' '}
+                    {csvSheet.columns.filter((column) => column.kind === 'price').length} price columns.
+                    {csvSheet.columns.some((column) => column.kind === 'cinema')
+                      ? ` Cinema is column ${csvColumnLetter(
+                          csvSheet.columns.find((column) => column.kind === 'cinema')?.index ?? 1
+                        )}.`
+                      : ''}
+                  </p>
+                  {fields.length === 0 ? (
+                    <p className="chd-field-hint">Add a variable on a text frame, then associate a column with it.</p>
+                  ) : (
+                    <p className="chd-field-hint">
+                      {fields.filter((field) => field.csvColumn).length === 1
+                        ? '1 column selected.'
+                        : `${fields.filter((field) => field.csvColumn).length} columns selected.`}
+                    </p>
+                  )}
+                  <input
+                    className="chd-gen-search"
+                    type="search"
+                    placeholder="Search columns"
+                    value={columnQuery}
+                    onChange={(event) => setColumnQuery(event.target.value)}
+                  />
+                  <div className="chd-gen-columns">
+                    {columnSections(csvSheet.columns, columnQuery).length === 0 ? (
+                      <p className="chd-field-hint">No columns match that search.</p>
+                    ) : null}
+                    {columnSections(csvSheet.columns, columnQuery).map((section) => (
+                      <div key={section.name}>
+                        <div className="chd-gen-col-group">{section.name}</div>
+                        {section.columns.map((column) => {
+                          const owner = fields.find((field) => field.csvColumn === column.id);
+                          const sample = csvSheet.records[0]?.values[column.id];
+                          return (
+                            <div
+                              key={column.id}
+                              className={owner ? 'chd-gen-column chd-gen-column--used' : 'chd-gen-column'}
+                            >
+                              <div className="chd-gen-column-name">
+                                <span>{columnCaption(column, section.name)}</span>
+                                {sample ? <small>{csvSheet.records[0]?.label}: {sample}</small> : null}
+                              </div>
+                              <select
+                                aria-label={`Use ${column.label}`}
+                                value={owner?.id ?? ''}
+                                disabled={fields.length === 0}
+                                onChange={(event) => {
+                                  const fieldId = event.target.value;
+                                  if (!fieldId) {
+                                    if (owner) dispatch({ type: 'SET_FIELD_CSV', fieldId: owner.id, column: '' });
+                                    return;
+                                  }
+                                  dispatch({ type: 'SET_FIELD_CSV', fieldId, column: column.id });
+                                }}
+                              >
+                                <option value="">Not used</option>
+                                {fields.map((field) => (
+                                  <option key={field.id} value={field.id}>
+                                    {variableLabel(field)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </>
               ) : null}
             </div>
           )}

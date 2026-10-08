@@ -1,10 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
 import { clampBoxToPins, fillLayerToCanvas } from './constraints';
 import { normalizeRotation } from './coords';
 import { fontsFromFiles, layerFontIsLoaded, layerUsesFont } from './fontFiles';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
-import { magicStringFor } from './fields';
+import { fieldLabelFromText, magicStringFor } from './fields';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
 import { syncActiveTemplatePage } from './templateSettings';
 import {
@@ -17,6 +17,25 @@ import {
 } from './store';
 import { layerTextAlign, storySource } from './textFlow';
 import type { DesignerDocument, DesignerFont, Layer, TextAlign } from './types';
+
+function VariableName({ fieldId, variable }: { fieldId: string; variable: string }) {
+  const dispatch = useDesignerAction();
+  const [draft, setDraft] = useState(variable);
+  useEffect(() => setDraft(variable), [variable]);
+  return (
+    <input
+      type="text"
+      value={draft}
+      spellCheck={false}
+      aria-label="Variable"
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => dispatch({ type: 'SET_FIELD_KEY', fieldId, key: draft })}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') event.currentTarget.blur();
+      }}
+    />
+  );
+}
 
 function FontField({
   value,
@@ -671,6 +690,13 @@ export default function PropertiesPane({
                   {field ? (
                     <>
                       <label className="chd-field">
+                        <span>Variable</span>
+                        <VariableName fieldId={field.id} variable={field.key} />
+                      </label>
+                      <p className="chd-field-hint">
+                        {magicStringFor(field)} is the variable a CSV column can fill. The sample copy stays on the page.
+                      </p>
+                      <label className="chd-field">
                         <span>Label</span>
                         <input
                           type="text"
@@ -684,15 +710,27 @@ export default function PropertiesPane({
                           }
                         />
                       </label>
-                      <label className="chd-field">
-                        <span>Magic string</span>
-                        <input type="text" readOnly value={magicStringFor(field)} />
-                      </label>
                     </>
                   ) : (
-                    <p className="chd-field-hint">
-                      Use Add magic strings to create a field. The sample copy stays on the page.
-                    </p>
+                    <>
+                      <p className="chd-field-hint">
+                        Add a variable for this text. The sample copy stays on the page.
+                      </p>
+                      <button
+                        type="button"
+                        className="chd-btn"
+                        onClick={() =>
+                          dispatch({
+                            type: 'ADD_FIELD',
+                            kind: 'text',
+                            label: fieldLabelFromText(story?.text, layer.name),
+                            layerId: story?.id || layer.id,
+                          })
+                        }
+                      >
+                        Add variable
+                      </button>
+                    </>
                   )}
                 </>
               )}
@@ -786,9 +824,18 @@ export default function PropertiesPane({
                     </select>
                   </label>
                   {layer.fieldId ? (
-                    <p className="chd-field-hint">
-                      A generation row replaces this image. The picture on the page stays as the sample.
-                    </p>
+                    <>
+                      <label className="chd-field">
+                        <span>Variable</span>
+                        <VariableName
+                          fieldId={layer.fieldId}
+                          variable={document.fields?.find((item) => item.id === layer.fieldId)?.key || ''}
+                        />
+                      </label>
+                      <p className="chd-field-hint">
+                        A generation row replaces this image. The picture on the page stays as the sample.
+                      </p>
+                    </>
                   ) : (
                     <button
                       type="button"

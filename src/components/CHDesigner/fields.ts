@@ -27,6 +27,15 @@ export function slugFieldKey(label: string): string {
   return slug || 'text';
 }
 
+/** Variable name stored on a magic string. Spaces become underscores. */
+export function variableKey(name: string, fields: DesignerField[], exceptId?: string): string | null {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const base = slugFieldKey(trimmed);
+  const used = new Set(fields.filter((field) => field.id !== exceptId).map((field) => field.key));
+  return uniqueKey(base, used);
+}
+
 function uniqueKey(base: string, used: Set<string>): string {
   if (!used.has(base)) {
     used.add(base);
@@ -119,9 +128,17 @@ export function resolveFieldText(
   return next;
 }
 
-export interface BatchCsv {
-  rows: Record<string, string>[];
-  unmatched: string[];
+export interface CsvColumn {
+  id: string;
+  /** Zero-based sheet column. 1 is column B. */
+  index: number;
+  label: string;
+  kind: 'cinema' | 'price' | 'text';
+}
+
+export interface CsvSheet {
+  columns: CsvColumn[];
+  records: { label: string; values: Record<string, string> }[];
 }
 
 export function parseCsv(text: string): string[][] {
@@ -166,34 +183,149 @@ export function parseCsv(text: string): string[][] {
   return rows.filter((entry) => entry.some((value) => value.trim() !== ''));
 }
 
-/** Header cells match a field label, key, or `{{key}}`. Empty cells keep the sample. */
-export function parseBatchCsv(csv: string, fields: DesignerField[]): BatchCsv {
+function normCell(value: string | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim();
+}
+
+function carryForward(row: string[], width: number): string[] {
+  const carried: string[] = [];
+  let last = '';
+  for (let index = 0; index < width; index += 1) {
+    const cell = normCell(row[index]);
+    if (cell) last = cell;
+    carried.push(cell || last);
+  }
+  return carried;
+}
+
+function columnLetter(index: number): string {
+  let number = index + 1;
+  let letters = '';
+  while (number > 0) {
+    const remainder = (number - 1) % 26;
+    letters = String.fromCharCode(65 + remainder) + letters;
+    number = Math.floor((number - 1) / 26);
+  }
+  return letters;
+}
+
+export function csvColumnLetter(index: number): string {
+  return columnLetter(index);
+}
+
+function isVenueCode(value: string): boolean {
+  return /^[A-Za-z0-9]{2,6}$/.test(value);
+}
+
+function isPriceText(value: string): boolean {
+  return /[£€]\s?\d/.test(value);
+}
+
+function isEmptyPrice(value: string): boolean {
+  const cell = normCell(value);
+  return !cell || cell === '-' || cell === '–' || cell === '#VALUE!';
+}
+
+function headerRowIndex(table: string[][]): number {
+  const limit = Math.min(table.length, 10);
+  for (let row = 0; row < limit; row += 1) {
+    if (table[row].some((cell) => normCell(cell).toLowerCase() === 'cinema')) return row;
+  }
+  return 0;
+}
+
+/**
+ * One row per cinema. Column B is the cinema when the sheet says so.
+ * Price columns are the ones whose cells are ticket prices. Grouped headers
+ * (film tier, seat type, Online / In Venue) are joined so repeated "Online"
+ * columns stay distinct.
+ */
+export function parseCsvSheet(csv: string): CsvSheet {
   const table = parseCsv(csv);
-  if (table.length === 0) return { rows: [], unmatched: [] };
-  const header = table[0].map((cell) => cell.trim());
-  const unmatched: string[] = [];
-  const columns: { index: number; fieldId: string }[] = [];
-  header.forEach((name, index) => {
-    if (!name) return;
-    const needle = name.toLowerCase();
-    const field = fields.find(
-      (item) =>
-        item.label.toLowerCase() === needle ||
-        item.key.toLowerCase() === needle ||
-        magicStringFor(item).toLowerCase() === needle
-    );
-    if (!field) unmatched.push(name);
-    else columns.push({ index, fieldId: field.id });
-  });
-  const rows = table.slice(1).map((cells) => {
+  if (table.length === 0) return { columns: [], records: [] };
+
+  const headerIndex = headerRowIndex(table);
+  const width = table.reduce((max, cells) => Math.max(max, cells.length), 0);
+  const leaf = Array.from({ length: width }, (_, index) => normCell(table[headerIndex]?.[index]));
+  const groups = table.slice(0, headerIndex).map((row) => carryForward(row, width));
+  const codeIndex = leaf.findIndex((cell) => cell.toLowerCase() === 'code');
+  const cinemaIndex = leaf.findIndex((cell) => cell.toLowerCase() === 'cinema');
+  const data = table.slice(headerIndex + 1);
+  const venueRows =
+    codeIndex >= 0
+      ? data.filter((row) => isVenueCode(normCell(row[codeIndex])) && normCell(row[cinemaIndex]))
+      : data.filter((row) => normCell(row[Math.max(cinemaIndex, 0)]));
+
+  const used = new Map<string, number>();
+  const columns: CsvColumn[] = [];
+  for (let index = 0; index < width; index += 1) {
+    const parts: string[] = [];
+    for (const group of groups) {
+      const part = group[index];
+      if (part && parts[parts.length - 1] !== part) parts.push(part);
+    }
+    if (leaf[index] && parts[parts.length - 1] !== leaf[index]) parts.push(leaf[index]);
+    const label = parts.join(' · ');
+    if (!label) continue;
+
+    const leafName = leaf[index].toLowerCase();
+    let kind: CsvColumn['kind'] | null = null;
+    if (index === cinemaIndex || leafName === 'cinema') kind = 'cinema';
+    else if (leafName === 'code' || leafName === 'price list file name') kind = 'text';
+    else if (leaf[index]) {
+      let prices = 0;
+      let other = 0;
+      for (const row of venueRows) {
+        const value = normCell(row[index]);
+        if (isEmptyPrice(value)) continue;
+        if (isPriceText(value)) prices += 1;
+        else other += 1;
+      }
+      if (prices >= 1 && prices >= other) kind = 'price';
+    }
+    if (!kind) continue;
+
+    const seen = used.get(label) ?? 0;
+    used.set(label, seen + 1);
+    columns.push({
+      id: seen === 0 ? label : `${label} (${seen + 1})`,
+      index,
+      label: seen === 0 ? label : `${label} (${seen + 1})`,
+      kind,
+    });
+  }
+
+  const records = venueRows.map((row) => {
     const values: Record<string, string> = {};
     for (const column of columns) {
-      const value = cells[column.index] ?? '';
-      if (value.trim()) values[column.fieldId] = value;
+      const value = normCell(row[column.index]);
+      if (!value) continue;
+      if (column.kind === 'price' && (isEmptyPrice(value) || !isPriceText(value))) continue;
+      values[column.id] = value;
     }
-    return values;
+    const cinema = cinemaIndex >= 0 ? normCell(row[cinemaIndex]) : '';
+    return { label: cinema || normCell(row[0]) || 'Cinema', values };
   });
-  return { rows, unmatched };
+
+  return { columns, records };
+}
+
+const CSV_STOP_WORDS = new Set(['the', 'and', 'for', 'films', 'film', 'seat', 'location', 'relative', 'only', 'your']);
+
+/** A column for this field when the match is unambiguous. An empty csvColumn means leave it unused. */
+export function suggestCsvColumn(field: DesignerField, columns: CsvColumn[]): string | undefined {
+  if (field.csvColumn !== undefined) return field.csvColumn.trim() || undefined;
+  const cinema = columns.find((column) => column.kind === 'cinema');
+  const name = `${field.key} ${field.label}`.toLowerCase();
+  if (cinema && /\b(cinema|venue|site)\b/.test(name)) return cinema.id;
+  const tokens = name.split(/[^a-z0-9]+/).filter((token) => token.length > 1 && !CSV_STOP_WORDS.has(token));
+  if (tokens.length === 0) return undefined;
+  const matches = columns.filter((column) => {
+    if (column.kind === 'cinema') return false;
+    const hay = column.label.toLowerCase();
+    return tokens.every((token) => hay.includes(token));
+  });
+  return matches.length === 1 ? matches[0].id : undefined;
 }
 
 export function fieldKind(field: Pick<DesignerField, 'kind'>): DesignerFieldKind {
@@ -322,12 +454,18 @@ export function assetIdFromImageCell(value: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null;
 }
 
-export function rowsFromBatchCsv(parsed: BatchCsv, idPrefix: string): GenerationRow[] {
-  return parsed.rows.map((values, index) => {
-    const text = Object.values(values).find((value) => value.trim() && !isDirectImageValue(value));
+export function rowsFromCsvSheet(sheet: CsvSheet, fields: DesignerField[], idPrefix: string): GenerationRow[] {
+  return sheet.records.map((record, index) => {
+    const values: Record<string, string> = {};
+    for (const field of fields) {
+      if (field.csvColumn === '') continue;
+      const columnId = field.csvColumn?.trim() || suggestCsvColumn(field, sheet.columns);
+      const value = columnId ? record.values[columnId] : '';
+      if (value) values[field.id] = value;
+    }
     return {
       id: `${idPrefix}-${index + 1}`,
-      label: (text || `Row ${index + 1}`).trim().slice(0, 80),
+      label: record.label.slice(0, 80),
       source: 'csv',
       values,
     };

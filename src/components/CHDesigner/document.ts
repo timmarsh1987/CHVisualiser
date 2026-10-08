@@ -386,6 +386,7 @@ function parseFields(raw: unknown): DesignerField[] | undefined {
       const path = (field.source as Record<string, unknown>).path;
       if (typeof path === 'string') parsed.source = { path: path.trim() };
     }
+    if (typeof field.csvColumn === 'string') parsed.csvColumn = field.csvColumn.trim();
     fields.push(parsed);
   }
   return fields.length > 0 ? fields : undefined;

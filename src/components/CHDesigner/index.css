@@ -316,6 +316,61 @@
   background: var(--chd-bg);
 }
 
+.chd-gen-columns {
+  max-height: 320px;
+  overflow: auto;
+  border: 0.5px solid var(--chd-border);
+  border-radius: 8px;
+}
+
+.chd-gen-col-group {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  background: #f4f6f5;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--chd-muted);
+}
+
+.chd-gen-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 132px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border-top: 0.5px solid var(--chd-border);
+}
+
+.chd-gen-column--used {
+  background: #e8f6ee;
+}
+
+.chd-gen-column-name {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+}
+
+.chd-gen-column-name span {
+  overflow-wrap: anywhere;
+}
+
+.chd-gen-column-name small {
+  color: var(--chd-muted);
+  font-size: 11px;
+}
+
+.chd-gen-column select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+}
+
 .chd-gen-list {
   list-style: none;
   margin: 0;
