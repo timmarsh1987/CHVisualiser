@@ -96,6 +96,32 @@ describe("column geometry", () => {
     expect(laid.pages[0]?.map((block) => [block.blockId, block.x, block.width])).toEqual([["right", 309, 267]]);
     expect(laid.reports.map((report) => report.regionId)).toEqual(["right"]);
   });
+
+  it("stacks a second block under the first in the same column", () => {
+    const template = flowTemplate([
+      {
+        id: "row-1",
+        blocks: [
+          {
+            id: "stack-1",
+            label: "Stack",
+            type: "stack",
+            span: 12,
+            items: [
+              { id: "top", label: "Top", type: "text", span: 12, binding: { kind: "property", path: "Top" } },
+              { id: "bottom", label: "Bottom", type: "text", span: 12, binding: { kind: "property", path: "Bottom" } },
+            ],
+          },
+        ],
+      },
+    ]);
+    const laid = place(template, { Top: "One", Bottom: "Two" });
+    const top = laid.pages[0]?.find((block) => block.blockId === "top");
+    const bottom = laid.pages[0]?.find((block) => block.blockId === "bottom");
+    expect(top?.x).toBe(36);
+    expect(bottom?.x).toBe(top?.x);
+    expect(bottom?.y ?? 0).toBeGreaterThan(top?.y ?? 0);
+  });
 });
 
 describe("layoutFlow", () => {

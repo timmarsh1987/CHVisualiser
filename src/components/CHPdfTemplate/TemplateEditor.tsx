@@ -36,11 +36,57 @@ function newId(prefix: string): string {
   return `${prefix}-${crypto.randomUUID()}`;
 }
 
+type LeafBlock = Exclude<FlowBlock, { type: 'stack' }>;
+
+function columnLeaves(block: FlowBlock | null): LeafBlock[] {
+  if (!block || block.type === 'spacer') return [];
+  if (block.type === 'stack') return block.items;
+  return [block];
+}
+
+function writeColumn(row: FlowRow, columnIndex: number, items: LeafBlock[]): void {
+  const span = row.blocks[columnIndex]?.span ?? 12;
+  const kept = items.filter((item): item is Exclude<LeafBlock, { type: 'spacer' }> => item.type !== 'spacer');
+  if (kept.length === 0) {
+    row.blocks[columnIndex] = spacer(span);
+    return;
+  }
+  if (kept.length === 1) {
+    const [only] = kept;
+    if (only) row.blocks[columnIndex] = { ...only, span };
+    return;
+  }
+  const existing = row.blocks[columnIndex];
+  row.blocks[columnIndex] = {
+    id: existing?.type === 'stack' ? existing.id : newId('stack'),
+    label: 'Stack',
+    type: 'stack',
+    span,
+    items: kept.map((item) => ({ ...item, span })),
+  };
+}
+
 function findBlock(template: Template, id: string | null): { rowIndex: number; block: FlowBlock } | null {
   const rows = template.layout?.rows ?? [];
   for (const [rowIndex, row] of rows.entries()) {
-    const block = row.blocks.find((item) => item.id === id);
-    if (block) return { rowIndex, block };
+    for (const block of row.blocks) {
+      if (block.type === 'stack') {
+        const child = block.items.find((item) => item.id === id);
+        if (child) return { rowIndex, block: child };
+      } else if (block.id === id) {
+        return { rowIndex, block };
+      }
+    }
+  }
+  return null;
+}
+
+function firstContentId(template: Template): string | null {
+  for (const row of template.layout?.rows ?? []) {
+    for (const block of row.blocks) {
+      const leaf = columnLeaves(block)[0];
+      if (leaf) return leaf.id;
+    }
   }
   return null;
 }
@@ -52,9 +98,73 @@ const COLUMN_PRESETS: Array<{ label: string; spans: number[] }> = [
   { label: '2 columns', spans: [6, 6] },
   { label: '3 columns', spans: [4, 4, 4] },
   { label: '4 columns', spans: [3, 3, 3, 3] },
-  { label: '8 + 4', spans: [8, 4] },
-  { label: '4 + 8', spans: [4, 8] },
+  { label: '2/3 + 1/3', spans: [8, 4] },
+  { label: '1/3 + 2/3', spans: [4, 8] },
 ];
+
+const PALETTE: Array<{ type: ContentType; label: string }> = [
+  { type: 'text', label: 'Text' },
+  { type: 'image', label: 'Image' },
+  { type: 'table', label: 'Table' },
+  { type: 'list', label: 'List' },
+];
+
+function EditorFieldset({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Box
+      component="fieldset"
+      sx={{
+        m: 0,
+        px: 1.5,
+        pt: 1,
+        pb: 1.5,
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+      }}
+    >
+      <Box component="legend" sx={{ px: 0.75, fontSize: 13, fontWeight: 600, color: 'text.secondary' }}>
+        {title}
+      </Box>
+      {children}
+    </Box>
+  );
+}
+
+function ComponentMark({ type }: { type: ContentType }) {
+  const shared = { width: 18, height: 18, viewBox: '0 0 18 18', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true };
+  if (type === 'image') {
+    return (
+      <Box component="svg" {...shared}>
+        <rect x="2.5" y="3.5" width="13" height="11" rx="1" />
+        <path d="M2.5 11.5l3.2-3 2.3 2.2 2.4-2.6 5.1 4.4" />
+      </Box>
+    );
+  }
+  if (type === 'table') {
+    return (
+      <Box component="svg" {...shared}>
+        <rect x="2.5" y="3.5" width="13" height="11" rx="1" />
+        <path d="M2.5 7.5h13M2.5 11h13M7.5 3.5v11" />
+      </Box>
+    );
+  }
+  if (type === 'list') {
+    return (
+      <Box component="svg" {...shared}>
+        <path d="M6 5h9.5M6 9h9.5M6 13h9.5" />
+        <circle cx="3.5" cy="5" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="3.5" cy="9" r="0.8" fill="currentColor" stroke="none" />
+        <circle cx="3.5" cy="13" r="0.8" fill="currentColor" stroke="none" />
+      </Box>
+    );
+  }
+  return (
+    <Box component="svg" {...shared}>
+      <path d="M3 4.5h12M3 9h12M3 13.5h8" />
+    </Box>
+  );
+}
 
 function isContentType(value: string): value is ContentType {
   return value === 'text' || value === 'image' || value === 'table' || value === 'list';
@@ -64,7 +174,7 @@ function spacer(span: number): FlowBlock {
   return { id: newId('slot'), label: 'Empty', type: 'spacer', span };
 }
 
-function contentBlock(type: ContentType, span: number): FlowBlock {
+function contentBlock(type: ContentType, span: number): LeafBlock {
   const id = newId('block');
   if (type === 'table') {
     return {
@@ -87,13 +197,95 @@ function addColumnRow(template: Template, spans: number[]): Template {
   return next;
 }
 
-function findLocation(template: Template, id: string): { rowIndex: number; blockIndex: number } | null {
+function findLocation(template: Template, id: string): { rowIndex: number; blockIndex: number; itemIndex: number | null } | null {
   const rows = template.layout?.rows ?? [];
   for (const [rowIndex, row] of rows.entries()) {
-    const blockIndex = row.blocks.findIndex((block) => block.id === id);
-    if (blockIndex >= 0) return { rowIndex, blockIndex };
+    for (const [blockIndex, block] of row.blocks.entries()) {
+      if (block.type === 'stack') {
+        const itemIndex = block.items.findIndex((item) => item.id === id);
+        if (itemIndex >= 0) return { rowIndex, blockIndex, itemIndex };
+      } else if (block.id === id) {
+        return { rowIndex, blockIndex, itemIndex: null };
+      }
+    }
   }
   return null;
+}
+
+function takeLeaf(row: FlowRow, blockIndex: number, itemIndex: number | null): LeafBlock | null {
+  const column = row.blocks[blockIndex];
+  if (!column || column.type === 'spacer') return null;
+  if (column.type === 'stack') {
+    const index = itemIndex ?? 0;
+    const item = column.items[index];
+    if (!item) return null;
+    writeColumn(row, blockIndex, column.items.filter((_, item) => item !== index));
+    return item;
+  }
+  row.blocks[blockIndex] = spacer(column.span);
+  return column;
+}
+
+function addToColumn(row: FlowRow, columnIndex: number, block: LeafBlock): void {
+  if (block.type === 'spacer') return;
+  const column = row.blocks[columnIndex];
+  if (!column) return;
+  const items: LeafBlock[] = column.type === 'spacer' ? [] : column.type === 'stack' ? [...column.items] : [column];
+  items.push(block);
+  writeColumn(row, columnIndex, items);
+}
+
+function removeItem(template: Template, id: string): Template {
+  const next = structuredClone(template);
+  const located = findLocation(next, id);
+  if (!located || !next.layout) return template;
+  const row = next.layout.rows[located.rowIndex];
+  const column = row?.blocks[located.blockIndex];
+  if (!row || !column) return template;
+  if (column.type === 'stack') {
+    writeColumn(row, located.blockIndex, column.items.filter((item) => item.id !== id));
+  } else {
+    row.blocks[located.blockIndex] = spacer(column.span);
+  }
+  return next;
+}
+
+function structureText(block: LeafBlock): string {
+  if (block.type === 'table') {
+    const names = block.columns.map((column) => column.header).filter((header) => header.length > 0);
+    return names.length > 0 ? names.join(', ') : 'Table';
+  }
+  if (block.type === 'spacer') return 'Empty';
+  if (block.binding.path !== 'Unbound') {
+    if (block.type === 'text' && block.binding.kind === 'relation' && block.binding.property !== 'Unbound') {
+      return `${block.label} (${block.binding.property})`;
+    }
+    return block.label;
+  }
+  if (block.type === 'image') return 'Image';
+  if (block.type === 'list') return 'List';
+  return 'Text';
+}
+
+function choicesFor(block: LeafBlock, fields: CatalogField[]): CatalogField[] {
+  if (block.type === 'text') {
+    return fields.filter((field) => field.kind === 'text' || field.kind === 'localized' || field.kind === 'option' || field.kind === 'relation');
+  }
+  if (block.type === 'image' || block.type === 'list') return fields.filter((field) => field.kind === block.type);
+  return [];
+}
+
+function applyCatalogField(block: FlowBlock, field: CatalogField): void {
+  if (block.type !== 'text' && block.type !== 'image' && block.type !== 'list') return;
+  block.label = field.label;
+  if (block.type === 'text' && field.kind === 'relation') {
+    const property = block.binding.kind === 'relation' ? block.binding.property : 'Unbound';
+    block.binding = { kind: 'relation', path: field.path, property };
+  } else if (block.type === 'text' || block.type === 'image') {
+    block.binding = { kind: 'property', path: field.path };
+  } else {
+    block.binding = { kind: 'repeating', path: field.path };
+  }
 }
 
 function rowSlots(row: FlowRow): Array<{ key: string; span: number; block: FlowBlock | null; index: number | 'end' }> {
@@ -108,51 +300,43 @@ function rowSlots(row: FlowRow): Array<{ key: string; span: number; block: FlowB
   return slots;
 }
 
+function columnIndexFor(row: FlowRow, index: number | 'end'): number {
+  if (index !== 'end') return index;
+  const open = row.blocks.findIndex((block) => block.type === 'spacer');
+  if (open >= 0) return open;
+  const filled = row.blocks.findIndex((block) => block.type !== 'spacer');
+  return filled >= 0 ? filled : 0;
+}
+
 function placePayload(template: Template, rowIndex: number, index: number | 'end', payload: string): { template: Template; selectedId: string | null } {
   const next = structuredClone(template);
   const rows = next.layout?.rows ?? [];
   const row = rows[rowIndex];
   if (!row) return { template, selectedId: null };
-  const used = row.blocks.reduce((sum, block) => sum + block.span, 0);
 
   if (payload.startsWith('move:')) {
     const from = findLocation(next, payload.slice(5));
     if (!from) return { template, selectedId: null };
-    const moving = rows[from.rowIndex]?.blocks[from.blockIndex];
+    const columnIndex = columnIndexFor(row, index);
+    if (from.rowIndex === rowIndex && from.blockIndex === columnIndex) {
+      const staying = rows[from.rowIndex]?.blocks[from.blockIndex];
+      const leafId = from.itemIndex != null && staying?.type === 'stack' ? staying.items[from.itemIndex]?.id : staying?.id;
+      return { template, selectedId: leafId ?? null };
+    }
+    const sourceRow = rows[from.rowIndex];
+    if (!sourceRow) return { template, selectedId: null };
+    const moving = takeLeaf(sourceRow, from.blockIndex, from.itemIndex);
     if (!moving || moving.type === 'spacer') return { template, selectedId: null };
-    if (from.rowIndex === rowIndex && (from.blockIndex === index || index === 'end')) {
-      return { template, selectedId: moving.id };
-    }
-    const sourceSpan = moving.span;
-    if (index === 'end') {
-      if (used >= 12) return { template, selectedId: moving.id };
-      rows[from.rowIndex].blocks[from.blockIndex] = spacer(sourceSpan);
-      const placed = { ...moving, span: 12 - used };
-      row.blocks.push(placed);
-      return { template: next, selectedId: placed.id };
-    }
-    const target = row.blocks[index];
-    if (!target) return { template, selectedId: moving.id };
-    const targetSpan = target.span;
-    row.blocks[index] = { ...moving, span: targetSpan };
-    rows[from.rowIndex].blocks[from.blockIndex] =
-      target.type === 'spacer' ? spacer(sourceSpan) : { ...target, span: sourceSpan };
+    addToColumn(row, columnIndex, moving);
     return { template: next, selectedId: moving.id };
   }
 
   if (!payload.startsWith('new:')) return { template, selectedId: null };
   const type = payload.slice(4);
   if (!isContentType(type)) return { template, selectedId: null };
-  if (index === 'end') {
-    if (used >= 12) return { template, selectedId: null };
-    const placed = contentBlock(type, 12 - used);
-    row.blocks.push(placed);
-    return { template: next, selectedId: placed.id };
-  }
-  const target = row.blocks[index];
-  if (!target || target.type !== 'spacer') return { template, selectedId: null };
-  const placed = contentBlock(type, target.span);
-  row.blocks[index] = placed;
+  const columnIndex = columnIndexFor(row, index);
+  const placed = contentBlock(type, row.blocks[columnIndex]?.span ?? 12);
+  addToColumn(row, columnIndex, placed);
   return { template: next, selectedId: placed.id };
 }
 
@@ -190,6 +374,9 @@ function LayoutBoard({
   onMoveRow,
   onRemoveRow,
   onReorderRow,
+  onClear,
+  fields,
+  onAssignField,
 }: {
   template: Template;
   selectedId: string | null;
@@ -201,49 +388,80 @@ function LayoutBoard({
   onMoveRow: (rowIndex: number, direction: -1 | 1) => void;
   onRemoveRow: (rowIndex: number) => void;
   onReorderRow: (fromIndex: number, toIndex: number) => void;
+  onClear: (blockId: string) => void;
+  fields: CatalogField[];
+  onAssignField: (blockId: string, path: string) => void;
 }) {
   const rows = template.layout?.rows ?? [];
   const readPayload = (event: React.DragEvent): string => event.dataTransfer.getData('text/plain');
   return (
     <Stack spacing={1.5} sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
       <Typography variant="subtitle1">Page layout</Typography>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        {COLUMN_PRESETS.map((preset) => (
-          <Button key={preset.label} size="small" variant="outlined" onClick={() => onAddRow(preset.spans)}>
-            {preset.label}
-          </Button>
-        ))}
-      </Stack>
-      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        {(['text', 'image', 'table', 'list'] as const).map((type) => (
-          <Box
-            key={type}
-            component="button"
-            type="button"
-            draggable
-            onDragStart={(event) => {
-              event.dataTransfer.setData('text/plain', `new:${type}`);
-              event.dataTransfer.effectAllowed = 'copy';
-            }}
-            sx={{
-              px: 1.5,
-              py: 1,
-              border: 1,
-              borderColor: 'primary.main',
-              borderRadius: 1,
-              bgcolor: 'background.paper',
-              color: 'primary.main',
-              cursor: 'grab',
-              textTransform: 'capitalize',
-            }}
-          >
-            {type}
-          </Box>
-        ))}
-      </Stack>
-      {rows.length === 0 ? (
-        <Typography variant="body2">Add a column layout, then drag text, image, table, or list into a column.</Typography>
-      ) : null}
+      <EditorFieldset title="Add new row">
+        <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
+          {COLUMN_PRESETS.map((preset) => (
+            <Button key={preset.label} size="small" variant="outlined" onClick={() => onAddRow(preset.spans)}>
+              {preset.label}
+            </Button>
+          ))}
+        </Stack>
+      </EditorFieldset>
+      <EditorFieldset title="Available components">
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+          {PALETTE.map((item) => (
+            <Box
+              key={item.type}
+              component="button"
+              type="button"
+              draggable
+              aria-label={item.label}
+              onDragStart={(event) => {
+                event.dataTransfer.setData('text/plain', `new:${item.type}`);
+                event.dataTransfer.effectAllowed = 'copy';
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                width: '100%',
+                px: 1,
+                py: 0.75,
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+                bgcolor: 'grey.50',
+                color: 'text.primary',
+                textAlign: 'left',
+                cursor: 'grab',
+                '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                '&:active': { cursor: 'grabbing' },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 32,
+                  height: 32,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  borderRadius: 0.75,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  color: 'primary.main',
+                }}
+              >
+                <ComponentMark type={item.type} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>{item.label}</Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', lineHeight: 1.2 }}>Drag onto a column</Typography>
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </EditorFieldset>
+      <Typography variant="body2">Drop a block onto an item to add another one underneath it.</Typography>
       {rows.map((row, rowIndex) => (
         <Box
           key={row.id}
@@ -253,10 +471,13 @@ function LayoutBoard({
           }}
           onDrop={(event) => {
             const payload = readPayload(event);
-            if (!payload.startsWith('row:')) return;
             event.preventDefault();
-            const fromIndex = Number(payload.slice(4));
-            if (Number.isInteger(fromIndex) && fromIndex !== rowIndex) onReorderRow(fromIndex, rowIndex);
+            if (payload.startsWith('row:')) {
+              const fromIndex = Number(payload.slice(4));
+              if (Number.isInteger(fromIndex) && fromIndex !== rowIndex) onReorderRow(fromIndex, rowIndex);
+            } else if (payload.startsWith('new:') || payload.startsWith('move:')) {
+              onPlace(rowIndex, 'end', payload);
+            }
             onDropTarget(null);
           }}
           sx={{
@@ -317,6 +538,7 @@ function LayoutBoard({
                     onDropTarget(null);
                   }}
                   sx={{
+                    position: 'relative',
                     minHeight: 84,
                     p: 1,
                     border: '1px dashed',
@@ -325,32 +547,97 @@ function LayoutBoard({
                     bgcolor: active ? 'action.hover' : 'background.default',
                   }}
                 >
-                  {slot.block ? (
-                    <Box
-                      component="button"
-                      type="button"
-                      draggable
-                      onClick={() => onSelect(slot.block?.id ?? '')}
-                      onDragStart={(event) => {
-                        event.stopPropagation();
-                        event.dataTransfer.setData('text/plain', `move:${slot.block?.id ?? ''}`);
-                        event.dataTransfer.effectAllowed = 'move';
-                      }}
-                      sx={{
-                        width: '100%',
-                        minHeight: 68,
-                        border: 0,
-                        borderRadius: 1,
-                        cursor: 'grab',
-                        textAlign: 'left',
-                        px: 1,
-                        bgcolor: slot.block.id === selectedId ? 'primary.main' : 'action.selected',
-                        color: slot.block.id === selectedId ? 'primary.contrastText' : 'text.primary',
-                      }}
-                    >
-                      <strong>{slot.block.label}</strong>
-                      <span style={{ display: 'block' }}>{slot.block.type}</span>
-                    </Box>
+                  {columnLeaves(slot.block).length > 0 ? (
+                    <Stack spacing={1}>
+                      {columnLeaves(slot.block).map((item) => (
+                        <Box
+                          key={item.id}
+                          sx={{
+                            position: 'relative',
+                            p: 1,
+                            borderRadius: 1,
+                            bgcolor: 'background.paper',
+                            border: '1px solid',
+                            borderColor: item.id === selectedId ? 'primary.main' : 'divider',
+                          }}
+                        >
+                          <Box
+                            component="button"
+                            type="button"
+                            draggable
+                            onClick={() => onSelect(item.id)}
+                            onDragStart={(event) => {
+                              event.stopPropagation();
+                              event.dataTransfer.setData('text/plain', `move:${item.id}`);
+                              event.dataTransfer.effectAllowed = 'move';
+                            }}
+                            sx={{
+                              width: '100%',
+                              border: 0,
+                              bgcolor: 'transparent',
+                              cursor: 'grab',
+                              textAlign: 'left',
+                              pr: 3,
+                              color: 'text.primary',
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ display: 'block', textTransform: 'capitalize', color: 'text.secondary' }}>
+                              {item.type}
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700 }}>{structureText(item)}</Typography>
+                          </Box>
+                          {item.type === 'text' || item.type === 'image' || item.type === 'list' ? (
+                            <TextField
+                              select
+                              size="small"
+                              fullWidth
+                              label="Field"
+                              value={item.binding.path === 'Unbound' ? '' : item.binding.path}
+                              onMouseDown={(event) => event.stopPropagation()}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onSelect(item.id);
+                              }}
+                              onChange={(event) => onAssignField(item.id, event.target.value)}
+                              sx={{ mt: 1 }}
+                            >
+                              <MenuItem value="">Choose a field</MenuItem>
+                              {choicesFor(item, fields).map((field) => (
+                                <MenuItem key={field.id} value={field.path}>
+                                  {field.kind === 'text' ? field.label : `${field.label} (${field.kind})`}
+                                </MenuItem>
+                              ))}
+                            </TextField>
+                          ) : null}
+                          <Box
+                            component="button"
+                            type="button"
+                            aria-label={`Remove ${item.label}`}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              event.stopPropagation();
+                              onClear(item.id);
+                            }}
+                            sx={{
+                              position: 'absolute',
+                              top: 4,
+                              right: 4,
+                              width: 22,
+                              height: 22,
+                              p: 0,
+                              border: 0,
+                              borderRadius: 0.5,
+                              cursor: 'pointer',
+                              lineHeight: '22px',
+                              bgcolor: 'transparent',
+                              color: 'text.primary',
+                            }}
+                          >
+                            ×
+                          </Box>
+                        </Box>
+                      ))}
+                    </Stack>
                   ) : (
                     <Typography variant="body2" sx={{ color: 'text.secondary' }}>Drop here</Typography>
                   )}
@@ -361,6 +648,45 @@ function LayoutBoard({
         </Box>
       ))}
     </Stack>
+  );
+}
+
+function PageStructure({ template }: { template: Template }) {
+  const rows = template.layout?.rows ?? [];
+  return (
+    <Box sx={{ p: 2, bgcolor: 'background.paper', border: 1, borderColor: 'divider' }}>
+    <EditorFieldset title="Page structure">
+      {rows.length === 0 ? (
+        <Typography variant="body2" sx={{ color: 'text.secondary' }}>Add a row to see the page as text.</Typography>
+      ) : (
+        <Stack spacing={1}>
+          {rows.map((row) => (
+            <Box
+              key={row.id}
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: rowSlots(row).map((slot) => `${slot.span}fr`).join(' '),
+                gap: 1,
+              }}
+            >
+              {rowSlots(row).map((slot) => {
+                const items = columnLeaves(slot.block);
+                return (
+                  <Box key={slot.key} sx={{ minHeight: 40, px: 1, py: 0.75, bgcolor: 'grey.50', borderRadius: 1 }}>
+                    {items.length === 0 ? (
+                      <Typography variant="body2" sx={{ color: 'text.secondary' }}>Empty</Typography>
+                    ) : items.map((item) => (
+                      <Typography key={item.id} variant="body2">{structureText(item)}</Typography>
+                    ))}
+                  </Box>
+                );
+              })}
+            </Box>
+          ))}
+        </Stack>
+      )}
+    </EditorFieldset>
+    </Box>
   );
 }
 
@@ -375,6 +701,11 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
   const [error, setError] = useState('');
   const [previewUrl, setPreviewUrl] = useState('');
   const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const [baseline, setBaseline] = useState<{ name: string; template: Template; templateId: number | null } | null>(null);
+
+  const remember = (nextName: string, nextTemplate: Template, nextId: number | null) => {
+    setBaseline({ name: nextName, template: structuredClone(nextTemplate), templateId: nextId });
+  };
 
   const selected = findBlock(template, selectedId);
   const textFields = useMemo(
@@ -405,7 +736,8 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
           setTemplateId(match.id);
           setName(match.name);
           setTemplate(loaded);
-          setSelectedId(loaded.layout?.rows.flatMap((row) => row.blocks).find((block) => block.type !== 'spacer')?.id ?? null);
+          setBaseline({ name: match.name, template: structuredClone(loaded), templateId: match.id });
+          setSelectedId(firstContentId(loaded));
         }
         setStatus(listed.length > 0 ? `${listed.length} templates.` : 'No templates yet.');
       } catch (loadError) {
@@ -449,7 +781,8 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     setTemplateId(loaded.id);
     setName(loaded.name);
     setTemplate(parsed);
-    setSelectedId(parsed.layout?.rows.flatMap((row) => row.blocks).find((block) => block.type !== 'spacer')?.id ?? null);
+    remember(loaded.name, parsed, loaded.id);
+    setSelectedId(firstContentId(parsed));
     setError('');
   };
 
@@ -461,6 +794,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     setTemplateId(id);
     setName(nextName);
     setTemplate(named);
+    remember(nextName, named, id);
     if (clearSelection) setSelectedId(null);
     setStatus('Template created.');
     setError('');
@@ -481,27 +815,76 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
     }
     await savePdfTemplate(client, templateId, next.name, JSON.stringify(next));
     setTemplate(next);
+    setName(nextName);
+    remember(nextName, next, templateId);
     setTemplates((current) => current.map((item) => (item.id === templateId ? { ...item, name: next.name } : item)));
     setStatus('Template saved.');
     setError('');
   };
 
+  const cancel = () => {
+    if (!baseline) {
+      const blank = blankTemplate('New PDF template');
+      setName(blank.name);
+      setTemplate(blank);
+      setTemplateId(null);
+      setSelectedId(null);
+    } else {
+      setName(baseline.name);
+      setTemplate(structuredClone(baseline.template));
+      setTemplateId(baseline.templateId);
+      setSelectedId(firstContentId(baseline.template));
+    }
+    setError('');
+    setStatus('Changes discarded.');
+  };
+
+  const assignField = (blockId: string, path: string) => {
+    const field = fields.find((item) => item.path === path);
+    if (!field) return;
+    const next = structuredClone(template);
+    const located = findLocation(next, blockId);
+    const column = located && next.layout ? next.layout.rows[located.rowIndex]?.blocks[located.blockIndex] : null;
+    if (!located || !column) return;
+    const target = located.itemIndex != null && column.type === 'stack' ? column.items[located.itemIndex] : column;
+    if (!target) return;
+    applyCatalogField(target, field);
+    setTemplate(next);
+    setSelectedId(blockId);
+  };
+
   const updateSelected = (mutate: (block: FlowBlock) => void) => {
     if (!selected) return;
     const next = structuredClone(template);
-    const block = next.layout?.rows[selected.rowIndex]?.blocks.find((item) => item.id === selected.block.id);
-    if (!block) return;
-    mutate(block);
+    const located = findLocation(next, selected.block.id);
+    const column = located && next.layout ? next.layout.rows[located.rowIndex]?.blocks[located.blockIndex] : null;
+    if (!located || !column) return;
+    if (located.itemIndex != null && column.type === 'stack') {
+      const item = column.items[located.itemIndex];
+      if (!item) return;
+      mutate(item);
+    } else {
+      mutate(column);
+    }
     setTemplate(next);
   };
 
   return (
-    <Stack direction={{ xs: 'column', md: 'row' }} spacing={2} sx={{ p: 2, alignItems: 'stretch' }}>
-      <Stack spacing={2} sx={{ width: { md: 420 }, flexShrink: 0 }}>
-        <Typography variant="h6">PDF template</Typography>
-        <Typography variant="body2">
-          Create a template and store its name and layout on {`EPAM.PDFTemplate`}.
-        </Typography>
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gridTemplateRows: 'auto minmax(640px, 1fr)',
+        gap: 2,
+        p: 2,
+        alignItems: 'stretch',
+        minHeight: '100%',
+      }}
+    >
+      <Stack spacing={2}>
+        <Button onClick={() => { void createNew().catch((createError: unknown) => setError(createError instanceof Error ? createError.message : 'Could not create a template.')); }}>
+          Create template
+        </Button>
         {error ? <Alert severity="error">{error}</Alert> : null}
         {status ? <Typography variant="body2">{status}</Typography> : null}
         <TextField
@@ -519,15 +902,43 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
           ))}
         </TextField>
         <TextField label="Name" value={name} onChange={(event) => setName(event.target.value)} />
-        <Stack direction="row" spacing={1}>
-          <Button variant="contained" onClick={() => { void save().catch((saveError: unknown) => setError(saveError instanceof Error ? saveError.message : 'Could not save.')); }}>
-            Save
-          </Button>
-          <Button onClick={() => { void createNew().catch((createError: unknown) => setError(createError instanceof Error ? createError.message : 'Could not create a template.')); }}>
-            New template
-          </Button>
-        </Stack>
-        <Typography variant="body2">Choose a column layout on the page, then drag a block into a column.</Typography>
+      </Stack>
+      <Stack direction="row" spacing={1} sx={{ justifyContent: 'flex-end', alignItems: 'flex-start' }}>
+        <Button variant="contained" onClick={() => { void save().catch((saveError: unknown) => setError(saveError instanceof Error ? saveError.message : 'Could not save.')); }}>
+          Save
+        </Button>
+        <Button onClick={cancel}>Cancel</Button>
+      </Stack>
+      <Stack spacing={2} sx={{ minWidth: 0 }}>
+        <LayoutBoard
+          template={template}
+          selectedId={selectedId}
+          dropTarget={dropTarget}
+          onSelect={setSelectedId}
+          onDropTarget={setDropTarget}
+          onAddRow={(spans) => setTemplate(addColumnRow(template, spans))}
+          onPlace={(rowIndex, index, payload) => {
+            const placed = placePayload(template, rowIndex, index, payload);
+            setTemplate(placed.template);
+            if (placed.selectedId) setSelectedId(placed.selectedId);
+          }}
+          onMoveRow={(rowIndex, direction) => setTemplate(moveRow(template, rowIndex, direction))}
+          onReorderRow={(fromIndex, toIndex) => setTemplate(reorderRow(template, fromIndex, toIndex))}
+          onRemoveRow={(rowIndex) => {
+            const next = structuredClone(template);
+            const removed = next.layout?.rows.splice(rowIndex, 1) ?? [];
+            if (removed.some((row) => row.blocks.some((block) => block.id === selectedId || (block.type === 'stack' && block.items.some((item) => item.id === selectedId))))) {
+              setSelectedId(null);
+            }
+            setTemplate(next);
+          }}
+          onClear={(blockId) => {
+            setTemplate(removeItem(template, blockId));
+            if (selectedId === blockId) setSelectedId(null);
+          }}
+          fields={fields}
+          onAssignField={assignField}
+        />
         {selected && selected.block.type !== 'spacer' ? (
           <Stack spacing={1}>
             {selected.block.type === 'text' || selected.block.type === 'image' || selected.block.type === 'list' ? (
@@ -535,20 +946,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
                 select
                 label="Field"
                 value={selected.block.binding.path === 'Unbound' ? '' : selected.block.binding.path}
-                onChange={(event) => {
-                  const field = fields.find((item) => item.path === event.target.value);
-                  if (!field) return;
-                  updateSelected((block) => {
-                    block.label = field.label;
-                    if (block.type === 'text' && field.kind === 'relation') {
-                      block.binding = { kind: 'relation', path: field.path, property: 'Unbound' };
-                    } else if (block.type === 'text' || block.type === 'image') {
-                      block.binding = { kind: 'property', path: field.path };
-                    } else if (block.type === 'list') {
-                      block.binding = { kind: 'repeating', path: field.path };
-                    }
-                  });
-                }}
+                onChange={(event) => assignField(selected.block.id, event.target.value)}
               >
                 <MenuItem value="">Choose a field</MenuItem>
                 {(selected.block.type === 'text' ? textFields : fields.filter((field) => field.kind === selected.block.type)).map((field) => (
@@ -613,13 +1011,7 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
               </Stack>
             ) : null}
             <Button color="warning" onClick={() => {
-              const next = structuredClone(template);
-              const row = next.layout?.rows[selected.rowIndex];
-              const block = row?.blocks.find((item) => item.id === selected.block.id);
-              if (!row || !block) return;
-              const index = row.blocks.indexOf(block);
-              row.blocks[index] = spacer(block.span);
-              setTemplate(next);
+              setTemplate(removeItem(template, selected.block.id));
               setSelectedId(null);
             }}>
               Clear column
@@ -628,35 +1020,13 @@ export default function TemplateEditor({ client, entity, options }: EditorProps)
         ) : (
           <Typography variant="body2">Select a block to choose its fields.</Typography>
         )}
+        <PageStructure template={template} />
       </Stack>
-      <Stack spacing={2} sx={{ flex: 1, minWidth: 0 }}>
-        <LayoutBoard
-          template={template}
-          selectedId={selectedId}
-          dropTarget={dropTarget}
-          onSelect={setSelectedId}
-          onDropTarget={setDropTarget}
-          onAddRow={(spans) => setTemplate(addColumnRow(template, spans))}
-          onPlace={(rowIndex, index, payload) => {
-            const placed = placePayload(template, rowIndex, index, payload);
-            setTemplate(placed.template);
-            if (placed.selectedId) setSelectedId(placed.selectedId);
-          }}
-          onMoveRow={(rowIndex, direction) => setTemplate(moveRow(template, rowIndex, direction))}
-          onReorderRow={(fromIndex, toIndex) => setTemplate(reorderRow(template, fromIndex, toIndex))}
-          onRemoveRow={(rowIndex) => {
-            const next = structuredClone(template);
-            const removed = next.layout?.rows.splice(rowIndex, 1) ?? [];
-            if (removed.some((row) => row.blocks.some((block) => block.id === selectedId))) setSelectedId(null);
-            setTemplate(next);
-          }}
-        />
-        <Box sx={{ flex: 1, minHeight: 640, bgcolor: '#d5d5d5' }}>
-          {previewUrl ? (
-            <iframe title="PDF preview" src={previewUrl} style={{ width: '100%', height: '100%', minHeight: 640, border: 0 }} />
-          ) : null}
-        </Box>
-      </Stack>
-    </Stack>
+      <Box sx={{ minHeight: 640, height: '100%', bgcolor: '#d5d5d5' }}>
+        {previewUrl ? (
+          <iframe title="PDF preview" src={previewUrl} style={{ width: '100%', height: '100%', minHeight: 640, border: 0 }} />
+        ) : null}
+      </Box>
+    </Box>
   );
 }

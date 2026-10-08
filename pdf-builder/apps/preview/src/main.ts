@@ -130,6 +130,7 @@ const newId = (prefix: string): string => `${prefix}-${crypto.randomUUID()}`;
 
 const bindingText = (block: FlowBlock): string => {
   if (block.type === "spacer") return "Empty";
+  if (block.type === "stack") return block.items.map((item) => bindingText(item)).join(", ");
   if (block.type === "table") {
     return block.binding?.path ?? block.columns.map((column) => column.header).join(", ");
   }
@@ -338,7 +339,7 @@ const paintInspector = (): void => {
   empty.value = "";
   empty.textContent = "Choose a field";
   fieldSelect.append(empty);
-  const currentPath = found.block.type === "spacer" ? "" : found.block.type === "table" ? found.block.binding?.path ?? "" : found.block.binding.path;
+  const currentPath = found.block.type === "spacer" || found.block.type === "stack" ? "" : found.block.type === "table" ? found.block.binding?.path ?? "" : found.block.binding.path;
   for (const field of matching) {
     const option = document.createElement("option");
     option.value = field.id;

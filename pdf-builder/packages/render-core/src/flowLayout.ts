@@ -65,6 +65,7 @@ interface Item {
   width: number;
   content: Content;
   report: RegionReport;
+  yOffset: number;
 }
 
 type Content =
@@ -124,7 +125,7 @@ export function layoutFlow(options: LayoutFlowOptions): LayoutFlowResult {
   let cursorY = layout.margin;
 
   const placeRow = (items: Item[], allowMove: boolean): void => {
-    const natural = Math.max(0, ...items.map((item) => naturalHeight(item)));
+    const natural = Math.max(0, ...items.map((item) => naturalHeight(item) + item.yOffset));
     if (natural === 0) return;
     const remaining = pageHeight - layout.margin - cursorY;
     if (natural <= remaining + 0.01) {
@@ -157,7 +158,7 @@ export function layoutFlow(options: LayoutFlowOptions): LayoutFlowResult {
   };
 
   const commit = (items: Item[], slices: Slice[]): void => {
-    const height = Math.max(0, ...slices.map((slice) => slice.height));
+    const height = Math.max(0, ...slices.map((slice, index) => slice.height + (items[index]?.yOffset ?? 0)));
     if (height === 0) return;
     const page = pages[pageIndex];
     if (!page) return;
@@ -167,7 +168,7 @@ export function layoutFlow(options: LayoutFlowOptions): LayoutFlowResult {
       page.push({
         blockId: item.blockId,
         x: layout.margin + item.column * (colWidth + layout.columnGap),
-        y: cursorY,
+        y: cursorY + item.yOffset,
         width: item.width,
         height: slice.height,
         draw: slice.draw,
@@ -187,16 +188,24 @@ export function layoutFlow(options: LayoutFlowOptions): LayoutFlowResult {
     const items: Item[] = [];
     for (const block of row.blocks) {
       const width = spanWidth(block.span, colWidth, layout.columnGap);
-      const prepared = prepareBlock(block, width, options);
-      items.push({
-        blockId: block.id,
-        column,
-        span: block.span,
-        width,
-        content: prepared.content,
-        report: prepared.report,
+      const stacked = block.type === "stack" ? block.items : [block];
+      let yOffset = 0;
+      stacked.forEach((child, childIndex) => {
+        const prepared = prepareBlock(child, width, options);
+        const item: Item = {
+          blockId: child.id,
+          column,
+          span: block.span,
+          width,
+          content: prepared.content,
+          report: prepared.report,
+          yOffset,
+        };
+        items.push(item);
+        if (child.type !== "spacer") reports.push(prepared.report);
+        yOffset += naturalHeight(item);
+        if (childIndex < stacked.length - 1) yOffset += layout.rowGap;
       });
-      if (block.type !== "spacer") reports.push(prepared.report);
       column += block.span;
     }
     placeRow(items, true);
@@ -220,7 +229,7 @@ function prepareBlock(
   if (block.type === "image") return prepareImage(block, options);
   if (block.type === "table") return prepareTable(block, width, options);
   if (block.type === "list") return prepareList(block, width, options);
-  if (block.type === "spacer") {
+  if (block.type === "spacer" || block.type === "stack") {
     return { content: { kind: "empty" }, report: reportFor(block.id, "ok") };
   }
   return prepareText(block, width, options);

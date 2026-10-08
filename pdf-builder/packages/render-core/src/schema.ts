@@ -209,12 +209,28 @@ const spacerBlockSchema = z
   })
   .strict();
 
+const leafBlockSchema = z.discriminatedUnion("type", [
+  textBlockSchema,
+  imageBlockSchema,
+  tableBlockSchema,
+  listBlockSchema,
+]);
+
+const stackBlockSchema = z
+  .object({
+    ...blockBase,
+    type: z.literal("stack"),
+    items: z.array(leafBlockSchema).min(1),
+  })
+  .strict();
+
 const blockSchema = z.discriminatedUnion("type", [
   textBlockSchema,
   imageBlockSchema,
   tableBlockSchema,
   listBlockSchema,
   spacerBlockSchema,
+  stackBlockSchema,
 ]);
 
 const layoutRowSchema = z
@@ -341,6 +357,27 @@ export const templateSchema = z
               columnOffset,
               "binding",
             ]);
+          }
+        }
+        if (block.type === "stack") {
+          for (const [itemOffset, item] of block.items.entries()) {
+            if (regionIds.has(item.id)) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                path: ["layout", "rows", rowOffset, "blocks", blockOffset, "items", itemOffset, "id"],
+                message: `Block id ${item.id} is duplicated.`,
+              });
+            }
+            regionIds.add(item.id);
+            if (item.type === "text" || item.type === "image") {
+              assertBindingPath(item.binding, ctx, ["layout", "rows", rowOffset, "blocks", blockOffset, "items", itemOffset, "binding"]);
+            }
+            if (item.type === "list") {
+              assertBindingPath(item.binding, ctx, ["layout", "rows", rowOffset, "blocks", blockOffset, "items", itemOffset, "binding"]);
+            }
+            if (item.type === "table" && item.binding) {
+              assertBindingPath(item.binding, ctx, ["layout", "rows", rowOffset, "blocks", blockOffset, "items", itemOffset, "binding"]);
+            }
           }
         }
       }
