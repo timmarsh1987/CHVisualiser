@@ -44,4 +44,22 @@ describe('rendition href', () => {
   it('returns nothing when the entity has no image rendition', () => {
     assert.equal(renditionHref({ renditions: {} }), '');
   });
+
+  it('uses the original file when no preview rendition exists', () => {
+    const entity = {
+      renditions: {
+        downloadOriginal: [{ href: 'https://example.test/original' }],
+      },
+    };
+    assert.equal(renditionHref(entity), 'https://example.test/original');
+  });
+
+  it('reads a rendition wrapped in items', () => {
+    const entity = {
+      renditions: {
+        preview: { items: [{ href: 'https://example.test/preview' }] },
+      },
+    };
+    assert.equal(renditionHref(entity), 'https://example.test/preview');
+  });
 });

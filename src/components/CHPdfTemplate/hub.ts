@@ -242,6 +242,8 @@ export async function loadProductContext(client: HubClient, id: number): Promise
   const entity = unwrapEntity(await getJson(client, `/api/entities/${id}`));
   const data = dataFromEntity(entity);
   const images: Record<string, Uint8Array> = {};
+  const rootId = entityIdFrom(entity);
+  if (rootId != null) await storeRendition(images, String(rootId), renditionHref(entity));
   const seen = new Map<number, { properties: Record<string, unknown>; rendition: string }>();
   const relations = asRecord(entity.relations) ?? {};
   for (const [name, value] of Object.entries(relations)) {
@@ -250,9 +252,7 @@ export async function loadProductContext(client: HubClient, id: number): Promise
       if (related.length === 0) continue;
       data[name] = related.map((item) => item.properties);
       for (const item of related) {
-        if (!item.rendition || images[item.id]) continue;
-        const bytes = await loadImageBytes(item.rendition);
-        if (bytes) images[item.id] = bytes;
+        await storeRendition(images, item.id, item.rendition);
       }
     } catch {
       // A relation that cannot be read stays unbound.
@@ -311,12 +311,23 @@ async function loadRelation(
   return records;
 }
 
+async function storeRendition(images: Record<string, Uint8Array>, id: string, href: string): Promise<void> {
+  if (!href || images[id]) return;
+  const bytes = await loadImageBytes(href);
+  if (bytes) images[id] = bytes;
+}
+
 async function loadImageBytes(href: string): Promise<Uint8Array | null> {
-  const response = await fetch(href);
-  if (!response.ok) return null;
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!isJpeg(bytes) && !isPng(bytes)) return null;
-  return bytes;
+  try {
+    const response = await fetch(href, { credentials: 'include' });
+    if (!response.ok) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > 12_000_000) return null;
+    if (!isJpeg(bytes) && !isPng(bytes)) return null;
+    return bytes;
+  } catch {
+    return null;
+  }
 }
 
 function isPng(bytes: Uint8Array): boolean {

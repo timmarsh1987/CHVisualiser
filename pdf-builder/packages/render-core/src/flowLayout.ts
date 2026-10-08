@@ -405,17 +405,19 @@ function prepareImage(
       }),
     };
   }
-  const key = imageLookupKey(resolved.value, options.language ?? "en");
-  const pixels = key ? (options.imageSize?.(key) ?? null) : null;
-  if (!key || !pixels) {
-    return {
-      content: { kind: "image", key, pixels: null },
-      report: reportFor(block.id, "error", { message: "Image was not provided." }),
-    };
+  const keys = imageLookupKeys(resolved.value, options.language ?? "en");
+  for (const key of keys) {
+    const pixels = options.imageSize?.(key) ?? null;
+    if (pixels) {
+      return {
+        content: { kind: "image", key, pixels },
+        report: reportFor(block.id, "ok"),
+      };
+    }
   }
   return {
-    content: { kind: "image", key, pixels },
-    report: reportFor(block.id, "ok"),
+    content: { kind: "image", key: keys[0] ?? null, pixels: null },
+    report: reportFor(block.id, "error", { message: "Image was not provided." }),
   };
 }
 
@@ -549,22 +551,24 @@ function fitCell(
   };
 }
 
-function imageLookupKey(value: unknown, language: string): string {
-  if (typeof value === "string") return value.trim();
-  if (typeof value === "number" && Number.isFinite(value)) return String(value);
-  if (Array.isArray(value)) {
+function imageLookupKeys(value: unknown, language: string): string[] {
+  const keys: string[] = [];
+  const add = (key: string) => {
+    if (key && !keys.includes(key)) keys.push(key);
+  };
+  if (typeof value === "string") add(value.trim());
+  else if (typeof value === "number" && Number.isFinite(value)) add(String(value));
+  else if (Array.isArray(value)) {
     for (const item of value) {
-      const key = imageLookupKey(item, language);
-      if (key) return key;
+      for (const key of imageLookupKeys(item, language)) add(key);
     }
-    return "";
-  }
-  if (value && typeof value === "object") {
+  } else if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
-    if (typeof record.id === "number" && Number.isFinite(record.id)) return String(record.id);
-    if (typeof record.id === "string" && record.id.trim()) return record.id.trim();
+    if (typeof record.id === "number" && Number.isFinite(record.id)) add(String(record.id));
+    else if (typeof record.id === "string" && record.id.trim()) add(record.id.trim());
+    else add(safeText(value, language));
   }
-  return safeText(value, language);
+  return keys;
 }
 
 function safeText(value: unknown, language = "en"): string {

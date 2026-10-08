@@ -1,4 +1,4 @@
-const PREVIEW_RENDITIONS = ['preview', 'thumbnail', 'bigthumbnail', 'downloadPreview'] as const;
+const PREVIEW_RENDITIONS = ['preview', 'thumbnail', 'bigthumbnail', 'downloadPreview', 'downloadOriginal', 'original'] as const;
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
@@ -40,13 +40,35 @@ export function linkedHrefs(relation: unknown): string[] {
   return hrefs;
 }
 
+function hrefFromRendition(entry: unknown): string {
+  if (Array.isArray(entry)) {
+    for (const item of entry) {
+      const href = hrefFromRendition(item);
+      if (href) return href;
+    }
+    return '';
+  }
+  const direct = hrefOf(entry);
+  if (direct) return direct;
+  const record = asRecord(entry);
+  if (!record) return '';
+  return hrefFromRendition(record.items);
+}
+
 export function renditionHref(entity: unknown): string {
-  const renditions = asRecord(asRecord(entity)?.renditions);
-  if (!renditions) return '';
+  const renditions = asRecord(entity)?.renditions;
+  if (Array.isArray(renditions)) {
+    for (const name of PREVIEW_RENDITIONS) {
+      const match = renditions.find((item) => asRecord(item)?.name === name);
+      const href = hrefFromRendition(match);
+      if (href) return href;
+    }
+    return '';
+  }
+  const record = asRecord(renditions);
+  if (!record) return '';
   for (const name of PREVIEW_RENDITIONS) {
-    const entry = renditions[name];
-    const first = Array.isArray(entry) ? entry[0] : entry;
-    const href = hrefOf(first);
+    const href = hrefFromRendition(record[name]);
     if (href) return href;
   }
   return '';
