@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DesignerCanvas from './DesignerCanvas';
 import { registerDesignerFonts, unregisterDesignerFont } from './fontFiles';
-import LayersPanel from './LayersPanel';
+import LayersPanel, { LeftSectionProvider } from './LayersPanel';
 import PageStrip from './PageStrip';
 import PropertiesPane from './PropertiesPane';
 import {
@@ -213,6 +213,7 @@ export default function DesignerShell({
 
   return (
     <DesignerProvider {...providerProps}>
+      <LeftSectionProvider>
       <FontRegistry />
       <ShellBody
         mode={mode}
@@ -229,6 +230,7 @@ export default function DesignerShell({
         statusClassName={statusClassName}
         saveStatus={saveStatus}
       />
+      </LeftSectionProvider>
     </DesignerProvider>
   );
 }

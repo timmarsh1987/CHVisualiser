@@ -1,3 +1,4 @@
+import { clampBoxInsideCanvas } from './constraints';
 import { createLayerId } from './document';
 import { fontFamilyStack } from './fontFiles';
 import { appendBlankTemplatePage, syncActiveTemplatePage } from './templateSettings';
@@ -111,7 +112,13 @@ export function reflowTextStory(doc: DesignerDocument, layerId: string): Designe
       const continuation = found ?? createContinuation(start, page);
       if (!found) page.layers = [...page.layers, continuation];
       continuation.fontSize = start.fontSize;
+      continuation.fontFamily = start.fontFamily;
+      continuation.fontWeight = start.fontWeight;
+      continuation.fontStyle = start.fontStyle;
       continuation.color = start.color;
+      continuation.fill = start.fill;
+      continuation.stroke = start.stroke;
+      continuation.strokeWidth = start.strokeWidth;
       continuation.align = start.align;
       continuation.direction = start.direction;
       let piece = fitText(probe, rest, continuation);
@@ -206,14 +213,23 @@ function stripContinuations(pages: DesignerTemplatePage[], startId: string) {
 function createContinuation(start: Layer, page: DesignerTemplatePage): Layer {
   const y = 24;
   const height = Math.max(48, page.height - y - 24);
+  const box = start.lockToCanvas
+    ? clampBoxInsideCanvas(
+        { x: start.x, y, width: start.width, height },
+        page.width,
+        page.height,
+        'move'
+      )
+    : { x: start.x, y, width: start.width, height };
   return {
     id: createLayerId(),
     type: 'text',
     name: `${start.name} continued`,
-    x: start.x,
-    y,
-    width: start.width,
-    height,
+    x: box.x,
+    y: box.y,
+    width: box.width,
+    height: box.height,
+    lockToCanvas: start.lockToCanvas,
     visible: true,
     locked: false,
     allowTransform: Boolean(start.allowTransform),
@@ -221,7 +237,13 @@ function createContinuation(start: Layer, page: DesignerTemplatePage): Layer {
     text: '',
     flowText: '',
     fontSize: start.fontSize,
+    fontFamily: start.fontFamily,
+    fontWeight: start.fontWeight,
+    fontStyle: start.fontStyle,
     color: start.color,
+    fill: start.fill,
+    stroke: start.stroke,
+    strokeWidth: start.strokeWidth,
     align: start.align,
     direction: start.direction,
     continuesFrom: start.id,

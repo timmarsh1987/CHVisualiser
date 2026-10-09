@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AssetPicker } from '../CHMarketingBuilder/AssetPicker';
-import { clampBoxToPins, fillLayerToCanvas } from './constraints';
+import { constrainPlacedBox, fillLayerToCanvas } from './constraints';
 import { normalizeRotation } from './coords';
-import { fontsFromFiles, layerFontIsLoaded, layerUsesFont } from './fontFiles';
+import { BUILTIN_FONTS, builtinFont, fontsFromFiles, layerFontIsLoaded, layerUsesFont } from './fontFiles';
+import { useLeftSection } from './LayersPanel';
 import { pinLayerInPlace, setLayerMargin, toggleLayerPin, type MarginKey, type PinKey } from './pageLayout';
-import { fieldLabelFromText, magicStringFor } from './fields';
+import { magicStringFor } from './fields';
 import { defaultEditableContent, layerAllowsContentEdit, layerAllowsTransform } from './policy';
 import { syncActiveTemplatePage } from './templateSettings';
 import {
@@ -17,25 +18,6 @@ import {
 } from './store';
 import { layerTextAlign, storySource } from './textFlow';
 import type { DesignerDocument, DesignerFont, Layer, TextAlign } from './types';
-
-function VariableName({ fieldId, variable }: { fieldId: string; variable: string }) {
-  const dispatch = useDesignerAction();
-  const [draft, setDraft] = useState(variable);
-  useEffect(() => setDraft(variable), [variable]);
-  return (
-    <input
-      type="text"
-      value={draft}
-      spellCheck={false}
-      aria-label="Variable"
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => dispatch({ type: 'SET_FIELD_KEY', fieldId, key: draft })}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') event.currentTarget.blur();
-      }}
-    />
-  );
-}
 
 function FontField({
   value,
@@ -56,13 +38,14 @@ function FontField({
     fonts.find((font) => font.postScriptName === value) ??
     fonts.find((font) => font.family === value && font.weight === (weight || font.weight) && font.style === (style || 'normal')) ??
     fonts.find((font) => font.family === value);
-  const known = Boolean(match) || fonts.some((font) => font.postScriptName === value || font.family === value);
+  const builtin = builtinFont(value);
+  const known = Boolean(match) || Boolean(builtin) || fonts.some((font) => font.postScriptName === value || font.family === value);
   return (
     <label className="chd-field">
       <span>Font</span>
       <select
         disabled={disabled}
-        value={match?.postScriptName || value || ''}
+        value={match?.postScriptName || builtin?.id || value || ''}
         onChange={(event) => {
           const next = event.target.value;
           if (!next) {
@@ -82,6 +65,11 @@ function FontField({
         }}
       >
         <option value="">Georgia</option>
+        {BUILTIN_FONTS.map((font) => (
+          <option key={font.id} value={font.id}>
+            {font.label}
+          </option>
+        ))}
         {fonts.map((font) => (
           <option key={font.id} value={font.postScriptName}>
             {font.postScriptName === font.family ? font.family : `${font.family} (${font.postScriptName})`}
@@ -114,6 +102,59 @@ function NumberField({
         onChange={(e) => onChange(Number(e.target.value))}
       />
     </label>
+  );
+}
+
+function backgroundOn(layer: Layer): boolean {
+  if (layer.fill === 'transparent' || layer.fill === 'none') return false;
+  if (typeof layer.fill === 'string' && layer.fill.trim()) return true;
+  return layer.type === 'frame' || layer.type === 'rect';
+}
+
+function backgroundColor(layer: Layer): string {
+  if (layer.fill && /^#/.test(layer.fill)) return layer.fill;
+  if (layer.type === 'rect') return '#888780';
+  if (layer.type === 'image') return '#e8e6e1';
+  return '#ffffff';
+}
+
+function borderOn(layer: Layer): boolean {
+  return Boolean(layer.stroke && layer.stroke !== 'transparent' && layer.stroke !== 'none');
+}
+
+function PaintToggle({
+  label,
+  enabled,
+  color,
+  width,
+  onToggle,
+  onColor,
+  onWidth,
+}: {
+  label: string;
+  enabled: boolean;
+  color: string;
+  width?: number;
+  onToggle: (enabled: boolean) => void;
+  onColor: (color: string) => void;
+  onWidth?: (width: number) => void;
+}) {
+  return (
+    <div className="chd-paint">
+      <label className="chd-field chd-field-checkbox">
+        <input type="checkbox" checked={enabled} onChange={(event) => onToggle(event.target.checked)} />
+        <span>{label}</span>
+      </label>
+      {enabled ? (
+        <div className="chd-field-row">
+          <label className="chd-field">
+            <span>Colour</span>
+            <input type="color" value={color} onChange={(event) => onColor(event.target.value)} />
+          </label>
+          {onWidth ? <NumberField label="Width" value={width ?? 1} onChange={onWidth} /> : null}
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -280,12 +321,33 @@ function FontManager({ document }: { document: DesignerDocument }) {
                             dispatch({ type: 'REPLACE_FONT', from: item.name, font: null });
                             return;
                           }
+                          const builtin = builtinFont(next);
+                          if (builtin) {
+                            dispatch({
+                              type: 'REPLACE_FONT',
+                              from: item.name,
+                              font: {
+                                id: builtin.id,
+                                family: builtin.label,
+                                postScriptName: builtin.id,
+                                weight: 400,
+                                style: 'normal',
+                                dataUrl: '',
+                              },
+                            });
+                            return;
+                          }
                           const font = fonts.find((face) => face.postScriptName === next);
                           if (font) dispatch({ type: 'REPLACE_FONT', from: item.name, font });
                         }}
                       >
                         <option value="">Choose a font</option>
                         <option value="georgia">Georgia</option>
+                        {BUILTIN_FONTS.map((font) => (
+                          <option key={font.id} value={font.id}>
+                            {font.label}
+                          </option>
+                        ))}
                         {fonts.map((font) => (
                           <option key={font.id} value={font.postScriptName}>
                             {fontTitle(font, fonts)}
@@ -365,6 +427,7 @@ export default function PropertiesPane({
   const dispatch = useDesignerAction();
   const mode = useDesignerMode();
   const document = useDesignerDocument();
+  const { setSection } = useLeftSection();
   const isAdmin = mode === 'admin';
   const isPublication = mode === 'publication';
 
@@ -380,6 +443,10 @@ export default function PropertiesPane({
   const canEditContent = layer ? (isAdmin ? !layer.locked : layerAllowsContentEdit(layer)) : false;
   const story = layer?.type === 'text' ? storySource(document, layer) : null;
   const field = story?.fieldId ? document.fields?.find((item) => item.id === story.fieldId) : undefined;
+  const variableFieldId = layer?.type === 'text' ? story?.fieldId : layer?.fieldId;
+  const variableField = variableFieldId
+    ? document.fields?.find((item) => item.id === variableFieldId)
+    : undefined;
 
   return (
     <aside
@@ -493,6 +560,58 @@ export default function PropertiesPane({
             ) : null}
           </Section>
 
+          {isAdmin ? (
+            <Section title="Variable">
+              {layer.continuesFrom ? (
+                <p className="chd-field-hint">
+                  {field
+                    ? `This frame continues ${magicStringFor(field)}.`
+                    : 'This frame continues the story from the previous page.'}
+                </p>
+              ) : (
+                <>
+                  <label className="chd-field">
+                    <span>Variable</span>
+                    <select
+                      value={variableFieldId || ''}
+                      onChange={(e) =>
+                        dispatch({
+                          type: 'SET_LAYER_FIELD',
+                          layerId: layer.type === 'text' ? story?.id || layer.id : layer.id,
+                          fieldId: e.target.value || null,
+                        })
+                      }
+                    >
+                      <option value="">None</option>
+                      {(document.fields ?? []).map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {magicStringFor(item)}
+                          {item.label && item.label !== item.key ? ` ${item.label}` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  {variableField ? (
+                    <>
+                      <p className="chd-field-hint">
+                        {layer.type === 'image'
+                          ? 'A generation row replaces this image. The picture on the page stays as the sample.'
+                          : layer.type === 'text'
+                            ? `${magicStringFor(variableField)} is filled from a CSV column or a product.`
+                            : `${magicStringFor(variableField)} marks this item. Text and images are the ones filled when you generate.`}
+                      </p>
+                      <button type="button" className="chd-btn" onClick={() => setSection('variables')}>
+                        Edit in Variables
+                      </button>
+                    </>
+                  ) : (
+                    <p className="chd-field-hint">Choose a variable, or add one in Variables.</p>
+                  )}
+                </>
+              )}
+            </Section>
+          ) : null}
+
           {layer.type === 'group' ? null : (
           <>
           {!isPublication ? (
@@ -504,7 +623,7 @@ export default function PropertiesPane({
                 disabled={!canTransform}
                 onChange={(x) =>
                   patch(
-                    clampBoxToPins(
+                    constrainPlacedBox(
                       { x, y: layer.y, width: layer.width, height: layer.height },
                       layer,
                       document.canvas.width,
@@ -520,7 +639,7 @@ export default function PropertiesPane({
                 disabled={!canTransform}
                 onChange={(y) =>
                   patch(
-                    clampBoxToPins(
+                    constrainPlacedBox(
                       { x: layer.x, y, width: layer.width, height: layer.height },
                       layer,
                       document.canvas.width,
@@ -543,7 +662,7 @@ export default function PropertiesPane({
                 disabled={!canTransform}
                 onChange={(width) =>
                   patch(
-                    clampBoxToPins(
+                    constrainPlacedBox(
                       { x: layer.x, y: layer.y, width, height: layer.height },
                       layer,
                       document.canvas.width,
@@ -559,7 +678,7 @@ export default function PropertiesPane({
                 disabled={!canTransform}
                 onChange={(height) =>
                   patch(
-                    clampBoxToPins(
+                    constrainPlacedBox(
                       { x: layer.x, y: layer.y, width: layer.width, height },
                       layer,
                       document.canvas.width,
@@ -582,37 +701,65 @@ export default function PropertiesPane({
           </Section>
           ) : null}
 
-          {!isPublication &&
-            canEditContent &&
-            (layer.type === 'frame' || layer.type === 'rect' || layer.type === 'image') && (
-              <Section title="Fill">
+          {!isPublication && canEditContent && layer.type !== 'group' ? (
+            <Section title="Colour">
+              {layer.type === 'text' ? (
                 <label className="chd-field">
-                  <span>Fill</span>
+                  <span>Font colour</span>
                   <input
                     type="color"
-                    value={layer.fill && /^#/.test(layer.fill) ? layer.fill : '#888780'}
-                    onChange={(e) => patch({ fill: e.target.value })}
+                    value={layer.color && /^#/.test(layer.color) ? layer.color : '#1a1a1a'}
+                    onChange={(e) => patch({ color: e.target.value })}
                   />
                 </label>
-              </Section>
-            )}
+              ) : null}
+              <PaintToggle
+                label="Background"
+                enabled={backgroundOn(layer)}
+                color={backgroundColor(layer)}
+                onToggle={(enabled) => patch({ fill: enabled ? backgroundColor(layer) : 'transparent' })}
+                onColor={(fill) => patch({ fill })}
+              />
+              <PaintToggle
+                label="Border"
+                enabled={borderOn(layer)}
+                color={layer.stroke && /^#/.test(layer.stroke) ? layer.stroke : '#1a1a1a'}
+                width={layer.strokeWidth ?? 1}
+                onToggle={(enabled) =>
+                  patch(
+                    enabled
+                      ? { stroke: layer.stroke && /^#/.test(layer.stroke) ? layer.stroke : '#1a1a1a', strokeWidth: layer.strokeWidth ?? 1 }
+                      : { stroke: undefined, strokeWidth: undefined }
+                  )
+                }
+                onColor={(stroke) => patch({ stroke, strokeWidth: layer.strokeWidth ?? 1 })}
+                onWidth={(strokeWidth) => patch({ strokeWidth: Math.max(0, strokeWidth) })}
+              />
+            </Section>
+          ) : null}
 
           {isAdmin && layer.type === 'text' && (
             <Section title="Text">
-              <label className="chd-field">
-                <span>Text</span>
-                <textarea
-                  rows={4}
-                  value={story?.text || ''}
-                  onChange={(e) =>
-                    dispatch({
-                      type: 'UPDATE_LAYER',
-                      id: story?.id || layer.id,
-                      patch: { text: e.target.value },
-                    })
-                  }
-                />
-              </label>
+              {variableField ? (
+                <p className="chd-field-hint">
+                  Set {magicStringFor(variableField)} in Variables. That copy is shown on every frame that uses it.
+                </p>
+              ) : (
+                <label className="chd-field">
+                  <span>Text</span>
+                  <textarea
+                    rows={4}
+                    value={story?.text || ''}
+                    onChange={(e) =>
+                      dispatch({
+                        type: 'UPDATE_LAYER',
+                        id: story?.id || layer.id,
+                        patch: { text: e.target.value },
+                      })
+                    }
+                  />
+                </label>
+              )}
               <ChoiceField
                 label="Align"
                 value={layerTextAlign(story || layer)}
@@ -644,96 +791,6 @@ export default function PropertiesPane({
                   ? 'This frame continues the story from the previous page.'
                   : 'Text that does not fit this box continues at the top of the next page.'}
               </p>
-              <label className="chd-field">
-                <span>Color</span>
-                <input
-                  type="color"
-                  value={layer.color && /^#/.test(layer.color) ? layer.color : '#1a1a1a'}
-                  onChange={(e) => patch({ color: e.target.value })}
-                />
-              </label>
-            </Section>
-          )}
-
-          {isAdmin && layer.type === 'text' && (
-            <Section title="Magic string">
-              {layer.continuesFrom ? (
-                <p className="chd-field-hint">
-                  {field
-                    ? `This frame continues ${magicStringFor(field)}.`
-                    : 'This frame continues the story from the previous page.'}
-                </p>
-              ) : (
-                <>
-                  <label className="chd-field">
-                    <span>Field</span>
-                    <select
-                      value={story?.fieldId || ''}
-                      onChange={(e) =>
-                        dispatch({
-                          type: 'SET_LAYER_FIELD',
-                          layerId: story?.id || layer.id,
-                          fieldId: e.target.value || null,
-                        })
-                      }
-                    >
-                      <option value="">None</option>
-                      {(document.fields ?? [])
-                        .filter((item) => item.kind !== 'image')
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.label} ({magicStringFor(item)})
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  {field ? (
-                    <>
-                      <label className="chd-field">
-                        <span>Variable</span>
-                        <VariableName fieldId={field.id} variable={field.key} />
-                      </label>
-                      <p className="chd-field-hint">
-                        {magicStringFor(field)} is the variable a CSV column can fill. The sample copy stays on the page.
-                      </p>
-                      <label className="chd-field">
-                        <span>Label</span>
-                        <input
-                          type="text"
-                          value={field.label}
-                          onChange={(e) =>
-                            dispatch({
-                              type: 'SET_FIELD_LABEL',
-                              fieldId: field.id,
-                              label: e.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                    </>
-                  ) : (
-                    <>
-                      <p className="chd-field-hint">
-                        Add a variable for this text. The sample copy stays on the page.
-                      </p>
-                      <button
-                        type="button"
-                        className="chd-btn"
-                        onClick={() =>
-                          dispatch({
-                            type: 'ADD_FIELD',
-                            kind: 'text',
-                            label: fieldLabelFromText(story?.text, layer.name),
-                            layerId: story?.id || layer.id,
-                          })
-                        }
-                      >
-                        Add variable
-                      </button>
-                    </>
-                  )}
-                </>
-              )}
             </Section>
           )}
 
@@ -799,61 +856,6 @@ export default function PropertiesPane({
 
           {canEditContent && layer.type === 'image' && (
             <Section title="Image">
-              {isAdmin ? (
-                <>
-                  <label className="chd-field">
-                    <span>Generation field</span>
-                    <select
-                      value={layer.fieldId || ''}
-                      onChange={(e) =>
-                        dispatch({
-                          type: 'SET_LAYER_FIELD',
-                          layerId: layer.id,
-                          fieldId: e.target.value || null,
-                        })
-                      }
-                    >
-                      <option value="">None</option>
-                      {(document.fields ?? [])
-                        .filter((item) => item.kind === 'image')
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.label} ({magicStringFor(item)})
-                          </option>
-                        ))}
-                    </select>
-                  </label>
-                  {layer.fieldId ? (
-                    <>
-                      <label className="chd-field">
-                        <span>Variable</span>
-                        <VariableName
-                          fieldId={layer.fieldId}
-                          variable={document.fields?.find((item) => item.id === layer.fieldId)?.key || ''}
-                        />
-                      </label>
-                      <p className="chd-field-hint">
-                        A generation row replaces this image. The picture on the page stays as the sample.
-                      </p>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      className="chd-btn"
-                      onClick={() =>
-                        dispatch({
-                          type: 'ADD_FIELD',
-                          kind: 'image',
-                          label: layer.name || 'Image',
-                          layerId: layer.id,
-                        })
-                      }
-                    >
-                      Create image field
-                    </button>
-                  )}
-                </>
-              ) : null}
               <div className="chd-image-source">
                 <span>Image</span>
                 <AssetPicker
@@ -888,8 +890,21 @@ export default function PropertiesPane({
             </Section>
           )}
 
-          {isAdmin ? (
+            {isAdmin ? (
             <>
+            <Section title="Options">
+              <label className="chd-field chd-field-checkbox">
+                <input
+                  type="checkbox"
+                  checked={Boolean(layer.lockToCanvas)}
+                  onChange={(e) => patch({ lockToCanvas: e.target.checked })}
+                />
+                <span>Lock to canvas</span>
+              </label>
+              <p className="chd-field-hint">
+                The layer can be moved around the page, but it cannot be moved off the canvas.
+              </p>
+            </Section>
             <Section title="Page">
               <div className="chd-field chd-pin-field">
                 <span>Pin to page</span>

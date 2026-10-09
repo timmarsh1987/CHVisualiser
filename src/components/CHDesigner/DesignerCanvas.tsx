@@ -1,14 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   canvasGuidesForBox,
-  clampBoxToPins,
+  constrainPlacedBox,
   snapMoveToCanvas,
   snapResizeToCanvas,
   type CanvasSnapGuide,
   type PlacedBox,
 } from './constraints';
 import { layerFontIsLoaded, missingFontNames } from './fontFiles';
-import { clamp, fitPageInView, normalizeRotation, revealBoxInView, screenDeltaToCanvas, screenToCanvas, zoomAroundPoint, type ViewBox } from './coords';
+import { clamp, fitPageInView, normalizeRotation, revealBoxEdgeInView, revealBoxInView, screenDeltaToCanvas, screenToCanvas, zoomAroundPoint, type ViewBox } from './coords';
 import LayerNode from './LayerNode';
 import { layerAllowsTransform, layerIsDrawn, layerIsSelectable } from './policy';
 import {
@@ -77,6 +77,8 @@ export default function DesignerCanvas() {
   const [spaceDown, setSpaceDown] = useState(false);
   const viewportStateRef = useRef(viewport);
   viewportStateRef.current = viewport;
+  const documentRef = useRef(document);
+  documentRef.current = document;
   const modeRef = useRef(mode);
   modeRef.current = mode;
   const viewportElRef = useRef<HTMLDivElement>(null);
@@ -84,8 +86,10 @@ export default function DesignerCanvas() {
   const didFitRef = useRef(false);
   const panMovedRef = useRef(false);
   const rotateRef = useRef({ last: 0, accum: 0 });
+  const movedBoxesRef = useRef<Record<string, PlacedBox>>({});
   const onWheelRef = useRef<(event: WheelEvent) => void>(() => undefined);
 
+  const applyViewRef = useRef<(next: { zoom: number; panX: number; panY: number }) => void>(() => undefined);
   const applyView = (next: { zoom: number; panX: number; panY: number }) => {
     const current = viewportStateRef.current;
     if (
@@ -97,6 +101,7 @@ export default function DesignerCanvas() {
     }
     dispatch({ type: 'VIEWPORT_SET', ...next });
   };
+  applyViewRef.current = applyView;
 
   useEffect(() => {
     const el = viewportElRef.current;
@@ -124,16 +129,23 @@ export default function DesignerCanvas() {
     if (interactionRef.current || selection.length === 0) return;
     const el = viewportElRef.current;
     if (!el) return;
-    const chosen = document.layers.filter(
-      (layer) => selection.includes(layer.id) && layerIsDrawn(layer, document.settings)
+    const doc = documentRef.current;
+    const chosen = doc.layers.filter(
+      (layer) => selection.includes(layer.id) && layerIsDrawn(layer, doc.settings)
     );
     if (chosen.length === 0) return;
     const rect = el.getBoundingClientRect();
     if (rect.width < 8 || rect.height < 8) return;
     const base = justFitted
-      ? fitPageInView(document.canvas.width, document.canvas.height, rect.width, rect.height)
+      ? fitPageInView(doc.canvas.width, doc.canvas.height, rect.width, rect.height)
       : viewportStateRef.current;
-    applyView(revealBoxInView(unionBox(chosen), base, rect.width, rect.height));
+    const box = unionBox(chosen);
+    const missesPage = layerMissesPage(box, doc.canvas.width, doc.canvas.height);
+    applyView(
+      missesPage
+        ? revealBoxEdgeInView(box, base, rect.width, rect.height)
+        : revealBoxInView(box, base, rect.width, rect.height)
+    );
     // A page fit in this same commit wins unless the chosen box sits outside that fitted page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectionKey]);
@@ -215,7 +227,7 @@ export default function DesignerCanvas() {
         const shiftY = snapped.y - group.y;
         const placed: PlacedBox[] = [];
         for (const item of moving) {
-          const next = clampBoxToPins(
+          const next = constrainPlacedBox(
             {
               x: item.box.x + shiftX,
               y: item.box.y + shiftY,
@@ -228,6 +240,7 @@ export default function DesignerCanvas() {
             'move'
           );
           placed.push(next);
+          movedBoxesRef.current[item.id] = next;
           dispatch({
             type: 'UPDATE_LAYER',
             id: item.id,
@@ -272,7 +285,7 @@ export default function DesignerCanvas() {
         zoom,
         interaction.handle
       );
-      const resized = clampBoxToPins(
+      const resized = constrainPlacedBox(
         snapped,
         interaction.layer,
         interaction.canvasWidth,
@@ -322,6 +335,21 @@ export default function DesignerCanvas() {
         dispatch({ type: 'UNSELECT_ALL' });
       } else if (interaction.kind === 'move' || interaction.kind === 'resize' || interaction.kind === 'rotate') {
         dispatch({ type: 'COMMIT' });
+        if (interaction.kind === 'move') {
+          const missed = interaction.ids
+            .map((id) => movedBoxesRef.current[id])
+            .filter(
+              (box): box is PlacedBox =>
+                Boolean(box) && layerMissesPage(box, interaction.canvasWidth, interaction.canvasHeight)
+            );
+          const el = viewportElRef.current;
+          if (missed.length > 0 && el) {
+            const rect = el.getBoundingClientRect();
+            const view = revealBoxEdgeInView(boundsOf(missed), viewportStateRef.current, rect.width, rect.height);
+            window.setTimeout(() => applyViewRef.current(view), 0);
+          }
+          movedBoxesRef.current = {};
+        }
       }
       interactionRef.current = null;
       setInteraction(null);
@@ -474,11 +502,21 @@ export default function DesignerCanvas() {
 
   const loadedFonts = document.settings?.fonts ?? [];
   const missingFonts = missingFontNames(document.layers, loadedFonts);
-  const selectedLayers = document.layers.filter(
-    (l) => selection.includes(l.id) && layerIsDrawn(l, document.settings)
-  );
+  const pageWidth = document.canvas.width;
+  const pageHeight = document.canvas.height;
+  const drawnLayers = document.layers.filter((layer) => layerIsDrawn(layer, document.settings));
+  const offCanvasLayers = drawnLayers.filter((layer) => layerOverflowsPage(layer, pageWidth, pageHeight));
+  const selectedLayers = drawnLayers.filter((layer) => selection.includes(layer.id));
   const primary = selectedLayers.length === 1 ? selectedLayers[0] : null;
   const showHandles = primary ? canTransformLayer(primary) : false;
+
+  const handleOffCanvasPointerDown = (layer: Layer, event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    if (!layerIsSelectable(layer, mode, document.settings)) return;
+    event.stopPropagation();
+    handleLayerSelect(layer, event);
+    if (!layer.locked) handleMoveStart(layer, event);
+  };
 
   return (
       <div
@@ -498,6 +536,31 @@ export default function DesignerCanvas() {
         style={{ transform: `translate(${viewport.panX}px, ${viewport.panY}px)` }}
       >
         <div className="chd-world-zoom" style={{ zoom: viewport.zoom }}>
+        <div className="chd-offcanvas">
+          {offCanvasLayers.map((layer) => (
+            <div
+              key={layer.id}
+              className={`chd-offcanvas-hit${layer.locked ? ' chd-offcanvas-hit--locked' : ''}`}
+              data-chd-offcanvas={layer.id}
+              title={layer.name || 'Off page'}
+              style={{
+                left: layer.x,
+                top: layer.y,
+                width: layer.width,
+                height: layer.height,
+                transform: layer.rotation ? `rotate(${layer.rotation}deg)` : undefined,
+              }}
+              onPointerDown={(event) => handleOffCanvasPointerDown(layer, event)}
+            >
+              <LayerNode
+                layer={layer}
+                embedded
+                selected={false}
+                missingFont={!layerFontIsLoaded(layer, loadedFonts)}
+              />
+            </div>
+          ))}
+        </div>
         <div
           className="chd-artboard"
           data-chd-artboard="true"
@@ -515,7 +578,7 @@ export default function DesignerCanvas() {
         >
           <div className="chd-artboard-clip">
             <div className="chd-artboard-page" />
-            {document.layers.filter((layer) => layerIsDrawn(layer, document.settings)).map((layer) => (
+            {drawnLayers.map((layer) => (
               <LayerNode
                 key={layer.id}
                 layer={layer}
@@ -538,6 +601,30 @@ export default function DesignerCanvas() {
             style={guideStyle(guide, document.canvas.width, document.canvas.height, viewport)}
           />
         ))}
+        {offCanvasLayers.map((layer) => {
+          const selected = selection.includes(layer.id);
+          const misses = layerMissesPage(layer, pageWidth, pageHeight);
+          const passive = Boolean(layer.rotation);
+          return (
+            <div
+              key={`off-${layer.id}`}
+              className={`chd-offcanvas-outline${selected ? ' chd-offcanvas-outline--selected' : ''}${
+                layer.locked ? ' chd-offcanvas-outline--locked' : ''
+              }${passive ? ' chd-offcanvas-outline--passive' : ''}`}
+              style={{
+                ...layerBoxStyle(layer, viewport),
+                clipPath: offCanvasClipPath(layer, pageWidth, pageHeight, viewport.zoom),
+              }}
+              onPointerDown={passive ? undefined : (event) => handleOffCanvasPointerDown(layer, event)}
+            >
+              {misses ? (
+                <span className={`chd-offcanvas-label chd-offcanvas-label--${offCanvasLabelSide(layer, pageWidth, pageHeight)}`}>
+                  {layer.name || 'Off page'}
+                </span>
+              ) : null}
+            </div>
+          );
+        })}
         {document.layers
           .filter((layer) => layer.locked && layerIsDrawn(layer, document.settings))
           .map((layer) => (
@@ -670,4 +757,64 @@ function unionBox(layers: Layer[]): ViewBox {
     y1 = Math.max(y1, layer.y + layer.height);
   }
   return { x: x0, y: y0, width: Math.max(1, x1 - x0), height: Math.max(1, y1 - y0) };
+}
+
+function layerOverflowsPage(
+  layer: { x: number; y: number; width: number; height: number },
+  pageWidth: number,
+  pageHeight: number
+): boolean {
+  return (
+    layer.x < -0.5 ||
+    layer.y < -0.5 ||
+    layer.x + layer.width > pageWidth + 0.5 ||
+    layer.y + layer.height > pageHeight + 0.5
+  );
+}
+
+function layerMissesPage(
+  layer: { x: number; y: number; width: number; height: number },
+  pageWidth: number,
+  pageHeight: number
+): boolean {
+  return (
+    layer.x + layer.width <= 0.5 ||
+    layer.y + layer.height <= 0.5 ||
+    layer.x >= pageWidth - 0.5 ||
+    layer.y >= pageHeight - 0.5
+  );
+}
+
+/** Put the name on the edge nearest the page, which is the part brought back into view. */
+function offCanvasLabelSide(
+  layer: { x: number; y: number; width: number; height: number },
+  pageWidth: number,
+  pageHeight: number
+): 'start' | 'end' | 'below' {
+  if (layer.x + layer.width <= 0.5) return 'end';
+  if (layer.x >= pageWidth - 0.5) return 'start';
+  if (layer.y + layer.height <= 0.5) return 'below';
+  if (layer.y >= pageHeight - 0.5) return 'start';
+  return 'start';
+}
+
+/** Clip the on-page part out of an off-canvas outline. Rotated boxes keep the full frame. */
+function offCanvasClipPath(
+  layer: Layer,
+  pageWidth: number,
+  pageHeight: number,
+  zoom: number
+): string | undefined {
+  if (layer.rotation) return undefined;
+  const width = layer.width * zoom;
+  const height = layer.height * zoom;
+  if (width <= 0 || height <= 0) return undefined;
+  const pageX = -layer.x * zoom;
+  const pageY = -layer.y * zoom;
+  const holeLeft = Math.max(0, pageX);
+  const holeTop = Math.max(0, pageY);
+  const holeRight = Math.min(width, pageX + pageWidth * zoom);
+  const holeBottom = Math.min(height, pageY + pageHeight * zoom);
+  if (holeLeft >= holeRight - 0.5 || holeTop >= holeBottom - 0.5) return undefined;
+  return `polygon(evenodd, 0 0, ${width}px 0, ${width}px ${height}px, 0 ${height}px, ${holeLeft}px ${holeTop}px, ${holeLeft}px ${holeBottom}px, ${holeRight}px ${holeBottom}px, ${holeRight}px ${holeTop}px)`;
 }

@@ -323,6 +323,92 @@ export function clampBoxToPins(
   return { x, y, width, height };
 }
 
+/**
+ * Keep a box on the page.
+ * Move slides it until an edge meets the canvas. Resize stops the edge being dragged.
+ */
+export function clampBoxInsideCanvas(
+  box: PlacedBox,
+  canvasWidth: number,
+  canvasHeight: number,
+  mode: 'move' | 'resize'
+): PlacedBox {
+  const pageWidth = Math.max(0, canvasWidth);
+  const pageHeight = Math.max(0, canvasHeight);
+
+  if (mode === 'move') {
+    const width = Math.min(Math.max(0, box.width), pageWidth);
+    const height = Math.min(Math.max(0, box.height), pageHeight);
+    return {
+      x: Math.min(Math.max(0, box.x), Math.max(0, pageWidth - width)),
+      y: Math.min(Math.max(0, box.y), Math.max(0, pageHeight - height)),
+      width,
+      height,
+    };
+  }
+
+  let x = box.x;
+  let y = box.y;
+  let width = box.width;
+  let height = box.height;
+
+  if (x < 0) {
+    width += x;
+    x = 0;
+  }
+  if (y < 0) {
+    height += y;
+    y = 0;
+  }
+  if (x + width > pageWidth) width = pageWidth - x;
+  if (y + height > pageHeight) height = pageHeight - y;
+
+  if (pageWidth >= MIN_LAYER_SIZE) width = Math.max(MIN_LAYER_SIZE, width);
+  if (pageHeight >= MIN_LAYER_SIZE) height = Math.max(MIN_LAYER_SIZE, height);
+
+  if (x + width > pageWidth) x = Math.max(0, pageWidth - width);
+  if (y + height > pageHeight) y = Math.max(0, pageHeight - height);
+  if (width > pageWidth) {
+    x = 0;
+    width = pageWidth;
+  }
+  if (height > pageHeight) {
+    y = 0;
+    height = pageHeight;
+  }
+
+  return { x, y, width, height };
+}
+
+type PlacedLayer = PinMargins & { lockToCanvas?: boolean };
+
+/** Pins first, then keep the box on the page when the layer is locked to the canvas. */
+export function constrainPlacedBox(
+  box: PlacedBox,
+  layer: PlacedLayer,
+  canvasWidth: number,
+  canvasHeight: number,
+  mode: 'move' | 'resize'
+): PlacedBox {
+  const pinned = clampBoxToPins(box, layer, canvasWidth, canvasHeight, mode);
+  if (layer.lockToCanvas !== true) return pinned;
+  return clampBoxInsideCanvas(pinned, canvasWidth, canvasHeight, mode);
+}
+
+/** Pull a locked layer fully onto the page. Other layers are unchanged. */
+export function keepLockedLayerOnCanvas(layer: Layer, canvasWidth: number, canvasHeight: number): Layer {
+  if (layer.lockToCanvas !== true || layer.type === 'group') return layer;
+  return {
+    ...layer,
+    ...clampBoxInsideCanvas(
+      { x: layer.x, y: layer.y, width: layer.width, height: layer.height },
+      canvasWidth,
+      canvasHeight,
+      'move'
+    ),
+  };
+}
+
 export function isFullBleed(
   layer: Pick<Layer, 'x' | 'y' | 'width' | 'height' | 'pinLeft' | 'pinRight' | 'pinTop' | 'pinBottom'>,
   canvasWidth: number,
@@ -373,10 +459,14 @@ export function remapLayerToCanvas(
   if (from.width === to.width && from.height === to.height) return layer;
 
   if (hasExplicitPins(layer)) {
-    return {
-      ...layer,
-      ...applyEdgePins(layer, to.width, to.height),
-    };
+    return keepLockedLayerOnCanvas(
+      {
+        ...layer,
+        ...applyEdgePins(layer, to.width, to.height),
+      },
+      to.width,
+      to.height
+    );
   }
 
   const pins = resolveLayerPins(layer, from.width, from.height);
@@ -384,14 +474,18 @@ export function remapLayerToCanvas(
   const yAxis = remapAxis(layer.y, layer.height, from.height, to.height, pins.top, pins.bottom);
   const fullBleed = pins.left && pins.right && pins.top && pins.bottom;
 
-  return {
-    ...layer,
-    x: xAxis.start,
-    y: yAxis.start,
-    width: xAxis.size,
-    height: yAxis.size,
-    objectFit: layer.objectFit ?? (fullBleed && layer.type === 'image' ? 'cover' : layer.objectFit),
-  };
+  return keepLockedLayerOnCanvas(
+    {
+      ...layer,
+      x: xAxis.start,
+      y: yAxis.start,
+      width: xAxis.size,
+      height: yAxis.size,
+      objectFit: layer.objectFit ?? (fullBleed && layer.type === 'image' ? 'cover' : layer.objectFit),
+    },
+    to.width,
+    to.height
+  );
 }
 
 export function remapDocumentCanvas(

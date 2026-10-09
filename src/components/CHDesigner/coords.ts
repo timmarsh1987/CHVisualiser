@@ -130,3 +130,43 @@ export function revealBoxInView(
 
   return { zoom, panX, panY };
 }
+
+/**
+ * Pan, without zooming, so a box that has left the stage shows a grabbable edge.
+ * A box that already overlaps the stage by `grab` pixels is left where it is.
+ */
+export function revealBoxEdgeInView(
+  box: ViewBox,
+  viewport: Pick<ViewportState, 'zoom' | 'panX' | 'panY'>,
+  viewWidth: number,
+  viewHeight: number,
+  grab = 72,
+  edge = 16
+): Pick<ViewportState, 'zoom' | 'panX' | 'panY'> {
+  const zoom = viewport.zoom > 0 ? viewport.zoom : 1;
+  let panX = viewport.panX;
+  let panY = viewport.panY;
+  const left = panX + box.x * zoom;
+  const top = panY + box.y * zoom;
+  const right = left + Math.max(box.width, 1) * zoom;
+  const bottom = top + Math.max(box.height, 1) * zoom;
+  const innerL = edge;
+  const innerT = edge;
+  const innerR = Math.max(edge + 1, viewWidth - edge);
+  const innerB = Math.max(edge + 1, viewHeight - edge);
+  const visibleW = Math.min(right, innerR) - Math.max(left, innerL);
+  const visibleH = Math.min(bottom, innerB) - Math.max(top, innerT);
+  const wantW = Math.min(grab, Math.max(box.width, 1) * zoom);
+  const wantH = Math.min(grab, Math.max(box.height, 1) * zoom);
+
+  if (visibleW < wantW) {
+    if (right <= innerL + wantW) panX += innerL + wantW - right;
+    else if (left >= innerR - wantW) panX -= left - (innerR - wantW);
+  }
+  if (visibleH < wantH) {
+    if (bottom <= innerT + wantH) panY += innerT + wantH - bottom;
+    else if (top >= innerB - wantH) panY -= top - (innerB - wantH);
+  }
+
+  return { zoom: viewport.zoom, panX, panY };
+}

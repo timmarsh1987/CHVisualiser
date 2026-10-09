@@ -21,11 +21,17 @@ export interface Layer {
   visible: boolean;
   /** Admin/end-user: fully locked — no select/move/edit in end-user mode. */
   locked?: boolean;
+  /** Stay on the page. The layer can move around the canvas, but it cannot leave it. */
+  lockToCanvas?: boolean;
   /** End user may move/resize (default false). */
   allowTransform?: boolean;
   /** End user may edit text/fill/src (default true for text/image). */
   editableContent?: boolean;
   fill?: string;
+  /** Border colour. Empty means no border. */
+  stroke?: string;
+  /** Border thickness in pixels. */
+  strokeWidth?: number;
   text?: string;
   /**
    * Portion of `text` drawn in this frame when the story continues on another page.
@@ -71,7 +77,7 @@ export interface Layer {
   /** Brand name for a brand-slot layer, such as Hampton. */
   option?: string;
   direction?: 'ltr' | 'rtl';
-  /** Magic-string field whose value replaces this frame’s story or image on an output. */
+  /** Variable whose value replaces this frame’s story or image on an output. */
   fieldId?: string;
   /** Group this layer sits inside. Groups are folders in the layers panel, not drawn on the page. */
   parentId?: string;
@@ -240,6 +246,11 @@ export type DesignerAction =
   | { type: 'SET_FIELD_CSV'; fieldId: string; column: string }
   | { type: 'SET_FIELD_CSV_COLUMNS'; columns: Record<string, string> }
   | { type: 'SET_LAYER_FIELD'; layerId: string; fieldId: string | null }
+  | { type: 'ASSIGN_SELECTION_FIELD'; fieldId: string }
+  | { type: 'CLEAR_SELECTION_FIELD'; fieldId: string }
+  | { type: 'REMOVE_FIELD'; fieldId: string }
+  | { type: 'FOCUS_FIELD'; fieldId: string }
+  | { type: 'SET_VARIABLE_TEXT'; fieldId: string; text: string }
   | { type: 'ADD_FIELD'; kind: DesignerFieldKind; label: string; layerId?: string }
   | { type: 'ADD_MAGIC_STRINGS' }
   | { type: 'COMMIT' };

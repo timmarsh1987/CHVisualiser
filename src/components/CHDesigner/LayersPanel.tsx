@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { fieldKind, magicStringFor, textForVariable, variableHits } from './fields';
 import { layerIsSelectable } from './policy';
 import { useDesignerAction, useDesignerDocument, useDesignerMode, useLayers, useSelection } from './store';
-import type { Layer } from './types';
+import type { DesignerField, Layer } from './types';
+
+type LeftSection = 'layers' | 'variables';
+
+const LeftSectionContext = React.createContext<{
+  section: LeftSection;
+  setSection: (section: LeftSection) => void;
+}>({ section: 'layers', setSection: () => {} });
+
+export function LeftSectionProvider({ children }: { children: React.ReactNode }) {
+  const [section, setSection] = useState<LeftSection>('layers');
+  return <LeftSectionContext.Provider value={{ section, setSection }}>{children}</LeftSectionContext.Provider>;
+}
+
+export function useLeftSection() {
+  return React.useContext(LeftSectionContext);
+}
 
 type ListedLayer = { layer: Layer; index: number };
 
@@ -18,6 +35,8 @@ export default function LayersPanel({
   const dispatch = useDesignerAction();
   const mode = useDesignerMode();
   const isAdmin = mode === 'admin';
+  const { section, setSection } = useLeftSection();
+  const showingVariables = isAdmin && section === 'variables';
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(() => new Set());
@@ -243,7 +262,7 @@ export default function LayersPanel({
   return (
     <aside
       className={`chd-panel chd-layers-panel${isAdmin ? ' chd-layers-panel--admin' : ''}${collapsed ? ' chd-panel--collapsed' : ''}`}
-      aria-label="Layers"
+      aria-label={showingVariables ? 'Variables' : 'Layers'}
       onDragOver={(event) => {
         if (!isAdmin || !draggedId) return;
         event.preventDefault();
@@ -259,13 +278,36 @@ export default function LayersPanel({
     >
       <div className="chd-panel-header">
         {collapsed ? (
-          <span className="chd-panel-rail-label">{isAdmin ? 'Layers' : 'Editable'}</span>
+          <span className="chd-panel-rail-label">
+            {showingVariables ? 'Variables' : isAdmin ? 'Layers' : 'Editable'}
+          </span>
+        ) : isAdmin ? (
+          <div className="chd-section-tabs" role="tablist" aria-label="Left panel">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={section === 'layers'}
+              className={`chd-section-tab${section === 'layers' ? ' chd-section-tab--active' : ''}`}
+              onClick={() => setSection('layers')}
+            >
+              Layers
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={section === 'variables'}
+              className={`chd-section-tab${section === 'variables' ? ' chd-section-tab--active' : ''}`}
+              onClick={() => setSection('variables')}
+            >
+              Variables
+            </button>
+          </div>
         ) : (
-          <span>{isAdmin ? 'Layers' : 'Editable layers'}</span>
+          <span>Editable layers</span>
         )}
         {collapsed ? null : (
           <div className="chd-panel-header-actions">
-            {isAdmin ? (
+            {isAdmin && section === 'layers' ? (
               <button
                 type="button"
                 className="chd-btn"
@@ -300,7 +342,9 @@ export default function LayersPanel({
           </button>
         ) : null}
       </div>
-      {collapsed ? null : (
+      {collapsed ? null : showingVariables ? (
+        <Variables document={document} layers={layers} selection={selection} />
+      ) : (
         <ul className="chd-layer-list">
           {roots.length === 0 ? (
             <li className="chd-panel-empty">No editable layers</li>
@@ -310,6 +354,151 @@ export default function LayersPanel({
         </ul>
       )}
     </aside>
+  );
+}
+
+function usageText(layers: number, pages: number): string {
+  if (layers === 0) return 'Not used';
+  return `${layers} on ${pages} ${pages === 1 ? 'page' : 'pages'}`;
+}
+
+function Variables({
+  document,
+  layers,
+  selection,
+}: {
+  document: ReturnType<typeof useDesignerDocument>;
+  layers: Layer[];
+  selection: string[];
+}) {
+  const dispatch = useDesignerAction();
+  const fields = document.fields ?? [];
+  const selected = new Set(selection);
+  const onThisPage = new Set(layers.map((layer) => layer.id));
+  return (
+    <section className="chd-variables" aria-label="Variables">
+      <div className="chd-variables-toolbar">
+        <p className="chd-field-hint">Set the copy for each variable here. It is shown on every frame that uses it.</p>
+        <button
+          type="button"
+          className="chd-btn"
+          onClick={() => dispatch({ type: 'ADD_FIELD', kind: 'text', label: 'Variable' })}
+        >
+          Add
+        </button>
+      </div>
+      {fields.length === 0 ? (
+        <p className="chd-panel-empty">No variables</p>
+      ) : (
+        <ul className="chd-variable-list">
+          {fields.map((field) => {
+            const hits = variableHits(document, field.id);
+            const usedHere = hits.some((hit) =>
+              hit.layerIds.some((id) => selected.has(id) && onThisPage.has(id))
+            );
+            return (
+              <VariableCard
+                key={field.id}
+                field={field}
+                hits={hits}
+                usedHere={usedHere}
+                text={textForVariable(document, field.id)}
+              />
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function VariableCard({
+  field,
+  hits,
+  usedHere,
+  text,
+}: {
+  field: DesignerField;
+  hits: { pageId: string; layerIds: string[] }[];
+  usedHere: boolean;
+  text: string | undefined;
+}) {
+  const dispatch = useDesignerAction();
+  const count = hits.reduce((sum, hit) => sum + hit.layerIds.length, 0);
+  const token = magicStringFor(field);
+  const isImage = fieldKind(field) === 'image';
+  return (
+    <li className={`chd-variable-card${usedHere ? ' chd-variable-card--active' : ''}`}>
+      <div className="chd-variable-row">
+        <button
+          type="button"
+          className="chd-variable-select"
+          onClick={() => dispatch({ type: 'FOCUS_FIELD', fieldId: field.id })}
+        >
+          <span className="chd-variable-token">{token}</span>
+          <small>{usageText(count, hits.length)}</small>
+        </button>
+        <button
+          type="button"
+          className="chd-icon-btn chd-icon-btn--danger"
+          title="Remove variable"
+          aria-label={`Remove ${token}`}
+          onClick={() => dispatch({ type: 'REMOVE_FIELD', fieldId: field.id })}
+        >
+          <TrashIcon />
+        </button>
+      </div>
+      <VariableName fieldId={field.id} variable={field.key} />
+      <label className="chd-field">
+        <span>Label</span>
+        <input
+          type="text"
+          value={field.label}
+          onChange={(event) =>
+            dispatch({ type: 'SET_FIELD_LABEL', fieldId: field.id, label: event.target.value })
+          }
+        />
+      </label>
+      {isImage ? (
+        <p className="chd-field-hint">A generation row replaces this image. The picture on the frame stays as the sample.</p>
+      ) : text === undefined ? (
+        <p className="chd-field-hint">Assign {token} to a text frame to set its copy.</p>
+      ) : (
+        <label className="chd-field">
+          <span>Text</span>
+          <textarea
+            rows={3}
+            aria-label={`Text for ${token}`}
+            value={text}
+            onChange={(event) =>
+              dispatch({ type: 'SET_VARIABLE_TEXT', fieldId: field.id, text: event.target.value })
+            }
+          />
+        </label>
+      )}
+    </li>
+  );
+}
+
+function VariableName({ fieldId, variable }: { fieldId: string; variable: string }) {
+  const dispatch = useDesignerAction();
+  const [draft, setDraft] = useState(variable);
+  useEffect(() => setDraft(variable), [variable]);
+  return (
+    <label className="chd-field">
+      <span>Name</span>
+      <input
+        type="text"
+        value={draft}
+        spellCheck={false}
+        aria-label="Variable name"
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={() => dispatch({ type: 'SET_FIELD_KEY', fieldId, key: draft })}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') event.currentTarget.blur();
+        }}
+      />
+    </label>
   );
 }
 

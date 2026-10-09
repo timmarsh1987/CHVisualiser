@@ -27,7 +27,7 @@ export function slugFieldKey(label: string): string {
   return slug || 'text';
 }
 
-/** Variable name stored on a magic string. Spaces become underscores. */
+/** Variable name. Spaces become underscores. */
 export function variableKey(name: string, fields: DesignerField[], exceptId?: string): string | null {
   const trimmed = name.trim();
   if (!trimmed) return null;
@@ -48,40 +48,92 @@ function uniqueKey(base: string, used: Set<string>): string {
   return key;
 }
 
-function canTakeField(layer: Layer): boolean {
-  if (layer.type !== 'text' || layer.continuesFrom || layer.fieldId) return false;
+function layerLists(doc: DesignerDocument): Layer[][] {
+  if (doc.pages?.length) return doc.pages.map((page) => page.layers);
+  return [doc.layers];
+}
+
+function storyKey(text: string | undefined): string {
+  return (text ?? '').replace(/\r\n/g, '\n').trim();
+}
+
+/**
+ * Create a variable for each editable text frame.
+ * The same text on any page shares one variable. Sample copy stays on the layer.
+ */
+export function assignMagicStrings(doc: DesignerDocument): DesignerDocument {
+  const synced = syncActiveTemplatePage(doc);
+  const hasText = layerLists(synced).some((layers) => layers.some(canShareText));
+  if (!hasText) return doc;
+
+  const copy = syncActiveTemplatePage(cloneDocument(doc));
+  const fields = [...(copy.fields ?? [])];
+  const referencedBefore = new Set<string>();
+  for (const layers of layerLists(copy)) {
+    for (const layer of layers) {
+      if (layer.fieldId) referencedBefore.add(layer.fieldId);
+    }
+  }
+
+  let changed = false;
+  const groups = new Map<string, Layer[]>();
+  for (const layers of layerLists(copy)) {
+    for (const layer of layers) {
+      if (!canShareText(layer)) continue;
+      const key = storyKey(layer.text);
+      if (!key) {
+        if (!layer.fieldId) {
+          const field = createDesignerField(fields, fieldLabelFromText(layer.text, layer.name), 'text');
+          fields.push(field);
+          layer.fieldId = field.id;
+          changed = true;
+        }
+        continue;
+      }
+      const group = groups.get(key);
+      if (group) group.push(layer);
+      else groups.set(key, [layer]);
+    }
+  }
+
+  for (const group of groups.values()) {
+    const current = group.find((layer) => layer.fieldId && fields.some((field) => field.id === layer.fieldId));
+    let fieldId = current?.fieldId;
+    if (!fieldId) {
+      const field = createDesignerField(fields, fieldLabelFromText(group[0].text, group[0].name), 'text');
+      fields.push(field);
+      fieldId = field.id;
+      changed = true;
+    }
+    for (const layer of group) {
+      if (layer.fieldId === fieldId) continue;
+      layer.fieldId = fieldId;
+      changed = true;
+    }
+  }
+
+  const referencedAfter = new Set<string>();
+  for (const layers of layerLists(copy)) {
+    for (const layer of layers) {
+      if (layer.fieldId) referencedAfter.add(layer.fieldId);
+    }
+  }
+  const nextFields = fields.filter((field) => referencedAfter.has(field.id) || !referencedBefore.has(field.id));
+  if (nextFields.length !== (copy.fields?.length ?? 0)) changed = true;
+  if (!changed) return doc;
+  if (nextFields.length) copy.fields = nextFields;
+  else delete copy.fields;
+  return copy;
+}
+
+function canShareText(layer: Layer): boolean {
+  if (layer.type !== 'text' || layer.continuesFrom) return false;
   if (layer.role === 'static' || layer.role === 'brand' || layer.role === 'hidden' || layer.role === 'picker') {
     return false;
   }
   if (layer.locked) return false;
   if (layer.editableContent === false) return false;
   return true;
-}
-
-function layerLists(doc: DesignerDocument): Layer[][] {
-  if (doc.pages?.length) return doc.pages.map((page) => page.layers);
-  return [doc.layers];
-}
-
-/** Give each editable text frame its own field. Sample copy is left on the layer. */
-export function assignMagicStrings(doc: DesignerDocument): DesignerDocument {
-  const synced = syncActiveTemplatePage(doc);
-  const needsField = layerLists(synced).some((layers) => layers.some(canTakeField));
-  if (!needsField) return doc;
-
-  const copy = syncActiveTemplatePage(cloneDocument(doc));
-  const fields = [...(copy.fields ?? [])];
-  for (const layers of layerLists(copy)) {
-    for (const layer of layers) {
-      if (!canTakeField(layer)) continue;
-      const label = fieldLabelFromText(layer.text, layer.name);
-      const field = createDesignerField(fields, label, 'text');
-      fields.push(field);
-      layer.fieldId = field.id;
-    }
-  }
-  copy.fields = fields;
-  return copy;
 }
 
 function filledValues(values: Record<string, string> | undefined): Record<string, string> | null {
@@ -326,6 +378,44 @@ export function suggestCsvColumn(field: DesignerField, columns: CsvColumn[]): st
     return tokens.every((token) => hay.includes(token));
   });
   return matches.length === 1 ? matches[0].id : undefined;
+}
+
+export function variableHits(
+  doc: DesignerDocument,
+  fieldId: string
+): { pageId: string; layerIds: string[] }[] {
+  const synced = syncActiveTemplatePage(doc);
+  const pages = synced.pages?.length
+    ? synced.pages.map((page) => ({ id: page.id, layers: page.layers }))
+    : [{ id: synced.activePageId ?? 'page', layers: synced.layers }];
+  return pages
+    .map((page) => ({
+      pageId: page.id,
+      layerIds: page.layers
+        .filter((layer) => layerUsesVariable(layer, page.layers, fieldId))
+        .map((layer) => layer.id),
+    }))
+    .filter((hit) => hit.layerIds.length > 0);
+}
+
+/** Text already stored on another frame that uses this variable. */
+export function textForVariable(doc: DesignerDocument, fieldId: string, exceptLayerId?: string): string | undefined {
+  const synced = syncActiveTemplatePage(doc);
+  const pages = synced.pages?.length ? synced.pages : [{ layers: synced.layers }];
+  for (const page of pages) {
+    for (const layer of page.layers) {
+      if (layer.id === exceptLayerId) continue;
+      if (layer.type === 'text' && !layer.continuesFrom && layer.fieldId === fieldId) return layer.text ?? '';
+    }
+  }
+  return undefined;
+}
+
+function layerUsesVariable(layer: Layer, layers: Layer[], fieldId: string): boolean {
+  if (layer.fieldId === fieldId) return true;
+  if (!layer.continuesFrom) return false;
+  const source = layers.find((item) => item.id === layer.continuesFrom);
+  return source?.fieldId === fieldId;
 }
 
 export function fieldKind(field: Pick<DesignerField, 'kind'>): DesignerFieldKind {

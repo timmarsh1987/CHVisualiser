@@ -1,5 +1,4 @@
 import { createLayerId } from './document';
-import { assignMagicStrings } from './fields';
 import { resolveCanvasPresetId } from './printPresets';
 import {
   applySourceLayer,
@@ -89,5 +88,5 @@ export function buildImportedDocument(pages: DesignerTemplatePage[]): DesignerDo
   if (Object.keys(brands).length > 0) {
     document.settings = { brands };
   }
-  return assignMagicStrings(document);
+  return document;
 }

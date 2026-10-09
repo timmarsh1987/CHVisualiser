@@ -457,7 +457,7 @@ export default function Toolbar() {
               ) : null}
             </div>
             <button type="button" className="chd-btn" onClick={() => dispatch({ type: 'ADD_MAGIC_STRINGS' })}>
-              Add magic strings
+              Add variables
             </button>
             <input
               ref={fileRef}

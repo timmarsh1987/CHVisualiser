@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { constrainPlacedBox } from './constraints';
 import { persistCurrentPageLayout, pushLayerToAllPages, switchDocumentPage } from './pageLayout';
 import { resolveCanvasPresetId } from './printPresets';
 import {
@@ -18,7 +19,14 @@ import {
   nextGroupName,
   parseDesignerDocument,
 } from './document';
-import { assignMagicStrings, createDesignerField, resolveFieldText, variableKey } from './fields';
+import {
+  assignMagicStrings,
+  createDesignerField,
+  resolveFieldText,
+  textForVariable,
+  variableHits,
+  variableKey,
+} from './fields';
 import { addTemplatePage, removeActiveTemplatePage, syncActiveTemplatePage } from './templateSettings';
 import { reflowTextStory, scaleFontWithBox } from './textFlow';
 import {
@@ -136,7 +144,8 @@ export function DesignerProvider({
 }: DesignerProviderProps) {
   const seedRef = useRef<DesignerDocument | null>(null);
   if (!seedRef.current) {
-    seedRef.current = initialDocument ? cloneDocument(initialDocument) : createSeedDocument();
+    const seeded = initialDocument ? cloneDocument(initialDocument) : createSeedDocument();
+    seedRef.current = mode === 'admin' ? assignMagicStrings(seeded) : seeded;
   }
 
   const templateBaselineRef = useRef<DesignerDocument>(
@@ -243,7 +252,12 @@ export function DesignerProvider({
         case 'UPDATE_LAYER': {
           const push = action.pushHistory !== false;
           setDocument((prev) => {
-            const applyPatch = (layer: Layer, persistLayout: boolean): Layer => {
+            const applyPatch = (
+              layer: Layer,
+              canvasWidth: number,
+              canvasHeight: number,
+              persistLayout: boolean
+            ): Layer => {
               if (layer.id !== action.id) return layer;
               const patch = constrained
                 ? filterEndUserPatch(layer, action.patch, modeRef.current)
@@ -256,16 +270,49 @@ export function DesignerProvider({
               if (typeof patched.height === 'number') {
                 patched.height = Math.max(MIN_LAYER_SIZE, patched.height);
               }
+              const placementChanged =
+                patch.x !== undefined ||
+                patch.y !== undefined ||
+                patch.width !== undefined ||
+                patch.height !== undefined ||
+                patch.lockToCanvas === true ||
+                patch.pinLeft !== undefined ||
+                patch.pinRight !== undefined ||
+                patch.pinTop !== undefined ||
+                patch.pinBottom !== undefined ||
+                patch.marginLeft !== undefined ||
+                patch.marginRight !== undefined ||
+                patch.marginTop !== undefined ||
+                patch.marginBottom !== undefined;
+              if (patched.lockToCanvas === true && patched.type !== 'group' && placementChanged) {
+                const sizeChanged =
+                  (patch.width !== undefined && patch.width !== layer.width) ||
+                  (patch.height !== undefined && patch.height !== layer.height);
+                const mode = sizeChanged ? 'resize' : 'move';
+                const box = constrainPlacedBox(
+                  { x: patched.x, y: patched.y, width: patched.width, height: patched.height },
+                  patched,
+                  canvasWidth,
+                  canvasHeight,
+                  mode
+                );
+                patched.x = box.x;
+                patched.y = box.y;
+                patched.width = box.width;
+                patched.height = box.height;
+              }
               const scaled = scaleFontWithBox(layer, patched, action.patch);
               return constrained || !persistLayout ? scaled : persistCurrentPageLayout(scaled, prev.canvas);
             };
-            const layers = prev.layers.map((layer) => applyPatch(layer, true));
+            const layers = prev.layers.map((layer) =>
+              applyPatch(layer, prev.canvas.width, prev.canvas.height, true)
+            );
             const pages = prev.pages?.map((page) => ({
               ...page,
               layers:
                 page.id === prev.activePageId
                   ? layers
-                  : page.layers.map((layer) => applyPatch(layer, false)),
+                  : page.layers.map((layer) => applyPatch(layer, page.width, page.height, false)),
             }));
             let next: DesignerDocument = pages ? { ...prev, layers, pages } : { ...prev, layers };
             const touched =
@@ -407,7 +454,7 @@ export function DesignerProvider({
           setDocument((prev) => {
             const synced = syncActiveTemplatePage(prev);
             const layers = [...synced.layers, ...copies];
-            const next: DesignerDocument =
+            const placed: DesignerDocument =
               synced.pages?.length && synced.activePageId
                 ? {
                     ...synced,
@@ -417,9 +464,9 @@ export function DesignerProvider({
                     ),
                   }
                 : { ...synced, layers };
-            pushHistory(next);
-            emitChanges(next);
-            return next;
+            pushHistory(placed);
+            emitChanges(placed);
+            return placed;
           });
           setSelection(copies.map((layer) => layer.id));
           break;
@@ -598,7 +645,8 @@ export function DesignerProvider({
           break;
         }
         case 'LOAD_DOCUMENT': {
-          applyDocument(cloneDocument(action.document), true);
+          const loaded = cloneDocument(action.document);
+          applyDocument(loaded, true);
           setSelection([]);
           break;
         }
@@ -920,6 +968,7 @@ export function DesignerProvider({
           if (constrained) return;
           setDocument((prev) => {
             if (action.fieldId && !prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const sample = action.fieldId ? textForVariable(prev, action.fieldId, action.layerId) : undefined;
             const apply = (layer: Layer): Layer => {
               if (layer.id !== action.layerId || layer.continuesFrom) return layer;
               if (!action.fieldId) {
@@ -927,16 +976,85 @@ export function DesignerProvider({
                 delete cleared.fieldId;
                 return cleared;
               }
-              return { ...layer, fieldId: action.fieldId };
+              const assigned: Layer = { ...layer, fieldId: action.fieldId };
+              if (layer.type === 'text' && sample !== undefined) assigned.text = sample;
+              return assigned;
             };
             const layers = prev.layers.map(apply);
+            const pages = prev.pages?.map((page) => ({
+              ...page,
+              layers: page.id === prev.activePageId ? layers : page.layers.map(apply),
+            }));
+            let next: DesignerDocument = pages ? { ...prev, layers, pages } : { ...prev, layers };
+            const touched = next.layers.find((layer) => layer.id === action.layerId);
+            if (touched?.type === 'text' && (touched.flowOverflow || touched.continuesFrom)) {
+              next = reflowTextStory(next, touched.continuesFrom || touched.id);
+            }
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'SET_VARIABLE_TEXT': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const apply = (layer: Layer): Layer => {
+              if (layer.type !== 'text' || layer.continuesFrom || layer.fieldId !== action.fieldId) return layer;
+              if ((layer.text ?? '') === action.text) return layer;
+              return { ...layer, text: action.text };
+            };
+            const synced = syncActiveTemplatePage(prev);
+            const layers = synced.layers.map(apply);
+            const pages = synced.pages?.map((page) => ({
+              ...page,
+              layers: page.id === synced.activePageId ? layers : page.layers.map(apply),
+            }));
+            let next: DesignerDocument = pages ? { ...synced, layers, pages } : { ...synced, layers };
+            const stories = new Set<string>();
+            const lists = next.pages?.length ? next.pages.map((page) => page.layers) : [next.layers];
+            for (const list of lists) {
+              for (const layer of list) {
+                if (
+                  layer.type === 'text' &&
+                  !layer.continuesFrom &&
+                  layer.fieldId === action.fieldId &&
+                  layer.flowOverflow
+                ) {
+                  stories.add(layer.id);
+                }
+              }
+            }
+            for (const id of stories) next = reflowTextStory(next, id);
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'ASSIGN_SELECTION_FIELD': {
+          if (constrained) return;
+          const selected = new Set(selectionRef.current);
+          if (selected.size === 0) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            let changed = false;
+            const apply = (layer: Layer): Layer => {
+              if (!selected.has(layer.id) || layer.continuesFrom || layer.fieldId === action.fieldId) return layer;
+              changed = true;
+              return { ...layer, fieldId: action.fieldId };
+            };
+            if (!prev.layers.some((layer) => selected.has(layer.id))) return prev;
+            const layers = prev.layers.map(apply);
+            if (!changed) return prev;
             const next: DesignerDocument = prev.pages
               ? {
                   ...prev,
                   layers,
                   pages: prev.pages.map((page) => ({
                     ...page,
-                    layers: page.id === prev.activePageId ? layers : page.layers.map(apply),
+                    layers: page.id === prev.activePageId ? layers : page.layers,
                   })),
                 }
               : { ...prev, layers };
@@ -944,6 +1062,114 @@ export function DesignerProvider({
             emitChanges(next);
             return next;
           });
+          break;
+        }
+        case 'CLEAR_SELECTION_FIELD': {
+          if (constrained) return;
+          const selected = new Set(selectionRef.current);
+          if (selected.size === 0) return;
+          setDocument((prev) => {
+            let changed = false;
+            const apply = (layer: Layer): Layer => {
+              if (!selected.has(layer.id) || layer.fieldId !== action.fieldId) return layer;
+              changed = true;
+              const next = { ...layer };
+              delete next.fieldId;
+              return next;
+            };
+            const layers = prev.layers.map(apply);
+            if (!changed) return prev;
+            const next: DesignerDocument = prev.pages
+              ? {
+                  ...prev,
+                  layers,
+                  pages: prev.pages.map((page) => ({
+                    ...page,
+                    layers: page.id === prev.activePageId ? layers : page.layers,
+                  })),
+                }
+              : { ...prev, layers };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          break;
+        }
+        case 'REMOVE_FIELD': {
+          if (constrained) return;
+          setDocument((prev) => {
+            if (!prev.fields?.some((field) => field.id === action.fieldId)) return prev;
+            const strip = (layer: Layer): Layer => {
+              if (layer.fieldId !== action.fieldId) return layer;
+              const next = { ...layer };
+              delete next.fieldId;
+              return next;
+            };
+            const synced = syncActiveTemplatePage(prev);
+            const layers = synced.layers.map(strip);
+            const fields = synced.fields?.filter((field) => field.id !== action.fieldId);
+            const next: DesignerDocument = {
+              ...synced,
+              layers,
+              pages: synced.pages?.map((page) => ({
+                ...page,
+                layers: page.id === synced.activePageId ? layers : page.layers.map(strip),
+              })),
+            };
+            if (fields?.length) next.fields = fields;
+            else delete next.fields;
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setFieldValues((current) => {
+            if (!(action.fieldId in current)) return current;
+            const nextValues = { ...current };
+            delete nextValues[action.fieldId];
+            fieldValuesRef.current = nextValues;
+            return nextValues;
+          });
+          break;
+        }
+        case 'FOCUS_FIELD': {
+          const synced = syncActiveTemplatePage(documentRef.current);
+          const hits = variableHits(synced, action.fieldId);
+          const here = hits.find((hit) => !synced.pages?.length || hit.pageId === synced.activePageId);
+          if (here) {
+            setSelection(here.layerIds);
+            break;
+          }
+          const nextHit = hits[0];
+          if (!nextHit) {
+            setSelection([]);
+            break;
+          }
+          const target = synced.pages?.find((page) => page.id === nextHit.pageId);
+          if (!target) {
+            setSelection(nextHit.layerIds);
+            break;
+          }
+          setViewPageId(null);
+          setDocument((prev) => {
+            const current = syncActiveTemplatePage(prev);
+            const page = current.pages?.find((item) => item.id === nextHit.pageId);
+            if (!page || page.id === prev.activePageId) return prev;
+            const next: DesignerDocument = {
+              ...current,
+              activePageId: page.id,
+              canvas: {
+                ...current.canvas,
+                width: page.width,
+                height: page.height,
+                presetId: resolveCanvasPresetId(page.width, page.height),
+              },
+              layers: page.layers.map((layer) => ({ ...layer })),
+            };
+            pushHistory(next);
+            emitChanges(next);
+            return next;
+          });
+          setSelection(nextHit.layerIds);
           break;
         }
         case 'ADD_MAGIC_STRINGS': {
@@ -983,8 +1209,9 @@ export function DesignerProvider({
       try {
         const parsed = parseDesignerDocument(JSON.parse(json));
         if (!parsed) return false;
-        templateBaselineRef.current = cloneDocument(parsed);
-        applyDocument(parsed, true);
+        const loaded = parsed;
+        templateBaselineRef.current = cloneDocument(loaded);
+        applyDocument(loaded, true);
         setSelection([]);
         return true;
       } catch {

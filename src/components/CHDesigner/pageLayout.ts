@@ -1,5 +1,5 @@
 import { CANVAS_PRESETS, resolveCanvasPresetId } from './printPresets';
-import { applyEdgePins, hasExplicitPins } from './constraints';
+import { applyEdgePins, hasExplicitPins, keepLockedLayerOnCanvas } from './constraints';
 import type { DesignerCanvasSize, DesignerDocument, Layer, LayerPageLayout } from './types';
 
 export type PinKey = 'pinTop' | 'pinLeft' | 'pinRight' | 'pinBottom';
@@ -167,19 +167,25 @@ export function switchDocumentPage(
       };
       const saved = pageLayouts[toKey];
       if (saved) {
-        return {
-          ...layer,
-          ...applyPageLayout(saved),
-          pageLayouts,
-        };
+        const restored = keepLockedLayerOnCanvas(
+          {
+            ...layer,
+            ...applyPageLayout(saved),
+            pageLayouts,
+          },
+          width,
+          height
+        );
+        return restored;
       }
 
       const placed = hasExplicitPins(layer)
         ? { ...layer, ...applyEdgePins(layer, width, height) }
         : layer;
+      const fitted = keepLockedLayerOnCanvas({ ...placed, pageLayouts }, width, height);
 
-      pageLayouts[toKey] = snapshotPageLayout(placed);
-      return { ...placed, pageLayouts };
+      pageLayouts[toKey] = snapshotPageLayout(fitted);
+      return { ...fitted, pageLayouts };
     }),
   };
 }

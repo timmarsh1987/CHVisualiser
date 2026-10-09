@@ -420,7 +420,7 @@ export default function GeneratePanel() {
             <div className="chd-gen-section">
               <p className="chd-gen-label">Variables</p>
               <p className="chd-field-hint">
-                Each magic string is a variable. Associate a CSV column with it on the CSV tab, or a product property here.
+                Associate a CSV column with a variable on the CSV tab, or a product property here.
               </p>
               {fields.map((field) => {
                 const members = membersFor(field, catalog);

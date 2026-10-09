@@ -1,5 +1,4 @@
 import { createLayerId } from './document';
-import { assignMagicStrings } from './fields';
 import { resolveCanvasPresetId } from './printPresets';
 import {
   applySourceLayer,
@@ -153,7 +152,7 @@ export async function importIdmlFile(data: ArrayBuffer): Promise<IdmlImportResul
   if (Object.keys(brands).length > 0) {
     document.settings = { brands };
   }
-  return { document: assignMagicStrings(document), pageCount: templatePages.length };
+  return { document, pageCount: templatePages.length };
 }
 
 function readSourceLayers(designMap: Document): Map<string, SourceLayerRecord> {

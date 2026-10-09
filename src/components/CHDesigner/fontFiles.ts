@@ -3,9 +3,40 @@ import type { DesignerFont, Layer } from './types';
 
 const FALLBACK_FONT = 'Georgia, "Times New Roman", serif';
 
+/** Faces the browser can draw without an uploaded font file. Georgia stays the empty default. */
+export const BUILTIN_FONTS: { id: string; label: string; stack: string }[] = [
+  { id: 'Arial', label: 'Arial', stack: 'Arial, Helvetica, sans-serif' },
+  { id: 'Calibri', label: 'Calibri', stack: 'Calibri, Candara, sans-serif' },
+  { id: 'Cambria', label: 'Cambria', stack: 'Cambria, Georgia, serif' },
+  { id: 'Candara', label: 'Candara', stack: 'Candara, Calibri, sans-serif' },
+  { id: 'Consolas', label: 'Consolas', stack: 'Consolas, "Courier New", monospace' },
+  { id: 'Constantia', label: 'Constantia', stack: 'Constantia, Georgia, serif' },
+  { id: 'Corbel', label: 'Corbel', stack: 'Corbel, "Segoe UI", sans-serif' },
+  { id: 'Courier New', label: 'Courier New', stack: '"Courier New", Courier, monospace' },
+  { id: 'Franklin Gothic Medium', label: 'Franklin Gothic', stack: '"Franklin Gothic Medium", Arial, sans-serif' },
+  { id: 'Garamond', label: 'Garamond', stack: 'Garamond, "Palatino Linotype", serif' },
+  { id: 'Gill Sans', label: 'Gill Sans', stack: '"Gill Sans", "Gill Sans MT", Calibri, sans-serif' },
+  { id: 'Helvetica', label: 'Helvetica', stack: 'Helvetica, Arial, sans-serif' },
+  { id: 'Impact', label: 'Impact', stack: 'Impact, Haettenschweiler, sans-serif' },
+  { id: 'Palatino Linotype', label: 'Palatino', stack: '"Palatino Linotype", Palatino, "Book Antiqua", serif' },
+  { id: 'Segoe UI', label: 'Segoe UI', stack: '"Segoe UI", sans-serif' },
+  { id: 'Tahoma', label: 'Tahoma', stack: 'Tahoma, Verdana, sans-serif' },
+  { id: 'Times New Roman', label: 'Times New Roman', stack: '"Times New Roman", Times, serif' },
+  { id: 'Trebuchet MS', label: 'Trebuchet MS', stack: '"Trebuchet MS", sans-serif' },
+  { id: 'Verdana', label: 'Verdana', stack: 'Verdana, Geneva, sans-serif' },
+];
+
+export function builtinFont(family?: string): (typeof BUILTIN_FONTS)[number] | undefined {
+  const name = family?.trim();
+  if (!name) return undefined;
+  return BUILTIN_FONTS.find((font) => font.id === name);
+}
+
 export function fontFamilyStack(family?: string): string {
   const name = family?.trim();
-  if (!name) return FALLBACK_FONT;
+  if (!name || name.toLowerCase() === 'georgia') return FALLBACK_FONT;
+  const builtin = builtinFont(name);
+  if (builtin) return builtin.stack;
   return `"${name.replace(/"/g, '')}", ${FALLBACK_FONT}`;
 }
 
@@ -27,7 +58,7 @@ export function layerUsesFont(layer: FontLayer, font: DesignerFont, fonts: Desig
 export function layerFontIsLoaded(layer: FontLayer, fonts: DesignerFont[]): boolean {
   if (layer.type !== 'text') return true;
   const name = layer.fontFamily?.trim();
-  if (!name) return true;
+  if (!name || name.toLowerCase() === 'georgia' || builtinFont(name)) return true;
   return fonts.some((font) => layerUsesFont(layer, font, fonts));
 }
 

@@ -735,6 +735,117 @@
   flex: 1;
 }
 
+.chd-section-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 6px;
+  background: #eceae4;
+}
+
+.chd-section-tab {
+  border: none;
+  background: transparent;
+  color: var(--chd-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.chd-section-tab--active {
+  background: #fff;
+  color: var(--chd-text);
+}
+
+.chd-variables {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chd-variables-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+
+.chd-variables-toolbar .chd-field-hint {
+  margin: 0;
+}
+
+.chd-variables-toolbar .chd-btn {
+  flex: none;
+}
+
+.chd-variable-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow: auto;
+  flex: 1;
+}
+
+.chd-variable-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 8px;
+  border: 0.5px solid var(--chd-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.chd-variable-card--active {
+  border-color: #8ab4f8;
+  background: #f5f9ff;
+}
+
+.chd-variable-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px;
+  align-items: center;
+  border-radius: 6px;
+  padding: 2px;
+}
+
+.chd-variable-row--active {
+  background: #e8f0fe;
+}
+
+.chd-variable-select {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 4px 6px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.chd-variable-select small {
+  color: var(--chd-muted);
+  font-size: 11px;
+}
+
+.chd-variable-token {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .chd-layer-list-item {
   display: grid;
   grid-template-columns: 1fr;
@@ -1106,6 +1217,12 @@
   gap: 8px;
 }
 
+.chd-paint {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 .chd-field-checkbox {
   display: flex;
   flex-direction: row;
@@ -1155,8 +1272,81 @@
 
 .chd-artboard {
   position: relative;
+  z-index: 1;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 8px 24px rgba(0, 0, 0, 0.06);
   overflow: hidden;
+}
+
+.chd-offcanvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+}
+
+.chd-offcanvas-hit {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.16);
+  cursor: move;
+  touch-action: none;
+}
+
+.chd-offcanvas-hit--locked {
+  cursor: default;
+}
+
+.chd-offcanvas-hit .chd-layer {
+  pointer-events: none;
+}
+
+.chd-offcanvas-outline {
+  position: absolute;
+  border: 1.5px dashed var(--chd-selected);
+  pointer-events: auto;
+  cursor: move;
+  touch-action: none;
+  z-index: 18;
+}
+
+.chd-offcanvas-outline--selected {
+  border-color: transparent;
+}
+
+.chd-offcanvas-outline--locked {
+  cursor: default;
+}
+
+.chd-offcanvas-outline--passive {
+  pointer-events: none;
+}
+
+.chd-offcanvas-label {
+  position: absolute;
+  left: 4px;
+  top: 4px;
+  max-width: calc(100% - 8px);
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 0.5px solid var(--chd-border);
+  color: var(--chd-text);
+  font-size: 10px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
+.chd-offcanvas-label--end {
+  left: auto;
+  right: 4px;
+}
+
+.chd-offcanvas-label--below {
+  top: auto;
+  bottom: 4px;
 }
 
 .chd-artboard-clip {
